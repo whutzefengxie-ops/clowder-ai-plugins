@@ -12,7 +12,7 @@ icon:
 configuration:
   - key: configurationFile
     label: Private configuration file
-    description: Absolute path to an operator-owned JSON file; credentials stay with Git and gh.
+    description: Absolute private JSON path outside Git and plugin installation. May be new; open the workbench to configure repositories. Credentials stay with Git and gh.
     kind: string
     required: true
 contributions:

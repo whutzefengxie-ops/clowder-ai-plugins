@@ -132,6 +132,12 @@ export class GitReceiver {
     for (const check of this.config.checks ?? []) await command(check.command, check.args, { cwd: path });
     if ((await git(path, ['rev-parse', 'HEAD'])) !== head) fail('CHECK_HEAD_CHANGED', '检查命令改变了候选 HEAD');
     await git(path, ['diff', '--exit-code', 'HEAD', '--', '.']);
-    return { head, time: new Date().toISOString(), count: (this.config.checks ?? []).length, passed: true };
+    return {
+      head,
+      time: new Date().toISOString(),
+      count: (this.config.checks ?? []).length,
+      passed: true,
+      profile: this.config.checkProfile ?? 'custom',
+    };
   }
 }

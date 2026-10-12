@@ -10,7 +10,7 @@ tips_exempt: 独立内部 Git 接收工具，不接应用 Host；操作说明随
 
 ## 插件运行与安装边界
 
-插件标识 dev.clowder.repo-sync；候选包 @clowder-ai/repo-sync@0.1.0-alpha.0。独立 manifest 位于 plugin.yaml，协议版本为 0.1.0。兼容宿主通过 configurationFile 指定绝对路径的私有 JSON 配置，再启动声明的 stdio MCP contribution。
+插件标识 dev.clowder.repo-sync；候选包 @clowder-ai/repo-sync@0.1.0-alpha.0。独立 manifest 位于 plugin.yaml，协议版本为 0.1.0。兼容宿主通过 configurationFile 指定绝对路径的私有 JSON（可以尚未创建），再启动声明的 stdio MCP contribution，在工作台完成配置。
 
 MCP 只提供 repo_sync_status 和 repo_sync_open_workbench。前者返回受限版本/阶段字段，后者显式启动 loopback 工作台并返回 URL；插件启动不会执行 Git，Agent 没有推送、建单、合入或关单工具。实际同步仍在工作台由用户发起，平台 PR 在真实平台人工创建、审核与合入。
 
@@ -31,6 +31,33 @@ MCP 只提供 repo_sync_status 和 repo_sync_open_workbench。前者返回受限
 本包实现真实 Git、持久台账、恢复和 localhost 工作台。内部只使用 Git：Issue/PR 在平台人工创建、审核、合入和核对，界面生成来源模板并登记链接。它不伪造 Git 创建 Issue/PR 的命令，不自动合入、不推 main，也不声称读取了平台审批或关单状态。
 
 ## 先体验
+
+### 使用自己的仓库：空白配置入口
+
+这条入口执行真实 Git，没有预置演示数据或模拟 PR。需要 Node 24+、Git；开发过程模式还需要 GitHub CLI `gh`。本 PR 仍是 Alpha，平台 Issue / PR 人工创建，项目实际构建与平台策略需要使用方验证。
+
+在插件包源码目录执行（路径是示例；配置必须放在所有 Git 工作仓、插件安装与 node_modules 目录之外）：
+
+```powershell
+node src/cli.mjs setup "D:/private/repo-sync/config.json" 5220
+```
+
+已安装 tgz 的使用方执行 `clowder-repo-sync setup "D:/private/repo-sync/config.json" 5220`。`serve` 也支持这条配置入口。启动只读取本机配置，不执行 Git、不创建演示仓库；首次文件可以不存在。打开终端打印的地址后：
+
+1. 点击**配置真实仓库**，填写外部 GitHub 与内部 Git 地址、两侧分支。使用本机 Git 的 HTTPS 凭据管理器或 SSH 密钥，不在网页填密码/Token。
+2. 选择方式：有内部 README 改动、新文件或插件目录时用**按 tag 更新**，列出内部保留路径与共同修改文件；需要逐笔原始 PR/Issue/commit 时用**同步开发过程**，核心文件须一致。
+3. 保存后点击**读取两侧当前版本**，实际 fetch 验证读取能力。HTTPS/SSH 认证需先在本机终端配置好，后台执行不提供交互式终端。内部候选分支写权限将在真正推送时核验；读取成功不证明可以推送。
+4. 填写上次已接收的外部 **U0** 和内部当前 **I0**，登记基线。例如内仓落后 20 个 commit，U0 是上次同步的 A，I0 是内仓当前 HEAD，不能把外部最新 HEAD 当 U0。SHA 可以不同；程序核验文件范围与历史。工具不能从相同内容唯一猜出此前接收版本。
+5. 进入工作台：版本模式读取 tag、选择目标版本；过程模式检查上游 PR/Issue。点击当前步骤按钮继续，程序只推候选分支，不合入 main。
+6. 使用生成的分支名、标题与正文在内部平台创建 PR，登记具体链接，在平台审核合入后回来点击**已在平台合入，核验 Git 结果**。版本模式随即完成；过程模式再保存人工核对的 Issue 接收记录。
+
+向导只写启动时指定的私有文件；台账分到同目录 `bindings/<绑定身份>/`，不上传外网。地址与规则只能在登记基线前编辑；已启用配置不可在网页覆盖。重启使用同一文件即可续接，另一组仓库使用另一私有配置文件。手工创建的旧配置继续可读，但向导不会覆盖，仍在本机 JSON 中维护。
+
+默认检查只有 `git fsck --no-reflogs`，页面明确显示**Git 基础完整性检查**；它不证明应用可构建或插件兼容。在首次同步前，可在私有 JSON 的 `checks` 添加项目可信 executable / args；网页和 MCP 无法指定执行命令。连续模式须先实测内部平台不会因原始提交消息误关 Issue，再声明 `commitClosureVerified: true`，未声明会阻止推送。
+
+配置保存使用独立单写锁与内容版本校验：并发或旧页面的修改暂停；损坏文件不会被覆盖。若配置锁因进程中断残留，先确认所有使用该文件的执行器和 Git/检查子进程均已退出，再在本机处理 `<配置文件>.lock`；不能在操作仍运行时移除锁。Git 台账锁仍使用下方显式 `unlock` 流程。配置与台账不是跨平台原子事务，当前提供进程中断恢复。
+
+### 使用虚构仓库演示
 
 需要 Node 24+、Git。项目根目录执行：
 

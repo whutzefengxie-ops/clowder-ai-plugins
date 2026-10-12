@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createReceiverServer } from './server.mjs';
 
-export function createRepoSyncMcpServer(receiver) {
+export function createRepoSyncMcpServer(receiver, options = {}) {
   const server = new McpServer({ name: 'clowder-repo-sync', version: '0.1.0-alpha.0' });
   let workbench;
   let starting;
@@ -24,9 +24,11 @@ export function createRepoSyncMcpServer(receiver) {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     run(async () => {
-      const state = await receiver.status();
+      if (options.connection) receiver = await options.connection.current();
+      const state = receiver ? await receiver.status() : null;
       return {
-        mode: receiver.config.mode,
+        configured: Boolean(receiver),
+        mode: receiver?.config.mode ?? null,
         adopted: Boolean(state),
         queued: state?.queue.length ?? 0,
         accepted: state?.accepted
@@ -50,13 +52,14 @@ export function createRepoSyncMcpServer(receiver) {
     run(async () => {
       if (closed) throw new Error('Plugin stopped');
       if (!starting) {
-        workbench = createReceiverServer(receiver);
+        workbench = createReceiverServer(receiver, options);
         starting = new Promise((done, reject) => {
           workbench.once('error', reject);
           workbench.listen(0, '127.0.0.1', () => done(`http://127.0.0.1:${workbench.address().port}/`));
         });
       }
-      return { url: await starting, mode: receiver.config.mode, simulation: false };
+      if (options.connection) receiver = await options.connection.current();
+      return { url: await starting, mode: receiver?.config.mode ?? null, simulation: false };
     }),
   );
   const close = server.close.bind(server);

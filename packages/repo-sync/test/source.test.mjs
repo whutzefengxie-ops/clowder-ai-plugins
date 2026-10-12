@@ -35,6 +35,7 @@ test('unknown commits, ambiguous PR ownership and a development head pause disco
 test('GitHub coordinates are constrained to the configured source', () => {
   assert.equal(githubRepository('https://github.com/demo/core.git'), 'demo/core');
   assert.equal(githubRepository('git@github.com:demo/core.git'), 'demo/core');
+  assert.equal(githubRepository('ssh://git@github.com/demo/core.git'), 'demo/core');
   assert.throws(() => githubRepository('https://example.com/demo/core.git'), { code: 'SOURCE_PLATFORM_UNSUPPORTED' });
 });
 test('commit-only and qualified Issue mentions are candidates, not closing proof', () => {

@@ -1,6 +1,7 @@
+import { captureDraft, configuration, firstUse, repositoryInput, restoreDraft } from './connections.mjs';
 import { progressSteps } from './progress.mjs';
 import { receiptFields } from './receipts.mjs';
-import { conflictEditor, conflictOptions, modeSettings, tagSelector, versionPreview } from './version.mjs';
+import { conflictEditor, conflictOptions, tagSelector, versionPreview } from './version.mjs';
 
 const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
@@ -17,14 +18,16 @@ const sha = (value) => `<code title="${esc(value)}">${esc(value)}</code>`;
 const button = (action, label) => `<button type="button" class="primary" data-action="${action}">${label}</button>`;
 async function refresh() {
   const response = await fetch('/api/status');
-  if (!response.ok) throw new Error('无法读取工作台');
-  snapshot = await response.json();
+  const result = await response.json();
+  if (!response.ok) throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
+  snapshot = result;
   render();
 }
 async function action(input) {
   if (busy) return;
   busy = true;
   errorPanel.hidden = true;
+  const drafts = captureDraft();
   for (const element of document.querySelectorAll('button, input, textarea, select')) element.disabled = true;
   try {
     const response = await fetch('/api/action', {
@@ -38,19 +41,21 @@ async function action(input) {
         `${result.code}：${result.message ?? '请求失败'}${result.details?.paths?.length ? `\n${result.details.paths.join('\n')}` : ''}`,
       );
     await refresh();
+    if (input.action === 'heads') restoreDraft(drafts);
     return result;
   } catch (error) {
-    await refresh();
+    try {
+      await refresh();
+    } catch {
+      /* Keep the last visible form when configuration is unavailable. */
+    }
+    restoreDraft(drafts);
     errorPanel.textContent = error.message;
     errorPanel.hidden = false;
   } finally {
     busy = false;
     for (const element of document.querySelectorAll('button, input, textarea, select')) element.disabled = false;
   }
-}
-function configuration() {
-  const { config, state } = snapshot;
-  return `${modeSettings(config, state, esc)}<section class="card"><h2>3 · 仓库连接与基线</h2><div class="split"><div><small>外部来源</small>${esc(config.sourceUrl)}<p>交付分支：${esc(config.sourceBranch)}</p></div><div><small>内部接收</small>${esc(config.internalUrl)}<p>合入分支：${esc(config.targetBranch)}</p></div></div><p>地址与检查命令来自本地私有配置。凭据由 Git / gh 的现有认证管理。</p>${state ? `<h3>初始对应</h3>${sha(state.initial.upstream)} → ${sha(state.initial.internal)}<h3>当前已接受对应</h3>${sha(state.accepted.upstream)} → ${sha(state.accepted.internal)}` : `${button('heads', '读取两侧当前版本')}<form data-form="adopt"><label for="upstream">外部已同步版本 U0（完整 SHA）</label><input id="upstream" name="upstream" required><label for="internal">内部当前版本 I0（完整 SHA）</label><input id="internal" name="internal" required><p>已有仓落后时，U0 填上次已同步版本；不能直接填外部最新版本。${config.mode === 'version' ? '程序核验同步范围与文件规则，允许规则内的内部差异。' : '程序核验完整文件树一致性。'}</p><button class="primary" type="submit">核验并登记已有基线</button></form>`}</section>`;
 }
 const states = {
   ISSUES_REQUIRED: [
@@ -106,6 +111,7 @@ function workflow(active, state = snapshot.state) {
   return `<p>最近读取的内部 HEAD：${sha(state.observedInternal ?? state.accepted.internal)}${state.observedInternal && state.observedInternal !== state.accepted.internal ? ' · 尚未登记为接受版本' : ''}</p><ol class="flow">${progressSteps(
     active,
     state,
+    snapshot.config.checkProfile,
   )
     .map(
       (group) =>
@@ -147,6 +153,7 @@ function idlePresentation(state) {
 }
 function workbench() {
   const state = snapshot.state;
+  if (!snapshot.config) return firstUse();
   if (!state)
     return `<section class="card task"><h2>先确认两侧已有基线</h2><p>连接已从私有配置载入，登记外部已同步版本与内部当前版本即可开始。</p><button type="button" data-view="configuration" class="primary">配置同步基线 →</button></section>`;
   const active = state.active;
@@ -194,12 +201,14 @@ function renderPlatform() {
 function render() {
   document.getElementById('mode').textContent = snapshot.synthetic
     ? '合成仓库演示 · 执行真实 Git'
-    : '真实 Git · 平台对象人工登记';
+    : snapshot.config
+      ? '真实 Git · 平台对象人工登记'
+      : '真实仓库 · 等待配置';
   content.innerHTML =
     snapshot.synthetic && location.pathname.startsWith('/demo/pr/')
       ? renderPlatform()
       : view === 'configuration'
-        ? configuration()
+        ? configuration(snapshot, esc, sha, button)
         : workbench();
   const badge = content.querySelector('.task .badge');
   if (badge && snapshot.state?.active)
@@ -241,25 +250,33 @@ document.addEventListener('click', async (event) => {
   }
   if (element.dataset.action) {
     const result = await action({ action: element.dataset.action, deliveryId: snapshot.state?.active?.id });
-    if (element.dataset.action === 'tags' && result) {
-      availableTags = result.result;
-      render();
-    }
-    if (element.dataset.action === 'demo-merge' && result) {
-      content.innerHTML =
-        '<section class="card"><h2>模拟平台已执行 Git 合入</h2><p>返回工作台核验并补写接收记录。</p><a href="/">返回工作台 →</a></section>';
-    }
-    if (element.dataset.action === 'heads' && result) {
-      document.getElementById('internal').value = result.result.internal;
-      document.getElementById('upstream').placeholder = `最新 ${result.result.upstream}；请填已同步版本`;
-    }
+    showActionResult(element.dataset.action, result);
   }
 });
+function showActionResult(kind, result) {
+  if (!result) return;
+  if (kind === 'tags') {
+    availableTags = result.result;
+    render();
+  }
+  if (kind === 'demo-merge') {
+    content.innerHTML =
+      '<section class="card"><h2>模拟平台已执行 Git 合入</h2><p>返回工作台核验并补写接收记录。</p><a href="/">返回工作台 →</a></section>';
+  }
+  if (kind === 'heads') {
+    document.getElementById('internal').value = result.result.internal;
+    document.getElementById('upstream').placeholder = `最新 ${result.result.upstream}；请填已同步版本`;
+    const heads = document.getElementById('observed-heads');
+    if (heads)
+      heads.innerHTML = `<p>读取成功：外部最新 ${sha(result.result.upstream)}<br>内部当前 ${sha(result.result.internal)}。请核对并填写上次已同步的 U0。</p>`;
+  }
+}
 document.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.target;
   const fields = Object.fromEntries(new FormData(form));
-  const input = { action: form.dataset.form, ...fields };
+  const input =
+    form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
   if (input.action === 'configure')
     for (const key of ['internalPaths', 'mergePaths'])
       input[key] =
@@ -277,10 +294,13 @@ document.addEventListener('submit', async (event) => {
       state: fields[issue.sourceId],
     }));
   const result = await action(input);
-  if (input.action === 'configure' && result) {
+  if (['configure', 'configure-repositories'].includes(input.action) && result) {
     const confirmation = document.createElement('p');
     confirmation.setAttribute('role', 'status');
-    confirmation.textContent = '同步方式与文件规则已保存，请登记已有基线。';
+    confirmation.textContent =
+      input.action === 'configure'
+        ? '同步方式与文件规则已保存，请登记已有基线。'
+        : '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。';
     content.prepend(confirmation);
   }
 });
@@ -301,8 +321,13 @@ function versionHistory(state) {
   }</section>`;
 }
 document.addEventListener('change', (event) => {
-  if (event.target.matches('[name="mode"]'))
-    document.querySelector('[data-policy]').hidden = event.target.value !== 'version';
+  if (event.target.matches('[name="mode"]')) {
+    const form = event.target.closest('form');
+    const policy = form.querySelector('[data-policy]');
+    const closure = form.querySelector('[data-closure]');
+    if (policy) policy.hidden = event.target.value !== 'version';
+    if (closure) closure.hidden = event.target.value === 'version';
+  }
 });
 
 refresh().catch((error) => {

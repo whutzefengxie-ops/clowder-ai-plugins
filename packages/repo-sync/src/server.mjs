@@ -15,6 +15,7 @@ const assets = new Map([
   ['/progress.mjs', 'progress.mjs'],
   ['/receipts.mjs', 'receipts.mjs'],
   ['/version.mjs', 'version.mjs'],
+  ['/connections.mjs', 'connections.mjs'],
 ]);
 export function createReceiverServer(receiver, options = {}) {
   const token = randomBytes(32).toString('hex');
@@ -27,24 +28,33 @@ export function createReceiverServer(receiver, options = {}) {
     );
     try {
       const path = requestPath(request, server.address()?.port);
+      if (options.connection && (path === '/api/status' || path === '/api/action'))
+        receiver = await options.connection.current();
       if (request.method === 'GET') return await get(receiver, options, token, path, response);
       if (request.method !== 'POST' || path !== '/api/action') return send(response, 404, { code: 'NOT_FOUND' });
       requireToken(request, token);
-      const input = await body(request);
-      if (input.action === 'configure') {
-        receiver = await configure(receiver, input);
-        return get(receiver, options, token, '/api/status', response);
-      }
-      const result = await dispatch(receiver, input, options);
-      return send(response, 200, {
-        result: ['heads', 'tags', 'conflict'].includes(input.action) ? result : null,
-        state: await receiver.status(),
-      });
+      receiver = await post(receiver, options, token, await body(request), response);
     } catch (error) {
       return sendError(response, error);
     }
   });
   return server;
+}
+async function post(receiver, options, token, input, response) {
+  let result;
+  if (options.connection) {
+    result = await options.connection.run(input, options);
+    receiver = await options.connection.current();
+  } else if (input.action === 'configure') receiver = await configure(receiver, input);
+  else result = await dispatch(receiver, input, options);
+  if (['configure', 'configure-repositories'].includes(input.action))
+    await get(receiver, options, token, '/api/status', response);
+  else
+    send(response, 200, {
+      result: ['heads', 'tags', 'conflict'].includes(input.action) ? result : null,
+      state: await receiver.status(),
+    });
+  return receiver;
 }
 function sendError(response, error) {
   const status = ['HOST_REJECTED', 'ORIGIN_REJECTED', 'TOKEN_REJECTED'].includes(error.code)
@@ -68,11 +78,34 @@ async function get(receiver, options, token, path, response) {
     return;
   }
   if (path !== '/api/status') return send(response, 404, { code: 'NOT_FOUND' });
-  const { sourceUrl, internalUrl, sourceBranch, targetBranch, mode, internalPaths, mergePaths } = receiver.config;
+  const {
+    sourceUrl,
+    internalUrl,
+    sourceBranch,
+    targetBranch,
+    mode,
+    internalPaths,
+    mergePaths,
+    checkProfile,
+    commitClosureVerified,
+  } = receiver?.config ?? {};
   return send(response, 200, {
     token,
-    state: await receiver.status(),
-    config: { sourceUrl, internalUrl, sourceBranch, targetBranch, mode, internalPaths, mergePaths },
+    state: receiver ? await receiver.status() : null,
+    config: receiver
+      ? {
+          sourceUrl,
+          internalUrl,
+          sourceBranch,
+          targetBranch,
+          mode,
+          internalPaths,
+          mergePaths,
+          checkProfile,
+          commitClosureVerified,
+        }
+      : null,
+    connection: options.connection?.describe(),
     demoLinks: options.demoLinks,
     synthetic: Boolean(options.demoMerge),
   });

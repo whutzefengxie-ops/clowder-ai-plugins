@@ -1,15 +1,12 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createConnection } from './connections.mjs';
 import { createRepoSyncMcpServer } from './mcp-server.mjs';
-import { configuredReceiver } from './settings.mjs';
 
 try {
   const file = process.env.REPO_SYNC_CONFIG_FILE;
-  if (!file || !isAbsolute(file)) throw new Error('Private configuration file required');
-  const receiver = await configuredReceiver(JSON.parse(await readFile(file, 'utf8')));
-  const server = createRepoSyncMcpServer(receiver);
+  const connection = await createConnection(file);
+  const server = createRepoSyncMcpServer(await connection.current(), { connection });
   for (const signal of ['SIGINT', 'SIGTERM'])
     process.once(signal, () => {
       void server.close();

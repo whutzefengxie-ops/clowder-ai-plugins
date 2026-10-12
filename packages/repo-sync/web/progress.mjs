@@ -1,4 +1,4 @@
-export function progressSteps(delivery, state) {
+export function progressSteps(delivery, state, checkProfile) {
   const status = delivery.status;
   const pushed = ['PR_REQUIRED', 'WAITING_APPROVAL', 'CODE_ACCEPTED_PENDING_METADATA', 'COMPLETE'].includes(status);
   const complete = status === 'COMPLETE';
@@ -13,7 +13,12 @@ export function progressSteps(delivery, state) {
           version || delivery.issues.every((issue) => state.issues[issue.sourceId]),
         ],
         [version ? '保留内部文件与三方合并' : '构造原始对象候选', Boolean(delivery.candidate)],
-        ['核心与插件检查', delivery.checks?.passed === true],
+        [
+          checkProfile === 'git-integrity' || delivery.checks?.profile === 'git-integrity'
+            ? 'Git 基础完整性检查'
+            : '配置的项目检查',
+          delivery.checks?.passed === true,
+        ],
         ['推送并回读候选分支', pushed],
       ],
     ],

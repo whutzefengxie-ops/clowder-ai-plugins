@@ -74,7 +74,13 @@ export function validateConfig(input) {
     )
       fail('INVALID_CHECK', '检查命令需要 executable 与字符串 args 数组');
   }
+  normalizeCheckProfile(config);
   return config;
+}
+function normalizeCheckProfile(config) {
+  if (config.checkProfile !== 'git-integrity') return;
+  if (JSON.stringify(config.checks) !== JSON.stringify([{ command: 'git', args: ['fsck', '--no-reflogs'] }]))
+    config.checkProfile = 'custom';
 }
 function validateMode(config) {
   config.mode ??= 'continuous';

@@ -23,7 +23,10 @@ export function groupLandings(boundaries, associations, branch) {
   return groups;
 }
 export function githubRepository(url) {
-  const match = /^(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url);
+  const match =
+    /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(
+      url,
+    );
   if (!match) fail('SOURCE_PLATFORM_UNSUPPORTED', '来源需要 github.com 仓库；本地仓仅用于合成验证');
   return `${match[1]}/${match[2]}`;
 }
