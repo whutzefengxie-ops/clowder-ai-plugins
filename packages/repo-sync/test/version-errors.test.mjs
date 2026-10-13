@@ -26,6 +26,7 @@ test('version: text conflict is shown, restart preserves it, manual resolution r
   assert.equal(await receiver.git.remoteBranch(paused.active.branch), null);
   receiver = new Receiver(f.config);
   assert.match((await receiver.conflict('README.md')).upstream, /新版介绍/);
+  assert.equal((await receiver.conflict('README.md')).deliveryId, paused.active.id);
   await assert.rejects(() => receiver.resolve('../core.txt', 'internal'), { code: 'RESOLUTION_NOT_ALLOWED' });
   assert.equal((await receiver.status()).active.error.code, 'CONTENT_CONFLICT');
   await receiver.resolve('README.md', 'manual', '人工合并介绍\n\n运行说明\n\n内部联系说明\n');

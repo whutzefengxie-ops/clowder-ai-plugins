@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { readConflict, resolveConflict } from './conflicts.mjs';
-import { phase, safeError } from './execution.mjs';
+import { execution, phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
 import { confirmGitPr } from './git-pr.mjs';
 import { assertLedger } from './ledger.mjs';
@@ -33,6 +33,8 @@ export class Receiver {
     return this.store.locked(async () => {
       const state = await this.read();
       if (!state) fail('NOT_ADOPTED', '先核验并登记两侧已有基线');
+      if (execution()?.deliveryId && this.active(state)?.id !== execution().deliveryId)
+        fail('DELIVERY_CHANGED', '活动交付已变化，已在写锁内停止旧页面操作；请刷新核对');
       try {
         await action(state);
       } catch (error) {
@@ -114,11 +116,13 @@ export class Receiver {
     state.latest = heads.upstream;
     event(state, null, `已冻结 ${plans.length} 笔连续上游交付`);
   }
-  async start() {
+  async start(expectedTarget) {
     return this.change(async (state) => {
       if (this.active(state)) fail('RECOVERY_FIRST', '先完成原交付，不新建重复对象');
       const plan = state.queue[0];
       if (!plan) fail('NO_DELIVERY', '没有待接收交付，先发现更新');
+      if (expectedTarget && plan.target !== expectedTarget)
+        fail('QUEUE_CHANGED', '待同步目标已变化，未发起交付；请刷新确认 tag / PR 和 commit 后再开始');
       const heads = await this.git.fetch();
       if (heads.internal !== state.accepted.internal) fail('CORE_DRIFT', '内部 main 与冻结基线不同');
       await sourceStillValid(this, plan, heads);

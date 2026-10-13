@@ -11,7 +11,8 @@ export async function phase(id, label, operation, cancellable = true) {
   checkpoint();
   const context = execution();
   if (!context) return operation();
-  context.cancellable = context.allowCancel && cancellable;
+  context.protectedDepth = (context.protectedDepth ?? 0) + (cancellable ? 0 : 1);
+  context.cancellable = context.allowCancel && context.protectedDepth === 0;
   context.report({ kind: 'start', id, label, cancellable: context.cancellable });
   try {
     const result = await operation();
@@ -20,6 +21,8 @@ export async function phase(id, label, operation, cancellable = true) {
   } catch (error) {
     context.report({ kind: 'failed', id, error: safeError(error) });
     throw error;
+  } finally {
+    if (!cancellable) context.protectedDepth--;
   }
 }
 export function safeError(error) {

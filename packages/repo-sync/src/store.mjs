@@ -13,7 +13,10 @@ export class Store {
   }
   async read() {
     try {
-      return JSON.parse(await readText(this.path));
+      const state = JSON.parse(await readText(this.path));
+      if (!state || typeof state !== 'object' || Array.isArray(state))
+        fail('LEDGER_UNREADABLE', '已有台账不是有效对象，暂停；不能当成首次空白基线覆盖');
+      return state;
     } catch (error) {
       if (error.code === 'ENOENT') return null;
       fail('LEDGER_UNREADABLE', '台账损坏或无法读取，暂停；不可自动创建空台账覆盖');

@@ -12,14 +12,22 @@ const longActions = new Set([
   'pr',
   'clear-pr',
   'create-pr',
+  'start',
+  'issue',
+  'receipts',
+  'resolve',
+  'cancel-version',
 ]);
 const active = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
+const blocked = (task) => active.has(task?.status) || task?.persistence?.status === 'FAILED';
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 export function createOperations({ snapshot, refresh, completed, errorPanel }) {
   const panel = document.getElementById('operation');
   let busy = false;
   let watching;
   let current;
+  let originalInput;
+  let retryingOriginal = false;
   function lock() {
     for (const element of document.querySelectorAll(
       'button[data-action], [data-rule-path], [data-baseline-read], [data-conflict-path], form button, input, textarea, select',
@@ -47,18 +55,24 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
   }
   async function wait(id) {
     while (true) {
+      if (bindingChanged(id))
+        throw new Error('CONFIGURATION_CHANGED：仓库绑定已变化，请刷新确认，原请求不会重送到新仓库。');
       try {
         const task = (await request(`/api/tasks/${id}`)).operation;
         show(task);
         errorPanel.hidden = true;
-        if (!active.has(task.status)) return task;
-        if (task.status === 'STOP_UNCONFIRMED') return task;
+        if (waitFinished(task)) return task;
       } catch (error) {
+        if (['TASK_UNREADABLE', 'TASK_BINDING_CHANGED', 'CONFIGURATION_CHANGED'].includes(error.code)) throw error;
         await disconnected(error, id);
       }
       await sleep(500);
     }
   }
+  const bindingChanged = (id) =>
+    originalInput?.requestId === id && snapshot().config?.bindingId !== originalInput.expectedBinding;
+  const waitFinished = (task) =>
+    !active.has(task.status) || task.persistence?.status === 'FAILED' || task.status === 'STOP_UNCONFIRMED';
   async function disconnected(error, id) {
     if (error.code === 'TOKEN_REJECTED') {
       try {
@@ -67,42 +81,53 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
     }
     errorPanel.textContent = `暂时无法读取任务状态，正在查询原任务 ${id}；不会重复提交。${error.code ?? 'CONNECTION_LOST'}`;
     errorPanel.hidden = false;
+    if (error.code === 'TASK_NOT_FOUND' && originalInput?.requestId === id) {
+      errorPanel.textContent = `暂未找到请求 ${id} 的记录。可继续查询，或重送同一请求；保持原标识，不创建第二笔同步。`;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.retryOriginal = '';
+      button.textContent = '重送原请求（保持同一标识）';
+      errorPanel.append(button);
+    }
   }
   function observe(task) {
     if (watching) {
       lock();
       return;
     }
-    busy = active.has(task?.status);
+    busy = blocked(task);
     show(task);
     lock();
-    if (task && ['RUNNING', 'CANCELLING'].includes(task.status)) {
+    if (task && !task.persistence && ['RUNNING', 'CANCELLING'].includes(task.status)) {
       watching = task.id;
       void wait(task.id)
         .then(async (done) => {
           watching = null;
-          busy = active.has(done.status);
+          busy = blocked(done);
           await refresh();
           if (done.status === 'SUCCEEDED') completed(done.action, { result: done.result });
           lock();
         })
         .catch((error) => {
+          watching = null;
           errorPanel.textContent = error.message;
           errorPanel.hidden = false;
-        });
+        })
+        .finally(lock);
     }
   }
   async function runLong(input) {
     const requestId = crypto.randomUUID().replaceAll('-', '');
     watching = requestId;
+    originalInput = {
+      ...input,
+      requestId,
+      expectedBinding: snapshot().config.bindingId,
+      expectedRevision: snapshot().connection?.revision,
+    };
     let value;
     try {
-      value = await request('/api/tasks', {
-        ...input,
-        requestId,
-        expectedBinding: snapshot().config.bindingId,
-        expectedRevision: snapshot().connection?.revision,
-      });
+      value = await request('/api/tasks', originalInput);
     } catch (error) {
       if (error.code) throw error;
       errorPanel.textContent = '请求回执暂未取得，正在查询原任务；请勿重复发起。';
@@ -113,6 +138,8 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
     return wait(requestId);
   }
   function checkOutcome(operation) {
+    if (operation.persistence?.status === 'FAILED')
+      throw new Error('TASK_STORE_FAILED：业务已结束，但执行记录未保存。请只补存原记录，不重复执行。');
     if (operation.status !== 'SUCCEEDED')
       throw new Error(`${operation.error?.code ?? operation.status}：${operation.error?.message ?? '当前操作未完成'}`);
   }
@@ -129,7 +156,19 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
         operation = await runLong(input);
         checkOutcome(operation);
         value = { result: operation.result };
-      } else value = await request('/api/action', input);
+      } else {
+        const configure = ['configure', 'configure-repositories', 'configure-pr'].includes(input.action);
+        value = await request(
+          '/api/action',
+          configure
+            ? input
+            : {
+                ...input,
+                expectedBinding: snapshot().config?.bindingId,
+                expectedRevision: snapshot().connection?.revision,
+              },
+        );
+      }
       watching = null;
       busy = false;
       await refresh();
@@ -138,7 +177,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
       return value;
     } catch (error) {
       watching = null;
-      busy = operation?.status === 'STOP_UNCONFIRMED';
+      busy = blocked(operation);
       try {
         await refresh();
       } catch {
@@ -151,7 +190,39 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
       lock();
     }
   }
+  async function resendOriginal() {
+    if (originalInput && !retryingOriginal) {
+      retryingOriginal = true;
+      try {
+        if (snapshot().config.bindingId !== originalInput.expectedBinding)
+          throw new Error('CONFIGURATION_CHANGED：仓库已变化，不能把原请求重送到另一套绑定。请刷新核对。');
+        show((await request('/api/tasks', originalInput)).operation);
+      } catch (error) {
+        errorPanel.textContent = error.message;
+        errorPanel.hidden = false;
+      } finally {
+        retryingOriginal = false;
+      }
+    }
+  }
+  async function repairRecord() {
+    if (current) {
+      try {
+        show((await request(`/api/tasks/${current.id}/persist`, {})).operation);
+        busy = blocked(current);
+        await refresh();
+        errorPanel.hidden = true;
+      } catch (error) {
+        errorPanel.textContent = error.message;
+        errorPanel.hidden = false;
+      } finally {
+        lock();
+      }
+    }
+  }
   document.addEventListener('click', async (event) => {
+    if (event.target.closest('[data-retry-original]')) return resendOriginal();
+    if (event.target.closest('[data-persist-operation]')) return repairRecord();
     if (!event.target.closest('[data-cancel-operation]') || !current) return;
     try {
       show((await request(`/api/tasks/${current.id}/cancel`, {})).operation);

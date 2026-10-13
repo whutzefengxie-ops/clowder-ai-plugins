@@ -67,7 +67,7 @@ export async function linkPr(receiver, state, url, options = {}) {
   }
   if (next) delivery.prUrl = next;
   else delete delivery.prUrl;
-  delivery.prReference = { verifiedBy: 'operator', time: new Date().toISOString() };
+  delivery.prReference = { verifiedBy: 'operator', time: new Date().toISOString(), withdrawn: !next };
   delivery.status = next ? 'WAITING_APPROVAL' : 'PR_REQUIRED';
   delete delivery.error;
   event(
@@ -128,6 +128,8 @@ function validateResult(config, result, input) {
   return prUrl(config, result.url);
 }
 export async function createPr(receiver, state, delivery, templates) {
+  if (delivery.prReference?.withdrawn)
+    fail('PR_REFERENCE_WITHDRAWN', '原 PR 引用已由操作者撤销，不自动恢复或重复创建；请核对平台并登记正确的已创建 PR');
   if (!receiver.config.pullRequests)
     fail(
       'PR_ADAPTER_REQUIRED',

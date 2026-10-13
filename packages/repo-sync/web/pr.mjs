@@ -22,6 +22,8 @@ function header(snapshot, esc) {
 }
 function automaticPending(snapshot, esc) {
   const delivery = snapshot.state.active;
+  if (delivery.prReference?.withdrawn)
+    return `<section class="card" id="pr-form"><h3>登记核对后的 PR 引用</h3>${header(snapshot, esc)}<p>原引用已由你撤销，系统不会重新登记旧回执或创建第二个 PR。先核对平台中已经创建的具体 PR、分支与候选，再补登记正确链接。</p>${referenceForm(delivery, esc)}</section>`;
   const git = snapshot.platform.transport === 'git';
   const receiptMissing = ['GIT_PR_LINK_UNKNOWN', 'GIT_PR_RESPONSE_AMBIGUOUS', 'PR_CREATE_RESULT_UNKNOWN'].includes(
     delivery.error?.code,

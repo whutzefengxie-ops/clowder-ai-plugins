@@ -26,6 +26,15 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('request', (request) => {
+    if (!request.url().endsWith('/api/tasks') || request.method() !== 'POST') return;
+    const input = request.postDataJSON();
+    if (input.action === 'receipts') {
+      assert.equal(input['issue-71'], undefined);
+      assert.match(input.deliveryId, /^[a-f0-9]{24}$/);
+      assert.equal(input.observations.length, 1);
+    }
+  });
   await page.goto(base);
   for (let index = 0; index < 2; index++) {
     await page.locator('[data-action="start"]').click();

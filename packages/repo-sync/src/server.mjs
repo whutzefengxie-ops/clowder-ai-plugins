@@ -77,9 +77,12 @@ export function createReceiverServer(receiver, options = {}) {
 async function taskRequest(request, response, path, tasks) {
   if (request.method === 'POST' && path === '/api/tasks')
     return send(response, 202, { operation: await tasks.start(await body(request)) });
-  const match = /^\/api\/tasks\/([a-f0-9]{32})(\/cancel)?$/.exec(path);
+  const match = /^\/api\/tasks\/([a-f0-9]{32})(\/cancel|\/persist)?$/.exec(path);
   if (!match) return send(response, 404, { code: 'NOT_FOUND' });
-  if (request.method === 'POST' && match[2]) return send(response, 202, { operation: await tasks.cancel(match[1]) });
+  if (request.method === 'POST' && match[2])
+    return send(response, 202, {
+      operation: await (match[2] === '/persist' ? tasks.retryPersistence(match[1]) : tasks.cancel(match[1])),
+    });
   if (request.method !== 'GET' || match[2]) return send(response, 404, { code: 'NOT_FOUND' });
   const operation = await tasks.latest(match[1]);
   return send(

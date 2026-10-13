@@ -92,6 +92,10 @@ export async function confirmGitPr(receiver, state, delivery) {
     'platform-pr',
     '核验 Git 创建回执与候选分支',
     async () => {
+      if (delivery.prReference?.withdrawn)
+        fail('PR_REFERENCE_WITHDRAWN', '原 PR 引用已撤销，不自动恢复旧回执或重复创建；请核对平台后登记正确 PR');
+      if (delivery.prUrl && delivery.prUrl !== delivery.gitPr?.url)
+        fail('PR_MAPPING_CONFLICT', 'Git 回执与已纠正的 PR 引用不同，保留操作者引用；请核对原交付，不自动覆盖');
       if (!delivery.gitPr?.url)
         fail(
           'GIT_PR_LINK_UNKNOWN',

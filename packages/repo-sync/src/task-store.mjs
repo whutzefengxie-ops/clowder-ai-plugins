@@ -16,6 +16,11 @@ export const taskActions = new Set([
   'pr',
   'clear-pr',
   'create-pr',
+  'start',
+  'issue',
+  'receipts',
+  'resolve',
+  'cancel-version',
 ]);
 const keys = new Set([
   'action',
@@ -28,6 +33,14 @@ const keys = new Set([
   'expectedRevision',
   'url',
   'previousUrl',
+  'expectedTarget',
+  'sourceId',
+  'internalId',
+  'previousId',
+  'observations',
+  'path',
+  'choice',
+  'content',
 ]);
 export function taskInput(input) {
   if (!taskActions.has(input?.action)) fail('UNKNOWN_ACTION', '此操作不支持后台执行');
@@ -61,21 +74,52 @@ export function taskPlan(action) {
     pr: [['platform-pr', '核验候选并登记 PR 引用']],
     'clear-pr': [['platform-pr', '核验未合入并撤销错误引用']],
     'create-pr': [['platform-pr', '查询/创建并回读内部 PR']],
+    issue: [['issue-mapping', '登记 / 纠正 Issue 来源映射']],
+    resolve: [['conflict-resolution', '保存当前交付的冲突处理']],
+    'cancel-version': [['version-cancel', '撤销当前未发布版本交付']],
   };
   return (plans[action] ?? fetch).map(([key, label]) => ({ id: key, key, label, status: 'PENDING' }));
 }
 export async function readTask(config, id) {
   if (!config?.stateDir) return null;
+  const explicit = Boolean(id);
+  let indexed = false;
   try {
     const folder = join(config.stateDir, 'operations');
-    if (!id) id = JSON.parse(await readText(join(folder, 'latest.json'))).id;
+    if (!id) {
+      id = JSON.parse(await readText(join(folder, 'latest.json'))).id;
+      indexed = true;
+    }
     if (!/^[a-f0-9]{32}$/.test(id)) fail('TASK_UNREADABLE', '任务记录格式无效，请在本机核对');
     const value = JSON.parse(await readText(join(folder, `${id}.json`)));
-    if (value.bindingId !== config.bindingId) return null;
-    if (value.id !== id || !Array.isArray(value.steps)) fail('TASK_UNREADABLE', '任务记录不属于当前绑定或格式无效');
+    if (value.bindingId !== config.bindingId) {
+      if (explicit) fail('TASK_BINDING_CHANGED', '原请求属于其他仓库绑定，暂停；不可当成未使用的请求标识覆盖');
+      return null;
+    }
+    if (
+      value.id !== id ||
+      !taskActions.has(value.action) ||
+      !['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED'].includes(
+        value.status,
+      ) ||
+      !Number.isInteger(value.ownerPid) ||
+      value.ownerPid < 1 ||
+      !/^[a-f0-9]{64}$/.test(value.inputHash ?? '') ||
+      !Number.isFinite(Date.parse(value.startedAt)) ||
+      !Array.isArray(value.steps) ||
+      value.steps.some(
+        (step) =>
+          !step ||
+          typeof step.id !== 'string' ||
+          typeof step.label !== 'string' ||
+          !['PENDING', 'RUNNING', 'DONE', 'FAILED'].includes(step.status),
+      )
+    )
+      fail('TASK_UNREADABLE', '任务记录缺少有效状态、执行器或步骤，暂停；不可当成已完成或自动重建');
     return value;
   } catch (error) {
-    if (error.code === 'ENOENT') return null;
+    if (error.safeToDisplay) throw error;
+    if (error.code === 'ENOENT' && !indexed) return null;
     fail('TASK_UNREADABLE', '任务记录无法读取，保留原文件；请在本机核对');
   }
 }
@@ -86,7 +130,7 @@ export async function saveTask(config, value, first = false) {
   await writePrivate(join(folder, `${value.id}.json`), value);
   if (first) await writePrivate(join(folder, 'latest.json'), { id: value.id });
 }
-export function publicTask(value, owned) {
+export function publicTask(value, owned, canRetryPersistence = false) {
   if (!value) return null;
   const { id, action, status, startedAt, updatedAt, finishedAt, steps, result, error, cancellable } = value;
   return {
@@ -107,6 +151,9 @@ export function publicTask(value, owned) {
     })),
     result,
     error,
+    ...(value.persistence
+      ? { persistence: { ...value.persistence, canRetry: Boolean(owned && canRetryPersistence) } }
+      : {}),
     cancellable: Boolean(owned && cancellable && status === 'RUNNING'),
   };
 }

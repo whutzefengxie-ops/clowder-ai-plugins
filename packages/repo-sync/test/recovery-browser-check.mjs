@@ -24,7 +24,13 @@ const environment = {
 };
 const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
 Object.assign(process.env, environment);
-const config = { ...f.config, allowLocal: false, sourceUrl: external, internalUrl: internal };
+const config = {
+  ...f.config,
+  allowLocal: false,
+  sourceUrl: external,
+  internalUrl: internal,
+  stateDir: join(folder, 'state'),
+};
 await fs.writeFile(file, JSON.stringify(config));
 const receiver = new Receiver(config);
 await receiver.adopt(f.u0, f.i0);

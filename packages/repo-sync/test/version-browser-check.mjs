@@ -35,6 +35,11 @@ try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
+    page.on('request', (request) => {
+      if (!request.url().endsWith('/api/tasks') || request.method() !== 'POST') return;
+      const input = request.postDataJSON();
+      if (input.action === 'resolve') assert.match(input.deliveryId, /^[a-f0-9]{24}$/);
+    });
     try {
       await page.goto(base);
       await page.getByRole('button', { name: '配置同步基线 →' }).click();

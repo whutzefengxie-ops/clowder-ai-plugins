@@ -75,3 +75,35 @@ test('an already published manual candidate gets a dedicated PR branch at the sa
   assert.equal(after.status, 'WAITING_APPROVAL');
   assert.equal(JSON.parse(await readFile(f.resultFile)).count, 1);
 });
+
+test('withdrawn automatic reference stays withdrawn after recovery and never creates a second PR', async () => {
+  const f = await gitPrFixture();
+  const receiver = new Receiver(f.config);
+  await receiver.adopt(f.u0, f.i0);
+  await receiver.selectTag('v2.0.0');
+  await receiver.start();
+  await receiver.prepare();
+  const before = (await receiver.status()).active;
+  await receiver.linkPr(null, { previousUrl: before.prUrl });
+  await assert.rejects(() => receiver.recover(), { code: 'PR_REFERENCE_WITHDRAWN' });
+  assert.equal((await receiver.status()).active.prUrl, undefined);
+  assert.equal(JSON.parse(await readFile(f.resultFile)).count, 1);
+});
+
+test('Git receipt cannot overwrite an operator correction after a paused preparation', async () => {
+  const f = await gitPrFixture();
+  const receiver = new Receiver(f.config);
+  await receiver.adopt(f.u0, f.i0);
+  await receiver.selectTag('v2.0.0');
+  await receiver.start();
+  await receiver.prepare();
+  await receiver.linkPr('https://codehub.example/core/-/merge_requests/502', {
+    previousUrl: 'https://codehub.example/core/-/merge_requests/501',
+  });
+  const state = await receiver.read();
+  state.deliveries[0].error = { code: 'PAUSED', message: 'synthetic pause' };
+  await receiver.store.save(state);
+  await assert.rejects(() => receiver.prepare(), { code: 'PR_MAPPING_CONFLICT' });
+  assert.equal((await receiver.status()).active.prUrl, 'https://codehub.example/core/-/merge_requests/502');
+  assert.equal(JSON.parse(await readFile(f.resultFile)).count, 1);
+});

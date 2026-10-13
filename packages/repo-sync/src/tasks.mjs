@@ -1,5 +1,7 @@
+import { join } from 'node:path';
 import { fail } from './config.mjs';
 import { runExecution, safeError } from './execution.mjs';
+import { Store } from './store.mjs';
 import { publicTask, readTask, saveTask, taskInput, taskPlan } from './task-store.mjs';
 
 const running = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
@@ -10,7 +12,7 @@ export class Tasks {
     this.writes = Promise.resolve();
   }
   busy() {
-    return this.executing || running.has(this.value?.status);
+    return this.executing || this.persistencePending || running.has(this.value?.status);
   }
   async latest(id) {
     const receiver = await this.resolveReceiver();
@@ -30,14 +32,32 @@ export class Tasks {
         };
       }
     }
-    return publicTask(value, value === this.value);
+    const owned = value === this.value;
+    if (owned && this.executing && !running.has(value.status))
+      value = {
+        ...value,
+        status: 'RUNNING',
+        cancellable: false,
+        steps: [...value.steps, { id: 'execution-record', label: '保存执行记录', status: 'RUNNING' }],
+      };
+    return publicTask(value, owned, !this.executing && !this.repairing);
   }
   async start(input) {
     const hash = taskInput(input);
     if (this.admitting) fail('OPERATION_RUNNING', '正在登记任务，请稍后读取任务状态');
     this.admitting = true;
     try {
-      return await this.admit(input, hash);
+      const receiver = await this.resolveReceiver();
+      if (!receiver?.config.stateDir) return await this.admit(input, hash);
+      const admission = new Store(join(receiver.config.stateDir, 'operations'));
+      return await admission.locked(async () => {
+        if ((await this.resolveReceiver())?.config.stateDir !== receiver.config.stateDir)
+          fail('CONFIGURATION_CHANGED', '登记期间台账目录已变化，请刷新核对；业务未开始');
+        return this.admit(input, hash);
+      });
+    } catch (error) {
+      if (error.code === 'WRITER_LOCKED') fail('OPERATION_RUNNING', '另一执行器正在登记原任务，请查询状态，不重复发起');
+      throw error;
     } finally {
       this.admitting = false;
     }
@@ -63,6 +83,7 @@ export class Tasks {
     const allowCancel = ['heads', 'adopt', 'tags', 'prepare'].includes(input.action);
     this.context = {
       signal: this.controller.signal,
+      deliveryId: input.deliveryId,
       allowCancel,
       cancellable: allowCancel,
       report: (event) => this.report(event),
@@ -82,7 +103,12 @@ export class Tasks {
     try {
       await saveTask(this.config, this.value, true);
     } catch {
-      this.value = null;
+      this.value.status = 'FAILED';
+      this.value.error = { code: 'TASK_STORE_FAILED', message: '任务登记失败，业务未执行；请修复私有目录后只补存记录' };
+      this.value.finishedAt = new Date().toISOString();
+      this.terminal = structuredClone(this.value);
+      await saveTask(this.config, this.terminal).catch(() => {});
+      this.recordFailed();
       fail('TASK_STORE_FAILED', '任务无法安全登记，尚未开始执行；请核对私有目录');
     }
     this.executing = true;
@@ -91,7 +117,7 @@ export class Tasks {
   }
   persist() {
     const snapshot = structuredClone(this.value);
-    this.writes = this.writes.then(() => saveTask(this.config, snapshot));
+    this.writes = this.writes.catch(() => {}).then(() => saveTask(this.config, snapshot));
     this.writes.catch(() => {});
   }
   report(event) {
@@ -110,11 +136,13 @@ export class Tasks {
       const { phase, percent, completed, total } = event;
       this.step.progress = { phase, percent, completed, total };
       if (!this.progressDue()) return;
-    } else if (this.step && ['done', 'failed'].includes(event.kind)) {
-      this.step.status = event.kind === 'done' ? 'DONE' : 'FAILED';
-      this.step.finishedAt = new Date().toISOString();
-      if (event.error) this.step.error = event.error;
-      this.step = null;
+    } else if (['done', 'failed'].includes(event.kind)) {
+      const step = this.value.steps.findLast((item) => item.key === event.id && item.status === 'RUNNING');
+      if (!step) return;
+      step.status = event.kind === 'done' ? 'DONE' : 'FAILED';
+      step.finishedAt = new Date().toISOString();
+      if (event.error) step.error = event.error;
+      this.step = this.value.steps.findLast((item) => item.status === 'RUNNING');
     }
     this.value.updatedAt = new Date().toISOString();
     this.persist();
@@ -155,17 +183,45 @@ export class Tasks {
     this.value.finishedAt = new Date().toISOString();
     this.value.updatedAt = this.value.finishedAt;
     this.value.cancellable = false;
+    this.terminal = structuredClone(this.value);
     this.persist();
     try {
       await this.writes;
     } catch {
-      this.value.error = {
-        code: 'TASK_STORE_FAILED',
-        message: '执行记录无法保存，请回读真实台账和 Git 结果；不要重复执行',
-      };
-      this.value.status = 'FAILED';
+      this.recordFailed();
     }
     this.executing = false;
+  }
+  recordFailed() {
+    this.persistencePending = true;
+    this.value.persistence = {
+      status: 'FAILED',
+      error: {
+        code: 'TASK_STORE_FAILED',
+        message:
+          '执行记录未完整保存。修复文件占用或写权限后，只补存原任务记录，不重跑 Git 或创建 PR；当前业务状态与台账仍需核对。',
+      },
+    };
+  }
+  async retryPersistence(id) {
+    if (this.value?.id !== id || !this.persistencePending || !this.terminal)
+      fail('NO_PENDING_RECORD', '当前执行器没有该任务的待保存记录；不能猜测或重跑旧任务');
+    if (this.executing || this.repairing) fail('OPERATION_RUNNING', '任务或补存正在执行，请查询原记录');
+    if ((await this.resolveReceiver())?.config.bindingId !== this.config.bindingId)
+      fail('CONFIGURATION_CHANGED', '绑定已变化，先恢复原绑定，不能补存到另一套仓库');
+    this.repairing = true;
+    try {
+      await this.writes.catch(() => {});
+      await saveTask(this.config, this.terminal, true);
+      this.value = structuredClone(this.terminal);
+      this.persistencePending = false;
+      return this.latest(id);
+    } catch {
+      this.recordFailed();
+      fail('TASK_STORE_FAILED', '原任务记录仍无法保存，请修复文件占用和目录写权限；业务没有重跑');
+    } finally {
+      this.repairing = false;
+    }
   }
   async cancel(id) {
     if (this.value?.id !== id || !this.job) fail('OPERATION_NOT_OWNED', '当前执行器不拥有这笔任务，不能在此取消');
@@ -181,5 +237,6 @@ export class Tasks {
   async close() {
     if (this.busy() && this.context?.cancellable) await this.cancel(this.value.id);
     await this.job;
+    if (this.persistencePending) await this.retryPersistence(this.value.id);
   }
 }

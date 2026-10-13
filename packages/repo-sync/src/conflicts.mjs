@@ -29,7 +29,7 @@ export async function readConflict(receiver, path) {
   return receiver.store.locked(async () => {
     const delivery = current(receiver, await receiver.read(), path);
     const list = await versions(receiver, delivery, path);
-    const result = { path, editable: true };
+    const result = { path, deliveryId: delivery.id, editable: true };
     for (const [index, name] of ['base', 'internal', 'upstream'].entries()) {
       const preview = await blobPreview(receiver.git.directory, list[index]);
       result[name] = preview.content;

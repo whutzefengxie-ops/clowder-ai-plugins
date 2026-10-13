@@ -63,11 +63,15 @@ export async function readPrivate(file) {
     if (error.code === 'ENOENT') return { config: null, revision: null };
     fail('CONFIGURATION_UNREADABLE', '私有配置无法读取，暂停；请在本机核对文件');
   }
+  let config;
   try {
-    return { config: JSON.parse(text), revision: createHash('sha256').update(text).digest('hex') };
+    config = JSON.parse(text);
   } catch {
     fail('CONFIGURATION_UNREADABLE', '私有配置 JSON 无效，暂停；原文件保留');
   }
+  if (!config || typeof config !== 'object' || Array.isArray(config))
+    fail('CONFIGURATION_UNREADABLE', '已有私有配置需要 JSON 对象；不是首次空白配置，暂停并保留原文件');
+  return { config, revision: createHash('sha256').update(text).digest('hex') };
 }
 export async function configurationLock(file, operation) {
   await privateLocation(file);

@@ -246,7 +246,11 @@ document.addEventListener('click', async (event) => {
     render();
   }
   if (element.dataset.action) {
-    const result = await action({ action: element.dataset.action, deliveryId: snapshot.state?.active?.id });
+    const result = await action({
+      action: element.dataset.action,
+      deliveryId: snapshot.state?.active?.id,
+      ...(element.dataset.action === 'start' ? { expectedTarget: snapshot.state?.queue[0]?.target } : {}),
+    });
     showActionResult(element.dataset.action, result);
   }
 });
@@ -270,7 +274,7 @@ document.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.target;
   const fields = Object.fromEntries(new FormData(form));
-  const input =
+  let input =
     form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
   if (input.action === 'configure')
     for (const key of ['internalPaths', 'mergePaths'])
@@ -283,11 +287,15 @@ document.addEventListener('submit', async (event) => {
           : [];
   if (input.action === 'issue') input.sourceId = form.dataset.source;
   if (input.action === 'receipts')
-    input.observations = snapshot.state.active.issues.map((issue) => ({
-      sourceId: issue.sourceId,
-      internalId: snapshot.state.issues[issue.sourceId].internalId,
-      state: fields[issue.sourceId],
-    }));
+    input = {
+      action: 'receipts',
+      deliveryId: snapshot.state.active.id,
+      observations: snapshot.state.active.issues.map((issue) => ({
+        sourceId: issue.sourceId,
+        internalId: snapshot.state.issues[issue.sourceId].internalId,
+        state: fields[issue.sourceId],
+      })),
+    };
   const result = await action(input);
   if (['configure', 'configure-repositories', 'configure-pr'].includes(input.action) && result) {
     const confirmation = document.createElement('p');

@@ -100,3 +100,11 @@ test('automatic lookup does not overwrite a different manual reference', async (
   assert.equal((await receiver.status()).active.prUrl, 'https://codehub.example/core/pull/502');
   assert.equal(JSON.parse(await readFile(database)).count, 1);
 });
+test('operator withdrawal blocks adapter lookup from reinstating the old PR reference', async () => {
+  const { receiver, database } = await fixture();
+  await receiver.createPr();
+  await receiver.linkPr(null, { previousUrl: 'https://codehub.example/core/pull/501' });
+  await assert.rejects(() => receiver.createPr(), { code: 'PR_REFERENCE_WITHDRAWN' });
+  assert.equal((await receiver.status()).active.prUrl, undefined);
+  assert.equal(JSON.parse(await readFile(database)).count, 1);
+});

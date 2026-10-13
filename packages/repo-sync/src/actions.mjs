@@ -5,7 +5,9 @@ import { discover } from './github.mjs';
 export async function dispatch(receiver, input) {
   if (
     input.deliveryId &&
-    ['issue', 'prepare', 'pr', 'clear-pr', 'create-pr', 'resolve', 'recover', 'receipts'].includes(input.action) &&
+    ['issue', 'prepare', 'pr', 'clear-pr', 'create-pr', 'resolve', 'recover', 'receipts', 'cancel-version'].includes(
+      input.action,
+    ) &&
     (await receiver.status())?.active?.id !== input.deliveryId
   )
     fail('DELIVERY_CHANGED', '活动交付已变化，请刷新后核对，不操作另一笔交付');
@@ -13,7 +15,7 @@ export async function dispatch(receiver, input) {
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () => discover(receiver),
-    start: () => receiver.start(),
+    start: () => receiver.start(input.expectedTarget),
     issue: () => receiver.linkIssue(input.sourceId, input.internalId, input.url, input),
     prepare: () => receiver.prepare(),
     pr: () => receiver.linkPr(input.url, input),
