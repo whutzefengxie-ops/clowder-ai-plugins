@@ -46,7 +46,7 @@ node src/cli.mjs setup "D:/private/repo-sync/config.json" 5220
 
 1. 点击**配置真实仓库**，填写外部 GitHub 与内部 Git 地址、两侧分支。使用本机 Git 的 HTTPS 凭据管理器或 SSH 密钥，不在网页填密码/Token。
 2. 选择方式：有内部 README 改动、新文件或插件目录时用**按 tag 更新**，列出内部保留路径与共同修改文件；需要逐笔原始 PR/Issue/commit 时用**同步开发过程**，核心文件须一致。
-3. 保存后点击**读取两侧当前版本**，使用 `git ls-remote` 轻量检查两侧连接、指定分支与 HEAD，此步不下载对象。HTTPS/SSH 认证需先在本机终端配置好，后台执行不提供交互式终端。内部候选分支写权限将在真正推送时核验；读取成功不证明可以推送。
+3. 确认 **PR 创建方式**：默认 Git 推送时自动创建；填写内部仓库网页地址以核对回执范围。平台使用其他推送选项时先在私有 JSON 配置。保存后点击**读取两侧当前版本**，使用 `git ls-remote` 轻量检查两侧连接、指定分支与 HEAD，此步不下载对象。HTTPS/SSH 认证需先在本机终端配置好，后台执行不提供交互式终端。内部候选分支写权限将在真正推送时核验；读取成功不证明可以推送或创建 PR。
 4. 填写上次已接收的外部 **U0** 和内部当前 **I0**，点击核验后才开始准备私有对象目录、下载所需历史并登记基线。例如内仓落后 20 个 commit，U0 是上次同步的 A，I0 是内仓当前 HEAD，不能把外部最新 HEAD 当 U0。SHA 可以不同；程序核验文件范围与历史。工具不能从相同内容唯一猜出此前接收版本。
 5. 进入工作台：版本模式读取 tag、选择目标版本；过程模式检查上游 PR/Issue。点击当前步骤按钮继续，程序只推候选分支，不合入 main。
 6. Git 自动模式在准备步骤推送并创建 PR，取得平台返回地址后直接进入审核；只在明确选择手工模式时，按模板创建并登记链接。在平台审核合入后回来点击**已在平台合入，核验 Git 结果**。版本模式随即完成；过程模式再保存人工核对的 Issue 接收记录。
@@ -108,7 +108,7 @@ pushOptions 可省略，默认使用上面这组 GitLab 兼容扩展。它是平
 
 #### 固定命令适配器（额外路径）
 
-普通 Git 协议不能创建平台 Issue/PR。本包提供平台命令适配器；只有本地私有 JSON 配置了真实平台能力，按钮才显示自动创建。没有适配器时，明确引导在平台创建后登记。网页和 MCP 不能设置命令或凭据。
+平台命令适配器是 Git 创建扩展之外的额外自动路径，在本地私有 JSON 配置其真实查询/创建能力后，准备步骤会自动执行。只在明确选择手工模式时引导在平台创建后登记；Git 路径缺少回执或不支持选项时暂停，不自动降级。网页和 MCP 不能设置命令或凭据。
 
 ```json
 {
@@ -157,7 +157,8 @@ clowder-repo-sync tags private-config.json
 clowder-repo-sync select-tag private-config.json v2.0.0
 clowder-repo-sync start private-config.json
 clowder-repo-sync prepare private-config.json
-clowder-repo-sync pr private-config.json https://codehub.example/core/pull/501
+# 自动模式已创建并登记 PR；仅手工模式需要：
+# clowder-repo-sync pr private-config.json https://codehub.example/core/pull/501
 # 在平台正常审核合入，然后：
 clowder-repo-sync recover private-config.json
 ```
@@ -189,7 +190,7 @@ clowder-repo-sync adopt private-config.json <U0> <I0>
 clowder-repo-sync serve private-config.json 5187
 ```
 
-5. 在界面检查上游更新 → 发起下一笔 → 在平台创建/复用 Issue 并登记 → 检查并推候选 → 用模板创建内部 PR、登记具体地址 → 打开 PR 在平台正常审核合入 → 回来核验 Git 结果 → 在平台核对 Issue 状态并保存本笔记录。
+5. 在界面检查上游更新 → 发起下一笔 → 过程模式在平台创建/复用 Issue 并登记 → 检查候选并自动创建内部 PR → 打开具体 PR 在平台正常审核合入 → 回来核验 Git 结果 → 过程模式核对 Issue 状态并保存本笔记录。只有明确手工模式才需要用模板创建 PR 并登记地址；版本模式不搬运 Issue。
 
 GitHub 发现根据 first-parent main 顺序、commit→PR 查询与实际 merge SHA确定范围，区分 squash/rebase 的实际 main 对象。读取关闭关联和完整 Issue timeline，只有能绑定本笔落地 commit 的关闭事件才视为关闭证据；文本提及仅作普通关联。无法唯一归属主干提交、PR 边界不一致或元数据查询失败时暂停。首版不提供评论、附件、账户、里程碑的全量镜像。
 
@@ -200,7 +201,8 @@ clowder-repo-sync discover private-config.json
 clowder-repo-sync start private-config.json
 clowder-repo-sync issue private-config.json <source-node-id> <internal-issue-id> <https-issue-url>
 clowder-repo-sync prepare private-config.json
-clowder-repo-sync pr private-config.json <https-pr-url>
+# 自动模式已取得 PR 地址；仅手工模式需要：
+# clowder-repo-sync pr private-config.json <https-pr-url>
 clowder-repo-sync recover private-config.json
 clowder-repo-sync receipts private-config.json observations.json
 clowder-repo-sync status private-config.json
