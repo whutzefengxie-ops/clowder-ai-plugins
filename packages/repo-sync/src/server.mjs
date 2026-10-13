@@ -4,8 +4,11 @@ import { createServer } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dispatch } from './actions.mjs';
+import { fail } from './config.mjs';
+import { safeError } from './execution.mjs';
 import { body, requestPath, requireToken, send } from './http.mjs';
 import { configure } from './settings.mjs';
+import { Tasks } from './tasks.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '../web');
 const assets = new Map([
@@ -16,9 +19,16 @@ const assets = new Map([
   ['/receipts.mjs', 'receipts.mjs'],
   ['/version.mjs', 'version.mjs'],
   ['/connections.mjs', 'connections.mjs'],
+  ['/operations.mjs', 'operations.mjs'],
+  ['/operation-view.mjs', 'operation-view.mjs'],
 ]);
 export function createReceiverServer(receiver, options = {}) {
   const token = randomBytes(32).toString('hex');
+  const current = async () => (options.connection ? options.connection.current() : receiver);
+  const tasks = new Tasks(current, async (input) =>
+    options.connection ? options.connection.run(input, options) : dispatch(receiver, input, options),
+  );
+  options = { ...options, tasks };
   const server = createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -28,17 +38,39 @@ export function createReceiverServer(receiver, options = {}) {
     );
     try {
       const path = requestPath(request, server.address()?.port);
-      if (options.connection && (path === '/api/status' || path === '/api/action'))
-        receiver = await options.connection.current();
+      if (options.connection && path.startsWith('/api/')) receiver = await options.connection.current();
+      if (path.startsWith('/api/tasks')) {
+        requireToken(request, token);
+        return await taskRequest(request, response, path, tasks);
+      }
       if (request.method === 'GET') return await get(receiver, options, token, path, response);
       if (request.method !== 'POST' || path !== '/api/action') return send(response, 404, { code: 'NOT_FOUND' });
       requireToken(request, token);
+      if (tasks.busy()) fail('OPERATION_RUNNING', '已有任务执行中，请等待或取消原任务；不能修改绑定或重复操作');
       receiver = await post(receiver, options, token, await body(request), response);
     } catch (error) {
       return sendError(response, error);
     }
   });
+  server.shutdown = async () => {
+    await tasks.close();
+    if (server.listening) await new Promise((done) => server.close(done));
+  };
   return server;
+}
+async function taskRequest(request, response, path, tasks) {
+  if (request.method === 'POST' && path === '/api/tasks')
+    return send(response, 202, { operation: await tasks.start(await body(request)) });
+  const match = /^\/api\/tasks\/([a-f0-9]{32})(\/cancel)?$/.exec(path);
+  if (!match) return send(response, 404, { code: 'NOT_FOUND' });
+  if (request.method === 'POST' && match[2]) return send(response, 202, { operation: await tasks.cancel(match[1]) });
+  if (request.method !== 'GET' || match[2]) return send(response, 404, { code: 'NOT_FOUND' });
+  const operation = await tasks.latest(match[1]);
+  return send(
+    response,
+    operation ? 200 : 404,
+    operation ? { operation } : { code: 'TASK_NOT_FOUND', message: '尚未找到这笔任务，请继续查询原请求' },
+  );
 }
 async function post(receiver, options, token, input, response) {
   let result;
@@ -62,11 +94,7 @@ function sendError(response, error) {
     : error.code === 'BODY_TOO_LARGE'
       ? 413
       : 409;
-  return send(response, status, {
-    code: error.code ?? 'INVALID_REQUEST',
-    message: error.code ? error.message : '请求未完成，请核对输入与当前步骤',
-    ...(error.details ? { details: error.details } : {}),
-  });
+  return send(response, status, safeError(error));
 }
 async function get(receiver, options, token, path, response) {
   const demoPr = options.demoMerge && /^\/demo\/pr\/[a-f0-9]{24}$/.test(path);
@@ -88,6 +116,7 @@ async function get(receiver, options, token, path, response) {
     mergePaths,
     checkProfile,
     commitClosureVerified,
+    bindingId,
   } = receiver?.config ?? {};
   return send(response, 200, {
     token,
@@ -103,11 +132,13 @@ async function get(receiver, options, token, path, response) {
           mergePaths,
           checkProfile,
           commitClosureVerified,
+          bindingId,
         }
       : null,
     connection: options.connection?.describe(),
     demoLinks: options.demoLinks,
     synthetic: Boolean(options.demoMerge),
+    operation: await options.tasks.latest(),
   });
 }
 export function listen(server, port = 5187) {

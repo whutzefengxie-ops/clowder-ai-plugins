@@ -80,6 +80,7 @@ button:disabled {
   cursor: wait;
 }
 .card {
+  overflow-wrap: anywhere;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 24px;

@@ -66,7 +66,7 @@ export function createRepoSyncMcpServer(receiver, options = {}) {
   server.close = async () => {
     closed = true;
     if (starting) await starting.catch(() => {});
-    if (workbench?.listening) await new Promise((done) => workbench.close(done));
+    if (workbench?.listening) await workbench.shutdown();
     await close();
   };
   server.server.onclose = () => {

@@ -17,7 +17,13 @@ try {
     : await configuredReceiver(JSON.parse(await readFile(configPath, 'utf8')));
   const serve = async () => {
     const port = Number(args[0] ?? 5187);
-    await listen(createReceiverServer(receiver, { connection }), port);
+    const server = await listen(createReceiverServer(receiver, { connection }), port);
+    for (const signal of ['SIGINT', 'SIGTERM'])
+      process.once(signal, () => {
+        void server.shutdown().catch(() => {
+          console.error('执行器停止结果待确认，请在本机核对进程与执行锁。');
+        });
+      });
     console.log(`真实仓库工作台：http://127.0.0.1:${port}/`);
     console.log('未预置演示数据；请在本机网页配置仓库和基线。平台 Issue / PR 由用户创建。');
   };

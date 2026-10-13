@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fail } from './config.mjs';
+import { execution } from './execution.mjs';
 
 export class Store {
   constructor(directory) {
@@ -36,12 +37,18 @@ export class Store {
     }
     await handle.writeFile(JSON.stringify({ token, pid: process.pid }));
     await handle.close();
+    let release = true;
     try {
       return await action();
+    } catch (error) {
+      if (error.code === 'STOP_UNCONFIRMED') release = false;
+      throw error;
     } finally {
-      const owner = JSON.parse(await readFile(this.lockPath, 'utf8'));
-      if (owner.token !== token) fail('LOCK_OWNER_CHANGED', '执行器锁归属改变，停止释放');
-      await unlink(this.lockPath);
+      if (release && !execution()?.stopUnconfirmed) {
+        const owner = JSON.parse(await readFile(this.lockPath, 'utf8'));
+        if (owner.token !== token) fail('LOCK_OWNER_CHANGED', '执行器锁归属改变，停止释放');
+        await unlink(this.lockPath);
+      }
     }
   }
   async unlock(writersStopped = false) {

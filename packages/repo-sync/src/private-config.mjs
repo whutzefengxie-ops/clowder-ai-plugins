@@ -3,6 +3,7 @@ import { access, lstat, mkdir, open, readFile, realpath, rename, unlink, writeFi
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fail } from './config.mjs';
+import { execution } from './execution.mjs';
 
 const installation = fileURLToPath(new URL('../', import.meta.url));
 export async function privateLocation(file) {
@@ -79,12 +80,16 @@ export async function configurationLock(file, operation) {
       fail('CONFIGURATION_BUSY', '配置或同步正在执行；若进程中断，请在本机确认所有执行器退出后处理配置锁');
     throw error;
   }
+  let release = true;
   try {
     await handle.writeFile(JSON.stringify({ pid: process.pid }));
     return await operation();
+  } catch (error) {
+    if (error.code === 'STOP_UNCONFIRMED') release = false;
+    throw error;
   } finally {
     await handle.close();
-    await unlink(lock);
+    if (release && !execution()?.stopUnconfirmed) await unlink(lock);
   }
 }
 export async function writePrivate(file, config) {

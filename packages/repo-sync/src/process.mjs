@@ -1,35 +1,93 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
+import { commandFailure } from './command-errors.mjs';
 import { fail } from './config.mjs';
-
-const execute = promisify(execFile);
+import { checkpoint, execution, progress } from './execution.mjs';
+import { terminateTree } from './terminate.mjs';
 
 export async function command(executable, args, options = {}) {
-  try {
-    const result = await execute(executable, args, {
-      windowsHide: true,
-      timeout: 120000,
-      maxBuffer: 8 * 1024 * 1024,
-      ...options,
+  checkpoint();
+  const signal = options.signal ?? execution()?.signal;
+  if (signal?.aborted) fail('OPERATION_CANCELLED', '操作已取消');
+  const { signal: _signal, timeout = 120000, ...spawnOptions } = options;
+  const child = spawn(executable, args, {
+    ...spawnOptions,
+    windowsHide: true,
+    detached: process.platform !== 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const decoder = new StringDecoder('utf8');
+  let stderr = '';
+  let line = '';
+  const stdout = [];
+  let size = 0;
+  let cause;
+  let stopping;
+  let uncertain;
+  const uncertainty = new Promise((done) => {
+    uncertain = done;
+  });
+  const stop = (reason) => {
+    if (stopping || child.exitCode !== null || child.signalCode !== null) return;
+    cause = reason;
+    stopping = terminateTree(child).catch((error) => {
+      cause = error.code;
+      if (execution()) execution().stopUnconfirmed = true;
+      uncertain(null);
     });
-    return result.stdout.trim();
-  } catch (error) {
-    // Never persist raw Git/CLI output: it can contain remote URLs, usernames and secrets.
+  };
+  const abort = () => stop('OPERATION_CANCELLED');
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => stop('COMMAND_TIMEOUT'), timeout);
+  child.stderr.on('data', (chunk) => {
+    const text = decoder.write(chunk);
+    stderr = (stderr + text).slice(-65536);
+    line = (line + text).slice(-8192);
+    const parts = line.split(/[\r\n]/);
+    line = parts.pop();
+    for (const part of parts) progress(part);
+  });
+  child.stdout.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > 8 * 1024 * 1024) stop('OUTPUT_LIMIT');
+    else stdout.push(chunk);
+  });
+  let spawnError;
+  child.on('error', (error) => {
+    spawnError = error;
+  });
+  const code = await Promise.race([new Promise((done) => child.once('close', done)), uncertainty]);
+  clearTimeout(timer);
+  signal?.removeEventListener('abort', abort);
+  if (stopping) await stopping;
+  progress(line);
+  if (cause)
     fail(
-      'COMMAND_FAILED',
-      `命令执行失败：${executable.split(/[\\/]/).at(-1)}，退出状态 ${Number.isInteger(error.code) ? error.code : '未知或超时'}。请在内部环境核对原始输出。`,
+      cause,
+      {
+        OPERATION_CANCELLED: '操作已取消，执行进程树已停止',
+        COMMAND_TIMEOUT: '命令超过允许时间，执行进程树已停止；请检查网络或在私有配置调整对应超时',
+        STOP_UNCONFIRMED: '无法确认执行进程树已停止；保留执行锁，请在本机确认后恢复',
+        OUTPUT_LIMIT: '命令输出超过允许大小，执行已停止；请在本机核对检查命令',
+      }[cause],
     );
-  }
+  if (spawnError || code !== 0) commandFailure(stderr, spawnError?.code ?? code);
+  return Buffer.concat(stdout).toString('utf8').trim();
 }
-export async function git(directory, args) {
-  return command('git', ['-C', directory, ...args], { env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+export function gitEnvironment() {
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' };
+  if (!env.GIT_SSH_COMMAND && !env.GIT_SSH) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes';
+  return env;
+}
+export function git(directory, args, options = {}) {
+  return command('git', ['-C', directory, ...args], { env: gitEnvironment(), ...options });
 }
 export async function ancestor(directory, from, to) {
   try {
-    await execute('git', ['-C', directory, 'merge-base', '--is-ancestor', from, to], { windowsHide: true });
+    await git(directory, ['merge-base', '--is-ancestor', from, to]);
     return true;
   } catch (error) {
-    if (error.code === 1) return false;
-    fail('GRAPH_CHECK_FAILED', '提交祖先核验失败，不能将错误当作不存在祖先关系');
+    if (error.code === 'COMMAND_FAILED' && error.details?.exitCode === 1) return false;
+    throw error;
   }
 }

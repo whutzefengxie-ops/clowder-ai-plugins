@@ -5,6 +5,7 @@ import { versionPolicy } from './policy.mjs';
 export function fail(code, message, details) {
   const error = new Error(message);
   error.code = code;
+  error.safeToDisplay = true;
   if (details) error.details = details;
   throw error;
 }
@@ -75,7 +76,23 @@ export function validateConfig(input) {
       fail('INVALID_CHECK', '检查命令需要 executable 与字符串 args 数组');
   }
   normalizeCheckProfile(config);
+  validateTimeouts(config.timeouts);
   return config;
+}
+function validateTimeouts(values) {
+  if (
+    values !== undefined &&
+    (!values ||
+      typeof values !== 'object' ||
+      Array.isArray(values) ||
+      Object.keys(values).some((key) => !['probe', 'fetch'].includes(key)))
+  )
+    fail('INVALID_TIMEOUT', '超时配置只支持 probe 和 fetch');
+  for (const [name, defaultValue] of Object.entries({ probe: 20000, fetch: 600000 })) {
+    const value = values?.[name] ?? defaultValue;
+    if (!Number.isInteger(value) || value < 1000 || value > 3600000)
+      fail('INVALID_TIMEOUT', '连接和下载超时必须是 1000～3600000 毫秒的整数');
+  }
 }
 function normalizeCheckProfile(config) {
   if (config.checkProfile !== 'git-integrity') return;

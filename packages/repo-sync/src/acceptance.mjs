@@ -1,4 +1,5 @@
 import { fail } from './config.mjs';
+import { phase } from './execution.mjs';
 import { event } from './store.mjs';
 import { verifyTag } from './tags.mjs';
 
@@ -21,7 +22,7 @@ export async function recoverDelivery(receiver, state, delivery) {
   }
   if (!delivery.candidate || !delivery.prUrl || !delivery.checks?.passed || delivery.checks.head !== delivery.candidate)
     fail('MERGE_UNATTRIBUTABLE', 'main 已前进，但没有完整冻结候选、检查和 PR 映射，暂停');
-  await receiver.git.verify(delivery, heads.internal);
+  await phase('merge-verify', '核验实际合入的文件树与历史', () => receiver.git.verify(delivery, heads.internal), false);
   delivery.acceptedInternal = heads.internal;
   state.accepted = { upstream: delivery.target, internal: heads.internal };
   if (receiver.config.mode === 'version') {

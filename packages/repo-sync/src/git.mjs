@@ -1,7 +1,9 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fail } from './config.mjs';
+import { phase } from './execution.mjs';
 import { ancestor, command, git } from './process.mjs';
+import { remoteHeads } from './remote-heads.mjs';
 
 export class GitReceiver {
   constructor(config) {
@@ -22,16 +24,28 @@ export class GitReceiver {
     }
     await git(this.directory, ['init', '--bare']);
   }
+  heads() {
+    return remoteHeads(this.config);
+  }
   async fetch() {
-    await this.ready();
+    await this.heads();
+    await phase('object-store', '准备私有对象目录', () => this.ready());
     const c = this.config;
-    await git(this.directory, ['fetch', '--no-tags', c.sourceUrl, `+refs/heads/${c.sourceBranch}:refs/sync/source`]);
-    await git(this.directory, [
-      'fetch',
-      '--no-tags',
-      c.internalUrl,
-      `+refs/heads/${c.targetBranch}:refs/sync/internal`,
-    ]);
+    const options = { timeout: c.timeouts?.fetch ?? 600000 };
+    await phase('source-fetch', '下载外部对象', () =>
+      git(
+        this.directory,
+        ['fetch', '--progress', '--no-tags', c.sourceUrl, `+refs/heads/${c.sourceBranch}:refs/sync/source`],
+        options,
+      ),
+    );
+    await phase('internal-fetch', '下载内部对象', () =>
+      git(
+        this.directory,
+        ['fetch', '--progress', '--no-tags', c.internalUrl, `+refs/heads/${c.targetBranch}:refs/sync/internal`],
+        options,
+      ),
+    );
     return { upstream: await this.sha('refs/sync/source'), internal: await this.sha('refs/sync/internal') };
   }
   async sha(ref) {

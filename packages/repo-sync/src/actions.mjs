@@ -3,7 +3,7 @@ import { discover } from './github.mjs';
 
 export async function dispatch(receiver, input, options) {
   const actions = {
-    heads: () => receiver.store.locked(() => receiver.git.fetch()),
+    heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () => discover(receiver),
     start: () => receiver.start(),

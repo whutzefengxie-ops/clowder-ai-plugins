@@ -1,4 +1,5 @@
-import { captureDraft, configuration, firstUse, repositoryInput, restoreDraft } from './connections.mjs';
+import { configuration, firstUse, repositoryInput } from './connections.mjs';
+import { createOperations } from './operations.mjs';
 import { progressSteps } from './progress.mjs';
 import { receiptFields } from './receipts.mjs';
 import { conflictEditor, conflictOptions, tagSelector, versionPreview } from './version.mjs';
@@ -7,7 +8,7 @@ const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
 let snapshot;
 let view = 'workbench';
-let busy = false;
+const operations = createOperations({ snapshot: () => snapshot, refresh, completed: showActionResult, errorPanel });
 let availableTags = [];
 const esc = (value) =>
   String(value ?? '').replace(
@@ -17,46 +18,15 @@ const esc = (value) =>
 const sha = (value) => `<code title="${esc(value)}">${esc(value)}</code>`;
 const button = (action, label) => `<button type="button" class="primary" data-action="${action}">${label}</button>`;
 async function refresh() {
-  const response = await fetch('/api/status');
+  const response = await fetch('/api/status', { signal: AbortSignal.timeout(8000) });
   const result = await response.json();
   if (!response.ok) throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
   snapshot = result;
+  if (!snapshot.state && snapshot.operation) view = 'configuration';
   render();
+  operations.observe(snapshot.operation);
 }
-async function action(input) {
-  if (busy) return;
-  busy = true;
-  errorPanel.hidden = true;
-  const drafts = captureDraft();
-  for (const element of document.querySelectorAll('button, input, textarea, select')) element.disabled = true;
-  try {
-    const response = await fetch('/api/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Repo-Sync-Token': snapshot.token },
-      body: JSON.stringify(input),
-    });
-    const result = await response.json();
-    if (!response.ok)
-      throw new Error(
-        `${result.code}：${result.message ?? '请求失败'}${result.details?.paths?.length ? `\n${result.details.paths.join('\n')}` : ''}`,
-      );
-    await refresh();
-    if (input.action === 'heads') restoreDraft(drafts);
-    return result;
-  } catch (error) {
-    try {
-      await refresh();
-    } catch {
-      /* Keep the last visible form when configuration is unavailable. */
-    }
-    restoreDraft(drafts);
-    errorPanel.textContent = error.message;
-    errorPanel.hidden = false;
-  } finally {
-    busy = false;
-    for (const element of document.querySelectorAll('button, input, textarea, select')) element.disabled = false;
-  }
-}
+const action = (input) => operations.action(input);
 const states = {
   ISSUES_REQUIRED: [
     '在内部平台创建或复用 Issue',
@@ -218,6 +188,7 @@ function render() {
         ? '等待内部审核'
         : '完成当前步骤';
   renderFreshness();
+  operations.lock();
   if (snapshot.demoLinks)
     content.insertAdjacentHTML(
       'afterbegin',
@@ -264,7 +235,9 @@ function showActionResult(kind, result) {
       '<section class="card"><h2>模拟平台已执行 Git 合入</h2><p>返回工作台核验并补写接收记录。</p><a href="/">返回工作台 →</a></section>';
   }
   if (kind === 'heads') {
-    document.getElementById('internal').value = result.result.internal;
+    const internal = document.getElementById('internal');
+    if (!internal) return;
+    internal.value = result.result.internal;
     document.getElementById('upstream').placeholder = `最新 ${result.result.upstream}；请填已同步版本`;
     const heads = document.getElementById('observed-heads');
     if (heads)

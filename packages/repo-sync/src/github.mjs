@@ -1,4 +1,5 @@
 import { fail } from './config.mjs';
+import { phase } from './execution.mjs';
 import { api } from './gh-api.mjs';
 import { collectIssues } from './github-issues.mjs';
 import { git } from './process.mjs';
@@ -39,7 +40,7 @@ async function discoverLocked(receiver) {
   if (!state) fail('NOT_ADOPTED', '先登记基线');
   if (receiver.active(state)) fail('RECOVERY_FIRST', '先恢复未完成交付，再扫描新的范围');
   const repo = githubRepository(receiver.config.sourceUrl);
-  const repository = await api(`repos/${repo}`);
+  const repository = await phase('github-repository', '读取 GitHub 仓库元数据', () => api(`repos/${repo}`));
   const heads = await receiver.git.fetch();
   if (!(await receiver.git.isAncestor(state.accepted.upstream, heads.upstream)))
     fail('SOURCE_REWRITTEN', '上游 main 历史发生改写');
@@ -50,34 +51,38 @@ async function discoverLocked(receiver) {
     `${state.accepted.upstream}..${heads.upstream}`,
   ]);
   const boundaries = output ? output.split('\n') : [];
-  const associations = {};
-  for (const sha of boundaries) associations[sha] = await api(`repos/${repo}/commits/${sha}/pulls?per_page=100`, true);
-  const groups = groupLandings(boundaries, associations, receiver.config.sourceBranch);
-  const plans = [];
-  let base = state.accepted.upstream;
-  for (const group of groups) {
-    const pr = await api(`repos/${repo}/pulls/${group.pr.number}`);
-    if (!pr.merged || pr.merge_commit_sha !== group.target) fail('SOURCE_CHANGED', '扫描过程中 PR 来源发生变化');
-    const introduced = (await git(receiver.git.directory, ['rev-list', `${base}..${group.target}`])).split('\n');
-    const messages = [];
-    for (const sha of introduced) messages.push(await git(receiver.git.directory, ['show', '-s', '--format=%B', sha]));
-    const issues = await collectIssues(repo, pr, introduced, messages);
-    plans.push({
-      target: group.target,
-      source: {
-        id: pr.node_id,
-        repositoryId: repository.node_id,
-        number: pr.number,
-        url: pr.html_url,
-        title: pr.title,
-        mergedAt: pr.merged_at,
-      },
-      issues,
-    });
-    base = group.target;
-  }
-  attachIssueRequirements(plans);
-  await receiver.replaceQueue(state, plans, heads);
-  await receiver.store.save(state);
-  return state;
+  return phase('github-deliveries', '读取并核对 PR / Issue / commit 对应', async () => {
+    const associations = {};
+    for (const sha of boundaries)
+      associations[sha] = await api(`repos/${repo}/commits/${sha}/pulls?per_page=100`, true);
+    const groups = groupLandings(boundaries, associations, receiver.config.sourceBranch);
+    const plans = [];
+    let base = state.accepted.upstream;
+    for (const group of groups) {
+      const pr = await api(`repos/${repo}/pulls/${group.pr.number}`);
+      if (!pr.merged || pr.merge_commit_sha !== group.target) fail('SOURCE_CHANGED', '扫描过程中 PR 来源发生变化');
+      const introduced = (await git(receiver.git.directory, ['rev-list', `${base}..${group.target}`])).split('\n');
+      const messages = [];
+      for (const sha of introduced)
+        messages.push(await git(receiver.git.directory, ['show', '-s', '--format=%B', sha]));
+      const issues = await collectIssues(repo, pr, introduced, messages);
+      plans.push({
+        target: group.target,
+        source: {
+          id: pr.node_id,
+          repositoryId: repository.node_id,
+          number: pr.number,
+          url: pr.html_url,
+          title: pr.title,
+          mergedAt: pr.merged_at,
+        },
+        issues,
+      });
+      base = group.target;
+    }
+    attachIssueRequirements(plans);
+    await receiver.replaceQueue(state, plans, heads);
+    await receiver.store.save(state);
+    return state;
+  });
 }

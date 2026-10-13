@@ -82,8 +82,15 @@ export async function createConnection(file) {
         if (input.action === 'configure-repositories') return save(input);
         const bound = await current();
         if (!bound) fail('CONFIGURATION_REQUIRED', '请先保存真实仓库配置，再登记已有基线');
+        verifyExecutionInput(input, bound, revision);
         if (input.action === 'configure') fail('CONFIGURATION_READ_ONLY', '请在仓库连接向导统一修改模式与文件规则');
         return dispatch(bound, input, options);
       }),
   };
+}
+function verifyExecutionInput(input, bound, revision) {
+  if (input.expectedBinding && input.expectedBinding !== bound.config.bindingId)
+    fail('CONFIGURATION_CHANGED', '仓库绑定已变化，任务尚未开始 Git 操作；请刷新核对');
+  if (input.expectedRevision !== undefined && input.expectedRevision !== revision)
+    fail('CONFIGURATION_CHANGED', '私有配置已变化，任务尚未开始 Git 操作；请刷新核对');
 }

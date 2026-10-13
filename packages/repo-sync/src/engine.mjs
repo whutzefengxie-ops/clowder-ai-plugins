@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
 import { fail, objectUrl, validateConfig } from './config.mjs';
 import { readConflict, resolveConflict } from './conflicts.mjs';
+import { phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
 import { assertLedger } from './ledger.mjs';
 import { mapIssue, recordReceipts, templates } from './metadata.mjs';
@@ -33,8 +34,9 @@ export class Receiver {
       } catch (error) {
         const delivery = this.active(state);
         if (delivery) {
-          recordFailure(delivery, error, preserveError);
-          event(state, delivery, error.message);
+          const failure = safeError(error);
+          recordFailure(delivery, failure, preserveError);
+          event(state, delivery, failure.message);
         }
         await this.store.save(state);
         throw error;
@@ -52,17 +54,19 @@ export class Receiver {
     return this.store.locked(async () => {
       if (await this.read()) fail('ALREADY_ADOPTED', '已有台账，不能重新初始化覆盖');
       const heads = await this.git.fetch();
-      upstream = await this.git.sha(upstream);
-      internal = await this.git.sha(internal);
-      if (heads.internal !== internal) fail('STALE_INTERNAL_HEAD', '内部基线不是当前 main，重新读取后确认');
-      if (this.config.mode === 'version') await this.git.baseline(upstream, internal);
-      if (
-        !(await this.git.isAncestor(upstream, heads.upstream)) ||
-        (this.config.mode !== 'version' && !(await this.git.sameTree(upstream, internal)))
-      )
-        fail('BASELINE_MISMATCH', '上游基线不在交付历史中，或两侧核心树不一致');
-      if (!(await this.git.mainBoundary(upstream, heads.upstream)))
-        fail('BASELINE_NOT_MAIN_BOUNDARY', '基线必须是上游 main 的实际接受边界');
+      await phase('baseline-check', '核验 U0 / I0 与历史', async () => {
+        upstream = await this.git.sha(upstream);
+        internal = await this.git.sha(internal);
+        if (heads.internal !== internal) fail('STALE_INTERNAL_HEAD', '内部基线不是当前 main，重新读取后确认');
+        if (this.config.mode === 'version') await this.git.baseline(upstream, internal);
+        if (
+          !(await this.git.isAncestor(upstream, heads.upstream)) ||
+          (this.config.mode !== 'version' && !(await this.git.sameTree(upstream, internal)))
+        )
+          fail('BASELINE_MISMATCH', '上游基线不在交付历史中，或两侧核心树不一致');
+        if (!(await this.git.mainBoundary(upstream, heads.upstream)))
+          fail('BASELINE_NOT_MAIN_BOUNDARY', '基线必须是上游 main 的实际接受边界');
+      });
       const state = {
         schema: 1,
         mode: this.config.mode,
@@ -78,7 +82,7 @@ export class Receiver {
         events: [],
       };
       event(state, null, '已有两仓基线核验并登记；未修改内部 main');
-      await this.store.save(state);
+      await phase('baseline-save', '登记已有基线', () => this.store.save(state), false);
       return state;
     });
   }
@@ -163,14 +167,15 @@ export class Receiver {
       state.observedInternal = heads.internal;
       if (heads.internal !== delivery.base.internal) fail('RECOVERY_FIRST', 'main 已前进，先核对原交付合入结果');
       await sourceStillValid(this, delivery, heads);
-      delivery.candidate ??= await this.git.candidate(
-        delivery.base,
-        delivery.target,
-        delivery.id,
-        delivery.resolutions,
+      delivery.candidate ??= await phase('candidate-build', '构造同步候选', () =>
+        this.git.candidate(delivery.base, delivery.target, delivery.id, delivery.resolutions),
       );
       await this.store.save(state); // Freeze the candidate before any remote effect.
-      delivery.checks = await this.git.checks(delivery.candidate);
+      delivery.checks = await phase(
+        'candidate-check',
+        this.config.checkProfile === 'git-integrity' ? 'Git 基础完整性检查' : '执行配置的项目检查',
+        () => this.git.checks(delivery.candidate),
+      );
       const checkedHeads = await this.git.fetch();
       if (checkedHeads.internal !== delivery.base.internal)
         fail('RECOVERY_FIRST', '检查期间内部 main 已改变，先核对原交付');
@@ -178,7 +183,7 @@ export class Receiver {
       delivery.status = 'PUSH_RESULT_UNKNOWN';
       event(state, delivery, '候选推送意图已保存；结果不明时先读取同名 ref');
       await this.store.save(state);
-      await this.git.publish(delivery);
+      await phase('candidate-publish', '推送并回读候选分支', () => this.git.publish(delivery), false);
       delivery.status = 'PR_REQUIRED';
       delete delivery.error;
       event(state, delivery, '候选分支已推送并回读；内部 main 未修改，等待平台创建 PR');
