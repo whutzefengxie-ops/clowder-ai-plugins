@@ -8,6 +8,7 @@ import { dispatch } from './actions.mjs';
 import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
 import { body, requestPath, requireToken, send } from './http.mjs';
+import { publicPlatform } from './pr-settings.mjs';
 import { configure } from './settings.mjs';
 import { Tasks } from './tasks.mjs';
 
@@ -26,6 +27,7 @@ const assets = new Map([
   ['/pr.mjs', 'pr.mjs'],
   ['/diagnostics.mjs', 'diagnostics.mjs'],
   ['/issues.mjs', 'issues.mjs'],
+  ['/platform.mjs', 'platform.mjs'],
 ]);
 export function createReceiverServer(receiver, options = {}) {
   const token = randomBytes(32).toString('hex');
@@ -93,7 +95,7 @@ async function post(receiver, options, token, input, response) {
     receiver = await options.connection.current();
   } else if (input.action === 'configure') receiver = await configure(receiver, input);
   else result = await dispatch(receiver, input, options);
-  if (['configure', 'configure-repositories'].includes(input.action))
+  if (['configure', 'configure-repositories', 'configure-pr'].includes(input.action))
     await get(receiver, options, token, '/api/status', response);
   else
     send(response, 200, {
@@ -140,7 +142,8 @@ async function get(receiver, options, token, path, response) {
           sourceUrl,
           internalUrl,
           internalWebUrl,
-          prMode: receiver.config.pullRequests ? 'automatic' : 'manual',
+          prMode: publicPlatform(receiver).prMode,
+          prTransport: publicPlatform(receiver).transport,
           sourceBranch,
           targetBranch,
           mode,
@@ -152,10 +155,7 @@ async function get(receiver, options, token, path, response) {
         }
       : null,
     connection: options.connection?.describe(),
-    platform: {
-      prMode: receiver?.config.pullRequests ? 'automatic' : 'manual',
-      repositoryUrl: receiver?.config.internalWebUrl ?? null,
-    },
+    platform: publicPlatform(receiver),
     service: 'production',
     runtime: options.runtime,
     operation: await options.tasks.latest(),

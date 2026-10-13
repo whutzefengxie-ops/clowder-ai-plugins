@@ -1,0 +1,61 @@
+import { fail } from './config.mjs';
+import { phase } from './execution.mjs';
+import { confirmGitPr, planGitPr } from './git-pr.mjs';
+import { event } from './store.mjs';
+import { sourceStillValid } from './version.mjs';
+
+async function resumePublished(receiver, state, delivery) {
+  if (!['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status) || delivery.error) return false;
+  if ((await receiver.git.remoteBranch(delivery.branch)) !== delivery.candidate)
+    fail('CANDIDATE_CONFLICT', '已经推送的候选发生变化，暂停核对');
+  if (delivery.status === 'WAITING_APPROVAL' || !receiver.config.pullRequests) return true;
+  if (receiver.config.pullRequests.mode === 'command') {
+    await receiver.finishPr(state, delivery);
+    return true;
+  }
+  if (!delivery.gitPr) return false;
+  await confirmGitPr(receiver, state, delivery);
+  return true;
+}
+export async function prepareDelivery(receiver, state) {
+  const delivery = receiver.requireActive(state);
+  receiver.requirePreparation(state, delivery);
+  if (await resumePublished(receiver, state, delivery)) return;
+  const heads = await receiver.git.fetch();
+  state.observedInternal = heads.internal;
+  if (heads.internal !== delivery.base.internal) fail('RECOVERY_FIRST', 'main 已前进，先核对原交付合入结果');
+  await sourceStillValid(receiver, delivery, heads);
+  delivery.candidate ??= await phase('candidate-build', '构造同步候选', () =>
+    receiver.git.candidate(delivery.base, delivery.target, delivery.id, delivery.resolutions),
+  );
+  await receiver.store.save(state);
+  delivery.checks = await phase(
+    'candidate-check',
+    receiver.config.checkProfile === 'git-integrity' ? 'Git 基础完整性检查' : '执行配置的项目检查',
+    () => receiver.git.checks(delivery.candidate),
+  );
+  const checkedHeads = await receiver.git.fetch();
+  if (checkedHeads.internal !== delivery.base.internal)
+    fail('RECOVERY_FIRST', '检查期间内部 main 已改变，先核对原交付');
+  await sourceStillValid(receiver, delivery, checkedHeads);
+  await publishCandidate(receiver, state, delivery);
+}
+async function publishCandidate(receiver, state, delivery) {
+  const gitCreation = receiver.config.pullRequests?.mode === 'git';
+  const options = gitCreation
+    ? await planGitPr(receiver, state, delivery, () => receiver.deliveryTemplates(state, delivery))
+    : [];
+  delivery.status = 'PUSH_RESULT_UNKNOWN';
+  event(state, delivery, '候选推送意图已保存；结果不明时先读取同名 ref');
+  await receiver.store.save(state);
+  await phase(
+    'candidate-publish',
+    gitCreation ? '推送候选并触发内部 PR 创建' : '推送并回读候选分支',
+    () => receiver.git.publish(delivery, options),
+    false,
+  );
+  delivery.status = 'PR_REQUIRED';
+  delete delivery.error;
+  event(state, delivery, '候选分支已推送并回读；内部 main 未修改，开始处理 PR 创建');
+  if (receiver.config.pullRequests) await receiver.finishPr(state, delivery);
+}

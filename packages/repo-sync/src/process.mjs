@@ -9,7 +9,7 @@ export async function command(executable, args, options = {}) {
   checkpoint();
   const signal = options.signal ?? execution()?.signal;
   if (signal?.aborted) fail('OPERATION_CANCELLED', '操作已取消');
-  const { signal: _signal, timeout = 120000, input, binary = false, ...spawnOptions } = options;
+  const { signal: _signal, timeout = 120000, input, binary = false, onOutput, ...spawnOptions } = options;
   const child = spawn(executable, args, {
     ...spawnOptions,
     windowsHide: true,
@@ -18,6 +18,7 @@ export async function command(executable, args, options = {}) {
   });
   const decoder = new StringDecoder('utf8');
   let stderr = '';
+  let truncated = false;
   let line = '';
   const stdout = [];
   let size = 0;
@@ -41,6 +42,7 @@ export async function command(executable, args, options = {}) {
   const timer = setTimeout(() => stop('COMMAND_TIMEOUT'), timeout);
   child.stderr.on('data', (chunk) => {
     const text = decoder.write(chunk);
+    if (stderr.length + text.length > 65536) truncated = true;
     stderr = (stderr + text).slice(-65536);
     line = (line + text).slice(-8192);
     const parts = line.split(/[\r\n]/);
@@ -75,6 +77,7 @@ export async function command(executable, args, options = {}) {
         OUTPUT_LIMIT: '命令输出超过允许大小，执行已停止；请在本机核对检查命令',
       }[cause],
     );
+  onOutput?.({ stdout: Buffer.concat(stdout).toString('utf8'), stderr, truncated });
   if (spawnError || code !== 0) commandFailure(stderr, spawnError?.code ?? code);
   const output = Buffer.concat(stdout);
   return binary ? output : output.toString('utf8').trim();

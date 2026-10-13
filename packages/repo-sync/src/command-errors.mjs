@@ -2,6 +2,11 @@ import { fail } from './config.mjs';
 
 const reasons = [
   [
+    /does not support push options|push options are not supported/i,
+    'GIT_PR_UNSUPPORTED',
+    '内部 Git 服务不支持配置的 PR 创建扩展；未改成手工创建，请核对平台的实际 Git 创建方式',
+  ],
+  [
     /REMOTE HOST IDENTIFICATION HAS CHANGED/i,
     'SSH_HOST_KEY_CHANGED',
     'SSH 主机密钥发生变化，请在本机核对可信指纹后处理已保存的主机记录',

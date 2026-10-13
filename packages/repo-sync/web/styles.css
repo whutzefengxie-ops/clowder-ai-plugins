@@ -305,3 +305,24 @@ a {
   max-height: 320px;
   overflow: auto;
 }
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.task-actions > .button,
+.task-actions > button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+@media (max-width: 800px) {
+  .task-actions {
+    margin-top: 20px;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+}

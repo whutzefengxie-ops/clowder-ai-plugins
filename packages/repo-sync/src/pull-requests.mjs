@@ -1,5 +1,6 @@
 import { fail, objectUrl } from './config.mjs';
 import { phase } from './execution.mjs';
+import { validateGitPr } from './git-pr.mjs';
 import { command } from './process.mjs';
 import { event } from './store.mjs';
 
@@ -7,6 +8,7 @@ export function validatePrConfig(config) {
   if (config.internalWebUrl) config.internalWebUrl = objectUrl(config.internalWebUrl).replace(/\/+$/, '');
   const adapter = config.pullRequests;
   if (!adapter) return;
+  if (adapter.mode === 'git') return validateGitPr(config);
   if (adapter.mode !== 'command' || !config.internalWebUrl)
     fail('INVALID_PR_ADAPTER', '自动 PR 需要 mode=command、内部网页仓库地址和固定查询/创建命令');
   for (const action of ['find', 'create']) {

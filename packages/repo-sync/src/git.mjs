@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
+import { captureGitPr } from './git-pr.mjs';
 import { ancestor, command, git } from './process.mjs';
 import { remoteHeads } from './remote-heads.mjs';
 
@@ -108,17 +109,22 @@ export class GitReceiver {
       fail('REMOTE_REF_CONFLICT', '远端候选 ref 返回不明确');
     return sha;
   }
-  async publish(delivery) {
+  async publish(delivery, pushOptions = []) {
     const existing = await this.remoteBranch(delivery.branch);
     if (existing && existing !== delivery.candidate) fail('CANDIDATE_CONFLICT', '候选分支存在不同 SHA，禁止覆盖');
     // Empty expected value is a create-only condition, never permission to replace a ref.
     if (!existing)
-      await git(this.directory, [
-        'push',
-        `--force-with-lease=refs/heads/${delivery.branch}:`,
-        this.config.internalUrl,
-        `${delivery.candidate}:refs/heads/${delivery.branch}`,
-      ]);
+      await git(
+        this.directory,
+        [
+          'push',
+          ...pushOptions.flatMap((option) => ['--push-option', option]),
+          `--force-with-lease=refs/heads/${delivery.branch}:`,
+          this.config.internalUrl,
+          `${delivery.candidate}:refs/heads/${delivery.branch}`,
+        ],
+        delivery.gitPr ? { onOutput: (output) => captureGitPr(this.config, delivery, output) } : {},
+      );
     if ((await this.remoteBranch(delivery.branch)) !== delivery.candidate)
       fail('PUSH_RESULT_UNKNOWN', '推送结果待回读确认');
   }

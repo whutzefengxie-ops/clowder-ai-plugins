@@ -3,6 +3,7 @@ import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
 import { fileTree, hydrateFiles } from './files.mjs';
 import { issueForms } from './issues.mjs';
 import { createOperations } from './operations.mjs';
+import { platformSettings } from './platform.mjs';
 import { prPanel } from './pr.mjs';
 import { progressSteps } from './progress.mjs';
 import { receiptFields } from './receipts.mjs';
@@ -69,7 +70,7 @@ function primary(active, state) {
   if (active.status === 'ISSUES_REQUIRED' && active.issues.every((issue) => state.issues[issue.sourceId]))
     return button('prepare', '检查并推送候选分支 →');
   if (active.status === 'WAITING_APPROVAL')
-    return `<a class="button primary" href="${esc(active.prUrl)}" target="_blank" rel="noopener">打开内部 PR ↗</a>${button('recover', '已在平台合入，核验 Git 结果')}`;
+    return `<a class="button primary" href="${esc(active.prUrl)}" target="_blank" rel="noopener">打开内部 PR ↗</a><button type="button" data-action="recover">已在平台合入，核验 Git 结果</button>`;
   const destinations = {
     ISSUES_REQUIRED: ['issue-mappings', '登记内部 Issue 对应 →'],
     PR_REQUIRED: [
@@ -129,7 +130,7 @@ function workbench() {
   const [title, description] = active ? taskPresentation(active, state) : idlePresentation(state);
   if (!active && !state.queue.length && state.accepted.upstream !== state.latest)
     return `<section class="card task"><h2>读取上游交付清单</h2><p>Git 已读取到更新版本。先关联 PR、Issue 与实际提交并冻结范围，再发起同步。</p>${button('discover', '检查上游更新')}</section>`;
-  return `<section class="card task"><div class="task-top"><div><span class="badge">${active ? esc(active.status) : '准备就绪'}</span><h2>${title}</h2><p>${description}</p></div><div>${primary(active, state)}</div></div>${active ? `<p>候选分支：${esc(active.branch)} → ${esc(snapshot.config.targetBranch)}</p>${workflow(active)}` : ''}</section><section class="card versions"><div><small>已接受上游</small>${sha(state.accepted.upstream)}</div><div><small>对应内部 commit</small>${sha(state.accepted.internal)}</div><div><small>冻结扫描目标</small>${sha(state.latest)}<small>${state.queue.length} 笔待完成交付</small></div></section>${
+  return `<section class="card task"><div class="task-top"><div><span class="badge">${active ? esc(active.status) : '准备就绪'}</span><h2>${title}</h2><p>${description}</p></div><div class="task-actions">${primary(active, state)}</div></div>${active ? `<p>候选分支：${esc(active.branch)} → ${esc(snapshot.config.targetBranch)}</p>${workflow(active)}` : ''}</section><section class="card versions"><div><small>已接受上游</small>${sha(state.accepted.upstream)}</div><div><small>对应内部 commit</small>${sha(state.accepted.internal)}</div><div><small>冻结扫描目标</small>${sha(state.latest)}<small>${state.queue.length} 笔待完成交付</small></div></section>${
     active?.error
       ? `<div class="card bad">× ${esc(active.error.code)}<p>${esc(active.error.message)}</p>${
           active.error.details?.paths
@@ -174,9 +175,12 @@ function taskPresentation(active, state) {
 }
 function render() {
   document.getElementById('mode').textContent = snapshot.config
-    ? `正式服务 · PR ${snapshot.platform?.prMode === 'automatic' ? '平台适配器创建' : '手工创建'}`
+    ? `正式服务 · PR ${snapshot.platform?.transport === 'git' ? 'Git 自动创建' : snapshot.platform?.prMode === 'automatic' ? '平台适配器创建' : '手工创建'}`
     : '正式服务 · 等待仓库配置';
-  content.innerHTML = view === 'configuration' ? configuration(snapshot, esc, sha, button) : workbench();
+  content.innerHTML =
+    view === 'configuration'
+      ? configuration(snapshot, esc, sha, button) + platformSettings(snapshot, esc)
+      : workbench();
   const badge = content.querySelector('.task .badge');
   if (badge && snapshot.state?.active)
     badge.textContent = snapshot.state.active.error
@@ -272,13 +276,15 @@ document.addEventListener('submit', async (event) => {
       state: fields[issue.sourceId],
     }));
   const result = await action(input);
-  if (['configure', 'configure-repositories'].includes(input.action) && result) {
+  if (['configure', 'configure-repositories', 'configure-pr'].includes(input.action) && result) {
     const confirmation = document.createElement('p');
     confirmation.setAttribute('role', 'status');
-    confirmation.textContent =
-      input.action === 'configure'
-        ? '同步方式与文件规则已保存，请登记已有基线。'
-        : '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。';
+    const messages = {
+      configure: '同步方式与文件规则已保存，请登记已有基线。',
+      'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
+      'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
+    };
+    confirmation.textContent = messages[input.action];
     content.prepend(confirmation);
   }
 });

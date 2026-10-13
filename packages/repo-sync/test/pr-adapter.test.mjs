@@ -33,12 +33,13 @@ console.log(JSON.stringify(request.action==='find'?db.object:db.object));`,
       create: { command: process.execPath, args: [script, database] },
     },
   };
-  const receiver = new Receiver(config);
+  const prepared = new Receiver({ ...config, pullRequests: undefined });
+  const receiver = prepared;
   await receiver.adopt(f.u0, f.i0);
   await receiver.selectTag('v2.0.0');
   await receiver.start();
   await receiver.prepare();
-  return { f, config, database, receiver };
+  return { f, config, database, receiver: new Receiver(config) };
 }
 test('automatic PR creation queries and reads back exact branches and head, reuses on retry', async () => {
   const { receiver, database } = await fixture();
@@ -49,6 +50,12 @@ test('automatic PR creation queries and reads back exact branches and head, reus
   assert.equal(delivery.prReference.verifiedBy, 'adapter');
   assert.equal(delivery.prUrl, 'https://codehub.example/core/pull/501');
   assert.equal((await receiver.git.heads()).internal, delivery.base.internal);
+});
+test('configured command adapter runs automatically when resuming a published candidate', async () => {
+  const { receiver, database } = await fixture();
+  await receiver.prepare();
+  assert.equal((await receiver.status()).active.status, 'WAITING_APPROVAL');
+  assert.equal(JSON.parse(await readFile(database)).count, 1);
 });
 test('lost creation receipt resumes by finding the same PR after process restart, never creates twice', async () => {
   const { receiver, config, database } = await fixture('lost');

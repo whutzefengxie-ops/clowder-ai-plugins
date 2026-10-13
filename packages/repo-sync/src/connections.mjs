@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { dispatch } from './actions.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
+import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
 import { configuredReceiver } from './settings.mjs';
 
@@ -17,6 +18,7 @@ const allowed = new Set([
   'commitClosureVerified',
   'expectedRevision',
   'internalWebUrl',
+  'prMode',
 ]);
 export async function createConnection(file) {
   const path = await privateLocation(file);
@@ -49,6 +51,7 @@ export async function createConnection(file) {
       sourceUrl: input.sourceUrl,
       internalUrl: input.internalUrl,
       internalWebUrl: input.internalWebUrl || undefined,
+      pullRequests: prConfiguration(receiver?.config, input.prMode),
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
       mode: input.mode,
@@ -69,6 +72,20 @@ export async function createConnection(file) {
     return current();
   }
   await current();
+  async function savePlatform(input) {
+    await current();
+    checkPlatformInput(input, receiver, revision);
+    const next = validateConfig({
+      ...receiver.config,
+      internalWebUrl: input.internalWebUrl,
+      pullRequests: prConfiguration(receiver.config, input.prMode),
+    });
+    const active = (await receiver.status())?.active;
+    checkFrozenPr(active, receiver.config, next);
+    await writePrivate(path, next);
+    loaded = false;
+    return current();
+  }
   return {
     current,
     describe: () => ({
@@ -82,6 +99,7 @@ export async function createConnection(file) {
     run: (input, options = {}) =>
       configurationLock(path, async () => {
         if (input.action === 'configure-repositories') return save(input);
+        if (input.action === 'configure-pr') return savePlatform(input);
         const bound = await current();
         if (!bound) fail('CONFIGURATION_REQUIRED', '请先保存真实仓库配置，再登记已有基线');
         verifyExecutionInput(input, bound, revision);

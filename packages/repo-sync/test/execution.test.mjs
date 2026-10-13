@@ -35,11 +35,12 @@ test('SSH host-key failure gives a safe actionable reason instead of opaque exit
   );
 });
 test('cancel and timeout have separate safe error codes', async () => {
-  await assert.rejects(command(process.execPath, ['-e', 'setTimeout(()=>{},2000)'], { timeout: 50 }), {
+  // Keep the worker alive until killed; natural exit races taskkill under a loaded full suite.
+  await assert.rejects(command(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { timeout: 50 }), {
     code: 'COMMAND_TIMEOUT',
   });
   const controller = new AbortController();
-  const running = command(process.execPath, ['-e', 'setTimeout(()=>{},2000)'], { signal: controller.signal });
+  const running = command(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { signal: controller.signal });
   controller.abort();
   await assert.rejects(running, { code: 'OPERATION_CANCELLED' });
 });

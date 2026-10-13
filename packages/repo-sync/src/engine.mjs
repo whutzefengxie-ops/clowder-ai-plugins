@@ -4,9 +4,11 @@ import { fail, validateConfig } from './config.mjs';
 import { readConflict, resolveConflict } from './conflicts.mjs';
 import { phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
+import { confirmGitPr } from './git-pr.mjs';
 import { assertLedger } from './ledger.mjs';
 import { mapIssue, recordReceipts, templates } from './metadata.mjs';
 import { checkPlan } from './plan.mjs';
+import { prepareDelivery } from './preparation.mjs';
 import { git } from './process.mjs';
 import { createPr, linkPr, prUrl } from './pull-requests.mjs';
 import { event, Store } from './store.mjs';
@@ -162,40 +164,8 @@ export class Receiver {
     if (!active) fail('NO_ACTIVE_DELIVERY', '没有未完成交付');
     return active;
   }
-  async prepare() {
-    return this.change(async (state) => {
-      const delivery = this.requireActive(state);
-      this.requirePreparation(state, delivery);
-      if (['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status) && !delivery.error) {
-        if ((await this.git.remoteBranch(delivery.branch)) !== delivery.candidate)
-          fail('CANDIDATE_CONFLICT', '已经推送的候选发生变化，暂停核对');
-        return;
-      }
-      const heads = await this.git.fetch();
-      state.observedInternal = heads.internal;
-      if (heads.internal !== delivery.base.internal) fail('RECOVERY_FIRST', 'main 已前进，先核对原交付合入结果');
-      await sourceStillValid(this, delivery, heads);
-      delivery.candidate ??= await phase('candidate-build', '构造同步候选', () =>
-        this.git.candidate(delivery.base, delivery.target, delivery.id, delivery.resolutions),
-      );
-      await this.store.save(state); // Freeze the candidate before any remote effect.
-      delivery.checks = await phase(
-        'candidate-check',
-        this.config.checkProfile === 'git-integrity' ? 'Git 基础完整性检查' : '执行配置的项目检查',
-        () => this.git.checks(delivery.candidate),
-      );
-      const checkedHeads = await this.git.fetch();
-      if (checkedHeads.internal !== delivery.base.internal)
-        fail('RECOVERY_FIRST', '检查期间内部 main 已改变，先核对原交付');
-      await sourceStillValid(this, delivery, checkedHeads);
-      delivery.status = 'PUSH_RESULT_UNKNOWN';
-      event(state, delivery, '候选推送意图已保存；结果不明时先读取同名 ref');
-      await this.store.save(state);
-      await phase('candidate-publish', '推送并回读候选分支', () => this.git.publish(delivery), false);
-      delivery.status = 'PR_REQUIRED';
-      delete delivery.error;
-      event(state, delivery, '候选分支已推送并回读；内部 main 未修改，等待平台创建 PR');
-    });
+  prepare() {
+    return this.change((state) => prepareDelivery(this, state));
   }
   requirePreparation(state, delivery) {
     if (delivery.acceptedInternal) fail('METADATA_ONLY', '代码已接受，仅补元数据');
@@ -211,15 +181,26 @@ export class Receiver {
     );
   }
   createPr() {
+    if (this.config.pullRequests?.mode === 'git') return this.prepare();
     return this.change((state) => {
       const delivery = this.requireActive(state);
-      const template = this.config.mode === 'version' ? versionTemplate(delivery) : templates(delivery, state.issues);
-      return createPr(this, state, delivery, template);
+      return this.finishPr(state, delivery);
     });
+  }
+  deliveryTemplates(state, delivery) {
+    return this.config.mode === 'version' ? versionTemplate(delivery) : templates(delivery, state.issues);
+  }
+  finishPr(state, delivery) {
+    return this.config.pullRequests?.mode === 'git'
+      ? confirmGitPr(this, state, delivery)
+      : createPr(this, state, delivery, this.deliveryTemplates(state, delivery));
   }
   async recover() {
     return this.change(async (state) => {
-      await recoverDelivery(this, state, this.requireActive(state));
+      const delivery = this.requireActive(state);
+      await recoverDelivery(this, state, delivery);
+      if (delivery.status === 'PR_REQUIRED' && this.config.pullRequests?.mode === 'git' && delivery.gitPr)
+        await confirmGitPr(this, state, delivery);
     });
   }
   async receipts(observations) {
