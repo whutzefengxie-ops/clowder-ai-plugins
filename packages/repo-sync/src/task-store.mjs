@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { readText } from './atomic-file.mjs';
 import { fail } from './config.mjs';
 import { writePrivate } from './private-config.mjs';
 
@@ -67,9 +68,9 @@ export async function readTask(config, id) {
   if (!config?.stateDir) return null;
   try {
     const folder = join(config.stateDir, 'operations');
-    if (!id) id = JSON.parse(await readFile(join(folder, 'latest.json'), 'utf8')).id;
+    if (!id) id = JSON.parse(await readText(join(folder, 'latest.json'))).id;
     if (!/^[a-f0-9]{32}$/.test(id)) fail('TASK_UNREADABLE', '任务记录格式无效，请在本机核对');
-    const value = JSON.parse(await readFile(join(folder, `${id}.json`), 'utf8'));
+    const value = JSON.parse(await readText(join(folder, `${id}.json`)));
     if (value.bindingId !== config.bindingId) return null;
     if (value.id !== id || !Array.isArray(value.steps)) fail('TASK_UNREADABLE', '任务记录不属于当前绑定或格式无效');
     return value;

@@ -42,10 +42,10 @@ export class Receiver {
           recordFailure(delivery, failure, preserveError);
           event(state, delivery, failure.message);
         }
-        await this.store.save(state);
+        await phase('ledger-save', '保存交付台账', () => this.store.save(state), false);
         throw error;
       }
-      await this.store.save(state);
+      await phase('ledger-save', '保存交付台账', () => this.store.save(state), false);
       return state;
     });
   }

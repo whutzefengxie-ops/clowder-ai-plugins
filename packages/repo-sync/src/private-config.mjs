@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { access, lstat, mkdir, open, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readText, writeJson } from './atomic-file.mjs';
 import { fail } from './config.mjs';
 import { execution } from './execution.mjs';
 
@@ -57,7 +58,7 @@ async function outsideRepository(path) {
 export async function readPrivate(file) {
   let text;
   try {
-    text = await readFile(file, 'utf8');
+    text = await readText(file);
   } catch (error) {
     if (error.code === 'ENOENT') return { config: null, revision: null };
     fail('CONFIGURATION_UNREADABLE', '私有配置无法读取，暂停；请在本机核对文件');
@@ -93,7 +94,5 @@ export async function configurationLock(file, operation) {
   }
 }
 export async function writePrivate(file, config) {
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-  await rename(temporary, file);
+  await writeJson(file, config);
 }

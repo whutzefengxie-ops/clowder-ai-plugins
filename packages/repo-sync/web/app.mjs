@@ -66,6 +66,7 @@ function primary(active, state) {
     return state.queue.length
       ? button('start', `同步上游 PR #${state.queue[0].source.number} →`)
       : button('discover', '检查上游更新');
+  if (needsWebRepository(active)) return '<a class="button primary" href="#pr-form">配置网页地址，继续 PR →</a>';
   if (active.error || active.status === 'PUSH_RESULT_UNKNOWN') return button('recover', '核对原交付并恢复');
   if (active.status === 'ISSUES_REQUIRED' && active.issues.every((issue) => state.issues[issue.sourceId]))
     return button('prepare', '检查并推送候选分支 →');
@@ -161,6 +162,11 @@ function workbench() {
   }</section>`;
 }
 function taskPresentation(active, state) {
+  if (needsWebRepository(active))
+    return [
+      '先配置内部仓库网页地址',
+      '点击配置入口，填写浏览器中的 HTTPS 仓库首页。SSH 的域名和端口可以不同，原候选与基线保留。',
+    ];
   if (active.status === 'PR_REQUIRED' && snapshot.platform?.prMode === 'automatic' && !active.error)
     return ['候选已发布，查询 / 创建内部 PR', '使用私有平台适配器，先查询再创建并回读；随后在真实平台审核。'];
   if (active.status === 'CODE_PREPARE_REQUIRED' && !active.error)
@@ -172,6 +178,13 @@ function taskPresentation(active, state) {
   if (active.status === 'ISSUES_REQUIRED' && active.issues.every((issue) => state.issues[issue.sourceId]))
     return ['内部 Issue 已就绪，准备同步代码', '点击检查并推送候选分支。原始提交保留，内部 main 仍等待平台审批。'];
   return states[active.status] ?? ['核对当前结果', '恢复原交付后继续。'];
+}
+function needsWebRepository(active) {
+  return (
+    snapshot.connection &&
+    !snapshot.platform?.repositoryUrl &&
+    ['PR_REQUIRED', 'WAITING_APPROVAL'].includes(active.status)
+  );
 }
 function render() {
   document.getElementById('mode').textContent = snapshot.config

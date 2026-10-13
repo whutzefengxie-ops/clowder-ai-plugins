@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { readText, writeJson } from './atomic-file.mjs';
 import { fail } from './config.mjs';
 import { execution } from './execution.mjs';
 
@@ -12,16 +13,14 @@ export class Store {
   }
   async read() {
     try {
-      return JSON.parse(await readFile(this.path, 'utf8'));
+      return JSON.parse(await readText(this.path));
     } catch (error) {
       if (error.code === 'ENOENT') return null;
       fail('LEDGER_UNREADABLE', '台账损坏或无法读取，暂停；不可自动创建空台账覆盖');
     }
   }
   async save(state) {
-    const temporary = `${this.path}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-    await rename(temporary, this.path);
+    await writeJson(this.path, state, 'LEDGER_WRITE_FAILED');
   }
   async locked(action) {
     await mkdir(this.directory, { recursive: true });

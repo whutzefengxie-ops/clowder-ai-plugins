@@ -1,4 +1,5 @@
 import { fail } from './config.mjs';
+import { prUrl } from './pull-requests.mjs';
 export function prConfiguration(config, mode) {
   if (mode === undefined) return config?.pullRequests;
   if (mode === 'manual') return undefined;
@@ -15,10 +16,12 @@ export function checkPlatformInput(input, receiver, revision) {
 }
 export function checkFrozenPr(active, previous, next) {
   if (!active?.gitPr && !active?.prCreation && !active?.prUrl) return;
-  if (
-    next.internalWebUrl !== previous.internalWebUrl ||
-    JSON.stringify(next.pullRequests ?? null) !== JSON.stringify(previous.pullRequests ?? null)
-  )
+  const sameDriver = JSON.stringify(next.pullRequests ?? null) === JSON.stringify(previous.pullRequests ?? null);
+  if (!previous.internalWebUrl && next.internalWebUrl && sameDriver && !active.gitPr && !active.prCreation) {
+    prUrl(next, active.prUrl);
+    return;
+  }
+  if (next.internalWebUrl !== previous.internalWebUrl || !sameDriver)
     fail('PR_CONFIG_FROZEN', '当前交付已关联或发起 PR，不能更换创建配置；先核对原交付，不覆盖台账');
 }
 export function publicPlatform(receiver) {

@@ -31,18 +31,18 @@ export function validatePrConfig(config) {
 export function prUrl(config, url, kind = 'PR') {
   const value = objectUrl(url);
   const parsed = new URL(value);
-  let repository = config.internalWebUrl;
-  if (!repository && !config.allowLocal) {
-    const address = config.internalUrl;
-    const scp = /^git@([^:]+):(.+)$/.exec(address);
-    repository = scp ? `https://${scp[1]}` : `https://${new URL(address).host}`;
-  }
+  const repository = config.internalWebUrl;
+  if (!repository && !config.allowLocal)
+    fail(
+      'INTERNAL_WEB_URL_REQUIRED',
+      '尚未配置内部仓库网页地址，不能从 SSH 主机或端口推断。请在当前 PR 步骤或仓库设置填写 HTTPS 仓库首页，再登记具体 PR / Issue 链接；基线与候选保留',
+    );
   if (repository) {
     const root = new URL(repository);
     if (parsed.origin !== root.origin || !parsed.pathname.startsWith(`${root.pathname.replace(/\/+$/, '')}/`))
       fail(
         kind === 'PR' ? 'PR_URL_MISMATCH' : 'ISSUE_URL_MISMATCH',
-        `需要内部仓库下的具体 ${kind} 页面，不能填仓库首页、来源对象或其他仓库链接；可在私有配置指定 internalWebUrl`,
+        `需要内部仓库下的具体 ${kind} 页面，不能填仓库首页、来源对象或其他仓库链接；请到仓库设置核对内部网页仓库地址，SSH 地址不参与网页来源比较`,
       );
   }
   if (parsed.pathname === '/') fail('PR_URL_MISMATCH', '请填写已经创建的具体 PR 页面地址');

@@ -60,7 +60,7 @@ try {
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://user:secret@github.com/demo/core.git');
   await page.getByLabel('内部 Git 仓库地址').fill(internal);
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
-  await page.getByLabel('内部仓库网页地址（建议填写）').fill('https://codehub.example/core');
+  await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');
   await page.getByLabel('外部交付分支').fill('releases');
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md');
   await page.getByLabel('共同修改的文件（每行一项）').fill('README.md');

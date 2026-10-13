@@ -27,7 +27,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:browser": "node test/browser-check.mjs && node test/version-browser-check.mjs && node test/setup-browser-check.mjs && node test/connection-browser-check.mjs && node test/reliability-browser-check.mjs && node test/git-pr-browser-check.mjs",
+    "test:browser": "node test/browser-check.mjs && node test/version-browser-check.mjs && node test/setup-browser-check.mjs && node test/connection-browser-check.mjs && node test/reliability-browser-check.mjs && node test/git-pr-browser-check.mjs && node test/recovery-browser-check.mjs",
     "test:package": "node --test test/packed-consumer.test.mjs",
     "lint": "node scripts/check.mjs && node --test test/manifest.test.mjs test/mcp.test.mjs",
     "prepack": "node scripts/build.mjs"

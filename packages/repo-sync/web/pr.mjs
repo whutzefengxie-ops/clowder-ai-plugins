@@ -1,3 +1,5 @@
+import { platformSettings } from './platform.mjs';
+
 const verification = {
   adapter: '平台适配器已回读核验',
   'git-receipt': 'Git 创建回执与候选 ref 已核验；未调用平台 API',
@@ -38,6 +40,8 @@ function manualInstructions(snapshot, esc) {
 export function prPanel(snapshot, esc) {
   const delivery = snapshot.state.active;
   if (!['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status)) return '';
+  if (!snapshot.platform?.repositoryUrl && snapshot.connection)
+    return `<section class="card bad" id="pr-form"><h3>先配置内部仓库网页地址</h3><p>SSH 克隆地址用于传输 Git，网页地址用于核对 PR / MR 链接；两者的域名和端口可以不同。填写 HTTPS 仓库首页后继续，原候选和基线保留。已有手工引用时保持原创建方式，网页地址须包含该引用；错误引用可先撤销。</p>${platformSettings(snapshot, esc)}${delivery.prUrl ? withdrawalForm(delivery, esc) : ''}</section>`;
   const automatic = snapshot.platform?.prMode === 'automatic';
   if (automatic && !delivery.prUrl) return automaticPending(snapshot, esc);
   const title = delivery.prUrl ? '内部 PR 与引用纠错' : '在内部平台创建 PR';

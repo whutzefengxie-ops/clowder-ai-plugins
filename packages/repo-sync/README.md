@@ -196,6 +196,18 @@ GitHub 发现根据 first-parent main 顺序、commit→PR 查询与实际 merge
 
 ## CLI 与恢复
 
+### SSH 地址与 PR / Issue 网页地址
+
+`internalUrl` 是 Git 克隆地址，`internalWebUrl` 是浏览器中的 HTTPS 仓库首页。例如 SSH 服务为 `ssh://git@ssh.example:2222/team/core.git`，网页可以是 `https://web.example/team/core`。工具不再从 SSH 主机、端口或 HTTPS 克隆路径反推网页来源。生产环境登记对象前需要明确配置网页仓库，之后按 origin 和路径范围核验具体链接。
+
+出现 `INTERNAL_WEB_URL_REQUIRED` 时，在当前 PR 步骤直接填写网页仓库地址并保存，也可进入“仓库设置 → PR 自动创建设置”；不用重建 U0/I0、台账或候选。已有手工引用但缺地址时，保持原创建方式、补填包含该引用的仓库范围；错误引用先撤销，再配置正确范围。自动创建意图已经冻结时禁止更换平台范围。Issue 同样按此网页范围登记。
+
+### Windows 台账保存失败
+
+同一文件的状态读取与原子替换按路径协调；短暂的 EPERM/EACCES/EBUSY 只有限重试文件替换，不重新执行同步或创建 PR。台账、私有配置、模式设置、执行记录均使用同一机制，不通过删除旧文件或截断目标来规避占用。
+
+如果仍出现 `LEDGER_WRITE_FAILED`，当前执行记录会显示“保存交付台账 ×”及固定原因。先关闭占用台账的编辑器/其他工具并核对目录写权限，再刷新回读原台账和 Git。撤销引用保存失败时原链接仍保留，确认状态后可重试撤销；候选与双游标不重置。涉及推送/合入的任务先恢复原交付，避免重复操作。台账本身无法写入时不声称 delivery.error 已落盘；执行记录独立保存，整个目录无法写入时也不能承诺记录持久化。
+
 ```bash
 clowder-repo-sync discover private-config.json
 clowder-repo-sync start private-config.json

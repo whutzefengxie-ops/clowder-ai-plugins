@@ -1,13 +1,12 @@
-import { randomUUID } from 'node:crypto';
-import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { readText, writeJson } from './atomic-file.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { Receiver } from './engine.mjs';
 
 export async function configuredReceiver(config) {
   let settings;
   try {
-    settings = JSON.parse(await readFile(join(config.stateDir, 'sync-settings.json'), 'utf8'));
+    settings = JSON.parse(await readText(join(config.stateDir, 'sync-settings.json')));
   } catch (error) {
     if (error.code !== 'ENOENT') fail('SETTINGS_UNREADABLE', '本地模式设置无法读取，暂停；不能自动恢复默认值');
   }
@@ -37,9 +36,7 @@ export async function configure(receiver, input) {
     const settings = { schema: 1, mode: input.mode, internalPaths: input.internalPaths, mergePaths: input.mergePaths };
     const next = new Receiver({ ...receiver.config, ...settings });
     const path = join(receiver.config.stateDir, 'sync-settings.json');
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(settings)}\n`, { mode: 0o600 });
-    await rename(temporary, path);
+    await writeJson(path, settings);
     return next;
   });
 }
