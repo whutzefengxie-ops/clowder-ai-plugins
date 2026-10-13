@@ -16,6 +16,7 @@ const allowed = new Set([
   'mergePaths',
   'commitClosureVerified',
   'expectedRevision',
+  'internalWebUrl',
 ]);
 export async function createConnection(file) {
   const path = await privateLocation(file);
@@ -47,6 +48,7 @@ export async function createConnection(file) {
       configurationSource: 'workbench',
       sourceUrl: input.sourceUrl,
       internalUrl: input.internalUrl,
+      internalWebUrl: input.internalWebUrl || undefined,
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
       mode: input.mode,

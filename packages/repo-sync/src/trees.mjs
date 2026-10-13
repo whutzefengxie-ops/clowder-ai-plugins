@@ -15,16 +15,29 @@ export async function entries(directory, sha) {
       }),
   );
 }
-export const equalEntry = (a, b) => a?.mode === b?.mode && a?.object === b?.object;
-export async function assertProjection(directory, upstream, internal, policy) {
+export const equalEntry = (a, b) => a?.mode === b?.mode && a?.type === b?.type && a?.object === b?.object;
+export async function assertProjection(directory, upstream, internal, policy, code = 'UNAPPROVED_DIFFERENCE') {
   const [source, local] = await Promise.all([entries(directory, upstream), entries(directory, internal)]);
-  const changed = [...new Set([...source.keys(), ...local.keys()])]
-    .filter((path) => category(path, policy) === 'upstream' && !equalEntry(source.get(path), local.get(path)))
-    .sort();
+  const differences = changeList(source, local, policy).map((item) => ({
+    ...item,
+    blocking: item.category === 'upstream',
+    sourceMode: source.get(item.path)?.mode ?? null,
+    internalMode: local.get(item.path)?.mode ?? null,
+  }));
+  const changed = differences.filter((item) => item.blocking);
   if (changed.length)
-    fail('UNAPPROVED_DIFFERENCE', '内部同步范围存在未声明的修改，请配置文件规则或处理后重新核对', {
-      paths: changed.slice(0, 100),
-    });
+    fail(
+      code,
+      code === 'BASELINE_MISMATCH'
+        ? 'U0 与 I0 文件不一致。请核对上次同步版本，或通过内部修复 PR 恢复一致；连续同步不能忽略差异'
+        : '内部同步范围存在未声明的修改，请在当前步骤处理差异后重新核验',
+      {
+        paths: changed.map((item) => item.path),
+        differences,
+        upstream,
+        internal,
+      },
+    );
   return { source, local };
 }
 export function changeList(before, after, policy) {

@@ -12,11 +12,11 @@ tips_exempt: 独立内部 Git 接收工具，不接应用 Host；操作说明随
 
 插件标识 dev.clowder.repo-sync；候选包 @clowder-ai/repo-sync@0.1.0-alpha.0。独立 manifest 位于 plugin.yaml，协议版本为 0.1.0。兼容宿主通过 configurationFile 指定绝对路径的私有 JSON（可以尚未创建），再启动声明的 stdio MCP contribution，在工作台完成配置。
 
-MCP 只提供 repo_sync_status 和 repo_sync_open_workbench。前者返回受限版本/阶段字段，后者显式启动 loopback 工作台并返回 URL；插件启动不会执行 Git，Agent 没有推送、建单、合入或关单工具。实际同步仍在工作台由用户发起，平台 PR 在真实平台人工创建、审核与合入。
+MCP 只提供 repo_sync_status 和 repo_sync_open_workbench。前者返回受限版本/阶段字段，后者显式启动 loopback 工作台并返回 URL；插件启动不会执行 Git，Agent 没有推送、建单、合入或关单工具。实际同步仍在工作台由用户发起，平台 PR 按配置使用人工创建或私有适配器自动创建，在真实平台审核与合入。
 
 私有配置、台账与凭据不在插件安装目录。Git/gh 使用已有认证；配置中的检查命令由用户提供，不能从网页或 MCP 参数更换。关闭 stdio 连接会停止工作台。宿主仍负责进程监督及异常进程树清理；中断后的旧写锁需确认原执行器与子进程退出后再显式恢复。升级或卸载不自动删除用户台账和配置。
 
-源码试用：在插件仓执行 pnpm install --frozen-lockfile，再执行 pnpm --filter @clowder-ai/repo-sync build。开发演示用 pnpm --filter @clowder-ai/repo-sync exec node examples/modes-demo.mjs，使用独立虚构仓库。
+源码试用：在插件仓执行 pnpm install --frozen-lockfile，再执行 pnpm --filter @clowder-ai/repo-sync build。正式服务只使用 setup/serve 入口。合成仓库夹具仅供自动化测试，不提供演示服务。
 
 制品安装：在包目录执行 npm pack，将生成的 tgz 安装到独立 consumer（npm install ./clowder-ai-repo-sync-0.1.0-alpha.0.tgz）。安装后的 CLI 是 clowder-repo-sync，MCP 入口是 clowder-repo-sync-mcp。打包白名单包含 dist、web、manifest、图标、README、许可证和 npm-shrinkwrap；开发原型/测试及私有数据不进入制品。
 
@@ -28,9 +28,9 @@ MCP 只提供 repo_sync_status 和 repo_sync_open_workbench。前者返回受限
 
 外部 GitHub → 内部核心 Git 仓。既有仓库从上次接收的 U0 / 当前内部 I0 登记基线，之后按 main 实际落地范围接收。核心 tree 相同，上游原始对象保留；内部允许初始化衔接和正常接收 merge commit。所有数据保存在操作者指定的私有目录，不写回外部 GitHub。
 
-本包实现真实 Git、持久台账、恢复和 localhost 工作台。内部只使用 Git：Issue/PR 在平台人工创建、审核、合入和核对，界面生成来源模板并登记链接。它不伪造 Git 创建 Issue/PR 的命令，不自动合入、不推 main，也不声称读取了平台审批或关单状态。
+本包实现真实 Git、持久台账、恢复和 localhost 工作台。内部只使用 Git：Issue 在平台人工创建；PR 可以使用私有适配器自动创建，在平台审核、合入和核对，界面生成来源模板并登记链接。它不伪造 Git 创建 Issue/PR 的命令，不自动合入、不推 main，也不声称读取了平台审批或关单状态。
 
-## 先体验
+## 启动正式服务
 
 ### 使用自己的仓库：空白配置入口
 
@@ -69,21 +69,39 @@ node src/cli.mjs setup "D:/private/repo-sync/config.json" 5220
 
 若状态为“停止结果待确认”或执行器已中断，先在本机确认原执行器与 Git/检查子进程已退出，再按上述配置锁及台账 unlock 流程恢复并重启。不会通过超时租约自动接管未知进程。应用的单元测试、构建与插件兼容仍需要用户补充检查，不由连接诊断代替。
 
-### 使用虚构仓库演示
+## 按版本更新与内部差异
 
-需要 Node 24+、Git。项目根目录执行：
+### 文件差异与错误引用的处理
 
-```bash
-node packages/repo-sync/examples/git-demo.mjs
+基线失败在当前步骤展示完整文件报告，比较外部已同步 U0 与内部当前 I0，不把 U0 之后的正常外部更新算作内部差异。文件清单默认折叠，支持目录树、全量搜索、分类筛选和每页 50 项；共同修改、内部保留及未声明修改明确区分。
+
+首次登记前，可逐文件填入内部保留或共同修改的配置草稿，查看两侧文本，再保存规则并重新核验。选择内部保留会跳过该路径的外部更新；不会默认排除所有不同文件。连续模式须修正基线或通过内部修复 PR 恢复全树一致。已启用规则固定，新增定制须使用新的私有配置和核验后的基线；原台账与未完成交付保留。
+
+PR 步骤先明确创建方式，再提供来源/目标分支、候选 SHA、标题和正文。人工登记需要确认已在平台创建并核对分支；没有平台接口时不声称网页存在性已验证。可以在等待审核阶段展开纠错，替换链接或撤销本机引用；要求旧链接仍匹配、候选未改变、内部 main 未前进。旧链接留在审计记录，不删除候选或平台 PR。已合入时先核验 Git 结果，不能重置。Issue 映射也支持候选冻结前、尚无接收记录的纠正；已使用映射不可改写。
+
+### 可配置的自动 PR 创建
+
+普通 Git 协议不能创建平台 Issue/PR。本包提供平台命令适配器；只有本地私有 JSON 配置了真实平台能力，按钮才显示自动创建。没有适配器时，明确引导在平台创建后登记。网页和 MCP 不能设置命令或凭据。
+
+```json
+{
+  "internalWebUrl": "https://internal.example/team/core",
+  "pullRequests": {
+    "mode": "command",
+    "timeoutMs": 120000,
+    "find": {"command": "D:/private/platform-adapter.exe", "args": []},
+    "create": {"command": "D:/private/platform-adapter.exe", "args": []}
+  }
+}
 ```
 
-打开 `http://127.0.0.1:5187/`。演示创建独立虚构的来源仓、内仓和台账，但提交、推送、合入、tree 与祖先核验全部执行真实 Git。两笔交付共用 Issue：第一笔接收后记录 open，第二笔完成才确认 closed。平台对象和审批由单独的模拟 PR 页面表示，不能作为真实平台能力证据。演示台账位于 gitignored `.repo-sync-tests/`，不清理已有数据。
+固定可执行文件通过 UTF-8 stdin 接收 JSON：schema=1、action=find/create、deliveryId、repository、branch、targetBranch、head、base、title、body。不经过 shell，不将正文或凭据放入 argv。适配器可以在内部调用平台 API 或实际 CLI；实现与认证由内部环境提供，不能把 Git 推送当作创建完成。
 
-纯流程原型仍位于 `packages/repo-sync/prototype/`，其 5186 页面只执行合成状态模拟；不得把两个入口的证据混用。
+find 必须完整查询该 deliveryId 对应对象，未创建时返回 JSON null；存在时返回唯一 JSON 对象，包含 deliveryId、branch、targetBranch、head、base、state=open/merged、url。多个对象、关闭状态或属性不符必须暂停。create 以 deliveryId 做幂等键并返回 JSON；调用后程序再次 find，核验全部冻结字段后才登记。
 
-体验两个模式与冲突处理：运行 `node packages/repo-sync/examples/modes-demo.mjs`。5190 是开发过程同步，5191 是按版本更新，5192 是共同文件冲突；三套仓库与台账独立，页面顶部可切换入口。版本模式先读取 tag、选择 v2.0.0、开始更新，检查推送后在模拟平台登记任意虚构 HTTPS PR 链接（如 `https://codehub.example/core/pull/501`），打开该笔模拟 PR 合入，回来核验并完成。冲突页可选择一侧版本或保存人工合并文本。
+创建前保存意图。超时、输出无效或回执丢失后，重试只查同一交付；查不到不会再次 create，需要在平台确认后登记已有对象。不会自动合入。真实内网协议尚未提供，当前验证的是适配器协议与故障恢复，不能代替该平台验收。
 
-## 按版本更新与内部差异
+CLI：`create-pr <私有配置>` 查询/创建；`pr <私有配置> <正确链接> [原链接]` 登记/纠正；`clear-pr <私有配置> <原链接>` 撤销本机错误引用。私有配置中指定 internalWebUrl 可限制对象链接属于该仓库；Git 地址与网页地址不同的平台应明确填写。
 
 在私有配置中指定：
 

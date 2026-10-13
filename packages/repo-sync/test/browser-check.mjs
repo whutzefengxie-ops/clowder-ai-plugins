@@ -15,7 +15,7 @@ const fixture = await repositories();
 const receiver = new Receiver(fixture.config);
 await receiver.adopt(fixture.u0, fixture.i0);
 await receiver.setQueue(fixture.plans);
-const server = createReceiverServer(receiver, { demoMerge: fixture.merge });
+const server = createReceiverServer(receiver);
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({
@@ -42,16 +42,9 @@ try {
     assert.match(before.templates.body, /内部 #318/);
     assert.equal(await page.locator('[data-step-state="done"]').count(), 5);
     await page.getByLabel('内部 PR 具体链接').fill(`https://codehub.example/core/pull/${index + 1}`);
+    await page.locator('[data-pr-confirm]').check();
     await page.getByRole('button', { name: '登记 PR，进入审核' }).click();
-    const [pr] = await Promise.all([
-      page.waitForEvent('popup'),
-      page.getByRole('link', { name: '打开内部 PR ↗' }).click(),
-    ]);
-    await pr.waitForLoadState();
-    assert.equal(new URL(pr.url()).pathname, `/demo/pr/${before.active.id}`);
-    await pr.getByRole('button', { name: '模拟平台审核通过并合入' }).click();
-    await pr.getByRole('heading', { name: '模拟平台已执行 Git 合入' }).waitFor({ timeout: 20000 });
-    await pr.close();
+    await fixture.merge((await receiver.status()).active);
     await page.reload();
     assert.equal((await receiver.status()).accepted.internal, before.accepted.internal);
     await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).click();

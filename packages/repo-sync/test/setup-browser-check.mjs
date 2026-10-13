@@ -59,6 +59,7 @@ try {
   assert.equal(await page.getByLabel('内部 Git 仓库地址').inputValue(), '');
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://user:secret@github.com/demo/core.git');
   await page.getByLabel('内部 Git 仓库地址').fill(internal);
+  await page.getByLabel('内部仓库网页地址（建议填写）').fill('https://codehub.example/core');
   await page.getByLabel('外部交付分支').fill('releases');
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md');
   await page.getByLabel('共同修改的文件（每行一项）').fill('README.md');
@@ -99,6 +100,7 @@ try {
   await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
   await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
   await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
+  await page.locator('[data-pr-confirm]').check();
   await page.getByRole('button', { name: '登记 PR，进入审核' }).click();
   await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).waitFor();
   assert.equal(

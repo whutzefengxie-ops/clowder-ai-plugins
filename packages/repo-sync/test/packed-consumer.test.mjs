@@ -36,6 +36,7 @@ test('packed plugin installs in a fresh consumer and launches exact stdio and we
   assert.ok(packed.files.some((file) => file.path === 'dist/mcp-entrypoint.mjs'));
   assert.ok(packed.files.some((file) => file.path === 'web/index.html'));
   assert.ok(packed.files.some((file) => file.path === 'npm-shrinkwrap.json'));
+  assert.ok(packed.files.every((file) => !/^(test|examples|prototype)\//.test(file.path)));
   assert.ok(
     packed.files.every(
       (file) =>
@@ -91,7 +92,7 @@ test('packed plugin installs in a fresh consumer and launches exact stdio and we
     assert.equal((await fetch(new URL('/operation-view.mjs', url))).status, 200);
     const firstUse = await (await fetch(new URL('/api/status', url))).json();
     assert.equal(firstUse.config, null);
-    assert.equal(firstUse.synthetic, false);
+    assert.equal(firstUse.service, 'production');
     assert.equal(existsSync(join(consumer, 'first-use.json')), false);
     await client.close();
     await assert.rejects(() => fetch(url, { signal: AbortSignal.timeout(2000) }));

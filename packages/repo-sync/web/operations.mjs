@@ -1,7 +1,18 @@
 import { captureDraft, restoreDraft } from './connections.mjs';
 import { renderTask } from './operation-view.mjs';
 
-const longActions = new Set(['heads', 'adopt', 'discover', 'prepare', 'recover', 'tags', 'select-tag']);
+const longActions = new Set([
+  'heads',
+  'adopt',
+  'discover',
+  'prepare',
+  'recover',
+  'tags',
+  'select-tag',
+  'pr',
+  'clear-pr',
+  'create-pr',
+]);
 const active = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 export function createOperations({ snapshot, refresh, completed, errorPanel }) {
@@ -10,7 +21,9 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
   let watching;
   let current;
   function lock() {
-    for (const element of document.querySelectorAll('button[data-action], form button, input, textarea, select'))
+    for (const element of document.querySelectorAll(
+      'button[data-action], [data-rule-path], [data-baseline-read], [data-conflict-path], form button, input, textarea, select',
+    ))
       element.disabled = busy;
   }
   function show(task) {
@@ -94,6 +107,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
       if (error.code) throw error;
       errorPanel.textContent = '请求回执暂未取得，正在查询原任务；请勿重复发起。';
       errorPanel.hidden = false;
+      document.getElementById('baseline-differences')?.scrollIntoView({ block: 'center' });
     }
     if (value) show(value.operation);
     return wait(requestId);
@@ -119,7 +133,8 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
       watching = null;
       busy = false;
       await refresh();
-      if (input.action === 'heads') restoreDraft(drafts);
+      if (['heads', 'baseline-file', 'conflict', 'configure', 'configure-repositories'].includes(input.action))
+        restoreDraft(drafts);
       return value;
     } catch (error) {
       watching = null;

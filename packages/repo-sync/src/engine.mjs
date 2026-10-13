@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
-import { fail, objectUrl, validateConfig } from './config.mjs';
+import { fail, validateConfig } from './config.mjs';
 import { readConflict, resolveConflict } from './conflicts.mjs';
 import { phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
@@ -8,7 +8,9 @@ import { assertLedger } from './ledger.mjs';
 import { mapIssue, recordReceipts, templates } from './metadata.mjs';
 import { checkPlan } from './plan.mjs';
 import { git } from './process.mjs';
+import { createPr, linkPr, prUrl } from './pull-requests.mjs';
 import { event, Store } from './store.mjs';
+import { assertProjection } from './trees.mjs';
 import { cancelVersion, selectTag, sourceStillValid, tags, versionTemplate } from './version.mjs';
 import { VersionGitReceiver } from './version-git.mjs';
 
@@ -58,12 +60,17 @@ export class Receiver {
         upstream = await this.git.sha(upstream);
         internal = await this.git.sha(internal);
         if (heads.internal !== internal) fail('STALE_INTERNAL_HEAD', '内部基线不是当前 main，重新读取后确认');
+        if (!(await this.git.isAncestor(upstream, heads.upstream)))
+          fail('BASELINE_HISTORY_MISMATCH', 'U0 不在外部交付分支历史中，请重新选择上次已同步版本；未登记基线');
         if (this.config.mode === 'version') await this.git.baseline(upstream, internal);
-        if (
-          !(await this.git.isAncestor(upstream, heads.upstream)) ||
-          (this.config.mode !== 'version' && !(await this.git.sameTree(upstream, internal)))
-        )
-          fail('BASELINE_MISMATCH', '上游基线不在交付历史中，或两侧核心树不一致');
+        else
+          await assertProjection(
+            this.git.directory,
+            upstream,
+            internal,
+            { internalPaths: [], mergePaths: [] },
+            'BASELINE_MISMATCH',
+          );
         if (!(await this.git.mainBoundary(upstream, heads.upstream)))
           fail('BASELINE_NOT_MAIN_BOUNDARY', '基线必须是上游 main 的实际接受边界');
       });
@@ -142,10 +149,11 @@ export class Receiver {
       );
     });
   }
-  async linkIssue(sourceId, internalId, url) {
+  async linkIssue(sourceId, internalId, url, options) {
     return this.change(async (state) => {
       const delivery = this.requireActive(state);
-      mapIssue(state, delivery, sourceId, internalId, url);
+      mapIssue(state, delivery, sourceId, internalId, prUrl(this.config, url, 'Issue'), options);
+      delete delivery.error;
       event(state, delivery, '内部 Issue 来源映射已登记');
     });
   }
@@ -197,14 +205,16 @@ export class Receiver {
       fail('PLATFORM_CLOSURE_UNVERIFIED', '先实测原始 commit 不会误关内部 Issue；配置未确认，禁止推送');
     if (!this.config.checks?.length) fail('CHECKS_REQUIRED', '至少配置一项核心/插件检查，不能把未检查当通过');
   }
-  async linkPr(url) {
-    return this.change(async (state) => {
+  linkPr(url, options) {
+    return this.change((state) =>
+      phase('platform-pr', '核验候选并登记或纠正 PR 引用', () => linkPr(this, state, url, options), false),
+    );
+  }
+  createPr() {
+    return this.change((state) => {
       const delivery = this.requireActive(state);
-      if (!['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status)) fail('PR_NOT_READY', '候选分支尚未确认推送');
-      if (delivery.prUrl && delivery.prUrl !== url) fail('PR_MAPPING_CONFLICT', '同一交付已有其他 PR 链接');
-      delivery.prUrl = objectUrl(url);
-      delivery.status = 'WAITING_APPROVAL';
-      event(state, delivery, '已登记内部 PR；请在内部平台完成独立审核和合入');
+      const template = this.config.mode === 'version' ? versionTemplate(delivery) : templates(delivery, state.issues);
+      return createPr(this, state, delivery, template);
     });
   }
   async recover() {

@@ -1,5 +1,9 @@
 import { configuration, firstUse, repositoryInput } from './connections.mjs';
+import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
+import { fileTree, hydrateFiles } from './files.mjs';
+import { issueForms } from './issues.mjs';
 import { createOperations } from './operations.mjs';
+import { prPanel } from './pr.mjs';
 import { progressSteps } from './progress.mjs';
 import { receiptFields } from './receipts.mjs';
 import { conflictEditor, conflictOptions, tagSelector, versionPreview } from './version.mjs';
@@ -60,17 +64,18 @@ function primary(active, state) {
   if (!active)
     return state.queue.length
       ? button('start', `同步上游 PR #${state.queue[0].source.number} →`)
-      : snapshot.synthetic
-        ? '<small>本轮两笔演示已完成，可回看下方记录。</small>'
-        : button('discover', '检查上游更新');
+      : button('discover', '检查上游更新');
   if (active.error || active.status === 'PUSH_RESULT_UNKNOWN') return button('recover', '核对原交付并恢复');
   if (active.status === 'ISSUES_REQUIRED' && active.issues.every((issue) => state.issues[issue.sourceId]))
     return button('prepare', '检查并推送候选分支 →');
   if (active.status === 'WAITING_APPROVAL')
-    return `<a class="button primary" href="${snapshot.synthetic ? `/demo/pr/${active.id}` : esc(active.prUrl)}" target="_blank" rel="noopener">打开内部 PR ↗</a>${button('recover', '已在平台合入，核验 Git 结果')}`;
+    return `<a class="button primary" href="${esc(active.prUrl)}" target="_blank" rel="noopener">打开内部 PR ↗</a>${button('recover', '已在平台合入，核验 Git 结果')}`;
   const destinations = {
     ISSUES_REQUIRED: ['issue-mappings', '登记内部 Issue 对应 →'],
-    PR_REQUIRED: ['pr-form', '登记内部 PR 链接 →'],
+    PR_REQUIRED: [
+      'pr-form',
+      snapshot.platform?.prMode === 'automatic' ? '查询 / 创建内部 PR →' : '在平台创建并登记 PR →',
+    ],
     CODE_ACCEPTED_PENDING_METADATA: ['receipt-form', '确认 Issue 接收记录 →'],
   };
   const [id, label] = destinations[active.status];
@@ -82,20 +87,13 @@ function workflow(active, state = snapshot.state) {
     active,
     state,
     snapshot.config.checkProfile,
+    snapshot.platform?.prMode,
   )
     .map(
       (group) =>
         `<li><b>${group.label}</b>${group.children.map((step) => `<small data-step-state="${step.status}" class="${step.status === 'failed' ? 'bad' : step.status === 'done' ? 'good' : ''}">${marks[step.status]} ${step.name}</small>`).join('')}</li>`,
     )
     .join('')}</ol>`;
-}
-function issueForms(active, state) {
-  return active.issues
-    .map((issue) => {
-      const mapping = state.issues[issue.sourceId];
-      return `<div class="card"><h3><a href="${esc(issue.url)}" target="_blank" rel="noopener">来源 Issue #${issue.number} ↗</a> · ${esc(issue.title)}</h3>${mapping ? `<p>内部 #${esc(mapping.internalId)} · <a href="${esc(mapping.url)}" target="_blank" rel="noopener">打开内部 Issue ↗</a></p>` : `<details><summary>复制 Issue 来源正文</summary><pre>${esc(`来源：${issue.url}\n\n${issue.body ?? ''}`)}</pre></details><form data-form="issue" data-source="${esc(issue.sourceId)}"><label>内部 Issue 编号<input name="internalId" required></label><label>内部 Issue 具体链接<input name="url" type="url" required></label><button type="submit">保存此 Issue 映射</button></form>`}</div>`;
-    })
-    .join('');
 }
 function currentForm(active, state) {
   const anchors = {
@@ -108,9 +106,8 @@ function currentForm(active, state) {
 function currentFormContent(active, state) {
   if (active.status === 'CODE_PREPARE_REQUIRED')
     return `${versionPreview(active, esc, sha)}${conflictOptions(active, esc)}<section class="card"><button type="button" data-action="cancel-version">撤销未发布交付，重新选择版本</button><p>历史记录保留。已发布候选必须先恢复，不能撤销。</p></section>`;
-  if (active.status === 'ISSUES_REQUIRED') return issueForms(active, state);
-  if (active.status === 'PR_REQUIRED')
-    return `<section class="card"><h3>内部 PR 模板</h3><pre>${esc(snapshot.state.templates.title)}\n\n${esc(snapshot.state.templates.body)}</pre><form data-form="pr"><label>内部 PR 具体链接<input name="url" type="url" required></label><button type="submit" class="primary">登记 PR，进入审核</button></form></section>`;
+  if (active.status === 'ISSUES_REQUIRED') return issueForms(active, state, esc);
+  if (['PR_REQUIRED', 'WAITING_APPROVAL'].includes(active.status)) return prPanel(snapshot, esc);
   if (active.status === 'CODE_ACCEPTED_PENDING_METADATA')
     return `<section class="card"><form data-form="receipts"><h3>确认平台实际状态并保存接收记录</h3>${receiptFields(active, state, esc, sha)}<button type="submit" class="primary">保存本笔接收记录，完成同步</button><p>此操作记录人工核对结果，不向内部平台发送关单请求。</p></form></section>`;
   return '';
@@ -132,11 +129,22 @@ function workbench() {
   const [title, description] = active ? taskPresentation(active, state) : idlePresentation(state);
   if (!active && !state.queue.length && state.accepted.upstream !== state.latest)
     return `<section class="card task"><h2>读取上游交付清单</h2><p>Git 已读取到更新版本。先关联 PR、Issue 与实际提交并冻结范围，再发起同步。</p>${button('discover', '检查上游更新')}</section>`;
-  return `<section class="card task"><div class="task-top"><div><span class="badge">${active ? esc(active.status) : '准备就绪'}</span><h2>${title}</h2><p>${description}</p></div><div>${primary(active, state)}</div></div>${active ? `<p>候选分支：${esc(active.branch)} → ${esc(snapshot.config.targetBranch)}</p>${workflow(active)}` : ''}</section><section class="card versions"><div><small>已接受上游</small>${sha(state.accepted.upstream)}</div><div><small>对应内部 commit</small>${sha(state.accepted.internal)}</div><div><small>冻结扫描目标</small>${sha(state.latest)}<small>${state.queue.length} 笔待完成交付</small></div></section>${active?.error ? `<div class="card bad">× ${esc(active.error.code)}<p>${esc(active.error.message)}</p>${active.error.details?.paths ? `<pre>${esc(active.error.details.paths.join('\n'))}</pre>` : ''}</div>` : ''}${active ? currentForm(active, state) : ''}<section class="card"><h3>本轮同步与审计</h3>${
+  return `<section class="card task"><div class="task-top"><div><span class="badge">${active ? esc(active.status) : '准备就绪'}</span><h2>${title}</h2><p>${description}</p></div><div>${primary(active, state)}</div></div>${active ? `<p>候选分支：${esc(active.branch)} → ${esc(snapshot.config.targetBranch)}</p>${workflow(active)}` : ''}</section><section class="card versions"><div><small>已接受上游</small>${sha(state.accepted.upstream)}</div><div><small>对应内部 commit</small>${sha(state.accepted.internal)}</div><div><small>冻结扫描目标</small>${sha(state.latest)}<small>${state.queue.length} 笔待完成交付</small></div></section>${
+    active?.error
+      ? `<div class="card bad">× ${esc(active.error.code)}<p>${esc(active.error.message)}</p>${
+          active.error.details?.paths
+            ? `${fileTree(
+                active.error.details.paths.map((path) => ({ path, kind: '异常', category: 'merge' })),
+                '异常文件清单',
+              )}`
+            : ''
+        }</div>`
+      : ''
+  }${active ? currentForm(active, state) : ''}<section class="card"><h3>本轮同步与审计</h3>${
     state.deliveries
       .map(
         (delivery) =>
-          `<details><summary>${esc(delivery.source.title)} · ${esc(delivery.status)}</summary><p>${esc(delivery.id)} · ${esc(delivery.branch)}</p>${delivery.prUrl ? `<p><a href="${snapshot.synthetic ? `/demo/pr/${delivery.id}` : esc(delivery.prUrl)}" target="_blank" rel="noopener">打开对应内部 PR ↗</a></p>` : ''}<p>目标 ${sha(delivery.target)} → 内部 ${sha(delivery.acceptedInternal ?? '待接受')}</p><details><summary>${delivery.mode === 'version' ? '上游版本提交范围（不重放提交）' : '本笔原始 commit 对应'}</summary><pre>${esc(delivery.commits.map((commit) => (delivery.mode === 'version' ? commit : `${commit} → ${commit}`)).join('\n'))}</pre><small>${delivery.mode === 'version' ? '来源 SHA 用于版本追溯；内部候选是一次内容更新提交。' : '原始对象 SHA 保留；内部接收节点单独记录。'}</small></details><pre>${esc(
+          `<details><summary>${esc(delivery.source.title)} · ${esc(delivery.status)}</summary><p>${esc(delivery.id)} · ${esc(delivery.branch)}</p>${delivery.prUrl ? `<p><a href="${esc(delivery.prUrl)}" target="_blank" rel="noopener">打开对应内部 PR ↗</a></p>` : ''}<p>目标 ${sha(delivery.target)} → 内部 ${sha(delivery.acceptedInternal ?? '待接受')}</p><details><summary>${delivery.mode === 'version' ? '上游版本提交范围（不重放提交）' : '本笔原始 commit 对应'}</summary><pre>${esc(delivery.commits.map((commit) => (delivery.mode === 'version' ? commit : `${commit} → ${commit}`)).join('\n'))}</pre><small>${delivery.mode === 'version' ? '来源 SHA 用于版本追溯；内部候选是一次内容更新提交。' : '原始对象 SHA 保留；内部接收节点单独记录。'}</small></details><pre>${esc(
             state.events
               .filter((event) => event.deliveryId === delivery.id)
               .map((event) => `${event.time} ${event.message}`)
@@ -152,6 +160,8 @@ function workbench() {
   }</section>`;
 }
 function taskPresentation(active, state) {
+  if (active.status === 'PR_REQUIRED' && snapshot.platform?.prMode === 'automatic' && !active.error)
+    return ['候选已发布，查询 / 创建内部 PR', '使用私有平台适配器，先查询再创建并回读；随后在真实平台审核。'];
   if (active.status === 'CODE_PREPARE_REQUIRED' && !active.error)
     return [
       `准备更新至 ${esc(active.source.tag)}`,
@@ -162,24 +172,11 @@ function taskPresentation(active, state) {
     return ['内部 Issue 已就绪，准备同步代码', '点击检查并推送候选分支。原始提交保留，内部 main 仍等待平台审批。'];
   return states[active.status] ?? ['核对当前结果', '恢复原交付后继续。'];
 }
-function renderPlatform() {
-  const delivery = snapshot.state?.active;
-  if (!delivery || !location.pathname.endsWith(delivery.id))
-    return '<section class="card"><h2>这笔模拟 PR 已结束或不属于当前交付</h2><a href="/">返回工作台</a></section>';
-  return `<section class="card"><span class="badge">合成内部平台 · 真实 Git 合并</span><h2>${esc(delivery.source.title)}</h2><p>${esc(delivery.branch)} → ${esc(snapshot.config.targetBranch)}</p><p>候选 ${sha(delivery.candidate)}</p><p>此页模拟平台审批，将候选合并到独立虚构内仓；实际环境在真实 PR 页面审核。</p>${delivery.status === 'WAITING_APPROVAL' ? button('demo-merge', '模拟平台审核通过并合入') : '<p>Git 接收结果已核验。</p>'}<p><a href="/">返回同步工作台核验结果 →</a></p></section>`;
-}
 function render() {
-  document.getElementById('mode').textContent = snapshot.synthetic
-    ? '合成仓库演示 · 执行真实 Git'
-    : snapshot.config
-      ? '真实 Git · 平台对象人工登记'
-      : '真实仓库 · 等待配置';
-  content.innerHTML =
-    snapshot.synthetic && location.pathname.startsWith('/demo/pr/')
-      ? renderPlatform()
-      : view === 'configuration'
-        ? configuration(snapshot, esc, sha, button)
-        : workbench();
+  document.getElementById('mode').textContent = snapshot.config
+    ? `正式服务 · PR ${snapshot.platform?.prMode === 'automatic' ? '平台适配器创建' : '手工创建'}`
+    : '正式服务 · 等待仓库配置';
+  content.innerHTML = view === 'configuration' ? configuration(snapshot, esc, sha, button) : workbench();
   const badge = content.querySelector('.task .badge');
   if (badge && snapshot.state?.active)
     badge.textContent = snapshot.state.active.error
@@ -188,15 +185,17 @@ function render() {
         ? '等待内部审核'
         : '完成当前步骤';
   renderFreshness();
+  renderDiagnostics();
+  hydrateFiles(content);
   operations.lock();
-  if (snapshot.demoLinks)
-    content.insertAdjacentHTML(
-      'afterbegin',
-      `<p class="demo-links">独立测试：<a href="${esc(snapshot.demoLinks.continuous)}">开发过程同步</a> · <a href="${esc(snapshot.demoLinks.version)}">按版本更新</a> · <a href="${esc(snapshot.demoLinks.conflict)}">文件冲突场景</a></p>`,
-    );
+}
+function renderDiagnostics() {
+  const panel = diagnostics(snapshot.state?.active?.error ?? snapshot.operation?.error, snapshot, esc);
+  const baseline = content.querySelector('form[data-form="adopt"]')?.closest('.card');
+  if (panel) (baseline ?? content).insertAdjacentHTML(baseline ? 'beforeend' : 'afterbegin', panel);
 }
 function renderFreshness() {
-  if (view === 'workbench' && snapshot.state && !location.pathname.startsWith('/demo/pr/')) {
+  if (view === 'workbench' && snapshot.state) {
     const freshness = document.createElement('p');
     freshness.className = 'badge';
     freshness.textContent =
@@ -211,6 +210,16 @@ function renderFreshness() {
 document.addEventListener('click', async (event) => {
   const element = event.target.closest('button');
   if (!element) return;
+  if (element.dataset.rulePath) stageRule(element);
+  if (element.hasAttribute('data-baseline-read')) {
+    const result = await action({
+      action: 'baseline-file',
+      upstream: element.dataset.upstream,
+      internal: element.dataset.internal,
+      path: document.querySelector('[data-baseline-path]').value,
+    });
+    if (result) document.getElementById('baseline-file-content').innerHTML = baselineContent(result.result, esc);
+  }
   if (element.dataset.conflictPath) {
     const result = await action({ action: 'conflict', path: element.dataset.conflictPath });
     if (result) document.getElementById('conflict-editor').innerHTML = conflictEditor(result.result, esc);
@@ -229,10 +238,6 @@ function showActionResult(kind, result) {
   if (kind === 'tags') {
     availableTags = result.result;
     render();
-  }
-  if (kind === 'demo-merge') {
-    content.innerHTML =
-      '<section class="card"><h2>模拟平台已执行 Git 合入</h2><p>返回工作台核验并补写接收记录。</p><a href="/">返回工作台 →</a></section>';
   }
   if (kind === 'heads') {
     const internal = document.getElementById('internal');
@@ -283,7 +288,7 @@ function versionHistory(state) {
     state.deliveries
       .map(
         (delivery) =>
-          `<details><summary>${esc(delivery.source.tag)} · ${esc(delivery.status)}</summary><p>外部 ${sha(delivery.target)} → 内部 ${sha(delivery.acceptedInternal ?? '待接受')}</p>${delivery.prUrl ? `<a href="${snapshot.synthetic ? `/demo/pr/${delivery.id}` : esc(delivery.prUrl)}" target="_blank" rel="noopener">打开对应内部 PR ↗</a>` : ''}<pre>${esc(
+          `<details><summary>${esc(delivery.source.tag)} · ${esc(delivery.status)}</summary><p>外部 ${sha(delivery.target)} → 内部 ${sha(delivery.acceptedInternal ?? '待接受')}</p>${delivery.prUrl ? `<a href="${esc(delivery.prUrl)}" target="_blank" rel="noopener">打开对应内部 PR ↗</a>` : ''}<pre>${esc(
             state.events
               .filter((event) => event.deliveryId === delivery.id)
               .map((event) => `${event.time} ${event.message}`)

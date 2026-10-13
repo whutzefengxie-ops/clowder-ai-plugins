@@ -31,7 +31,29 @@ export function safeError(error) {
   return {
     code: /^[A-Z_]+$/.test(error.code ?? '') ? error.code : 'OPERATION_FAILED',
     message: error.code ? error.message : '操作未完成，请核对当前步骤；原始输出保留在本机环境',
-    ...(error.details?.paths ? { details: { paths: error.details.paths } } : {}),
+    ...(error.details?.paths
+      ? {
+          details: {
+            paths: error.details.paths,
+            ...(error.details.differences
+              ? {
+                  differences: error.details.differences.map(
+                    ({ path, kind, category, blocking, sourceMode, internalMode }) => ({
+                      path,
+                      kind,
+                      category,
+                      blocking,
+                      sourceMode,
+                      internalMode,
+                    }),
+                  ),
+                  upstream: error.details.upstream,
+                  internal: error.details.internal,
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 export function progress(text) {

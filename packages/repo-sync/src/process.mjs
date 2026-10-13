@@ -9,12 +9,12 @@ export async function command(executable, args, options = {}) {
   checkpoint();
   const signal = options.signal ?? execution()?.signal;
   if (signal?.aborted) fail('OPERATION_CANCELLED', '操作已取消');
-  const { signal: _signal, timeout = 120000, ...spawnOptions } = options;
+  const { signal: _signal, timeout = 120000, input, binary = false, ...spawnOptions } = options;
   const child = spawn(executable, args, {
     ...spawnOptions,
     windowsHide: true,
     detached: process.platform !== 'win32',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
   });
   const decoder = new StringDecoder('utf8');
   let stderr = '';
@@ -56,6 +56,10 @@ export async function command(executable, args, options = {}) {
   child.on('error', (error) => {
     spawnError = error;
   });
+  if (input !== undefined) {
+    child.stdin.on('error', () => {});
+    child.stdin.end(input, 'utf8');
+  }
   const code = await Promise.race([new Promise((done) => child.once('close', done)), uncertainty]);
   clearTimeout(timer);
   signal?.removeEventListener('abort', abort);
@@ -72,7 +76,8 @@ export async function command(executable, args, options = {}) {
       }[cause],
     );
   if (spawnError || code !== 0) commandFailure(stderr, spawnError?.code ?? code);
-  return Buffer.concat(stdout).toString('utf8').trim();
+  const output = Buffer.concat(stdout);
+  return binary ? output : output.toString('utf8').trim();
 }
 export function gitEnvironment() {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' };

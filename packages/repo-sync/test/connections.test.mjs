@@ -97,7 +97,7 @@ test('blank loopback workbench retains token/origin protection and rejects recep
   try {
     const status = await (await fetch(`${base}/api/status`)).json();
     assert.equal(status.config, null);
-    assert.equal(status.synthetic, false);
+    assert.equal(status.service, 'production');
     const post = (input, headers = {}) =>
       fetch(`${base}/api/action`, { method: 'POST', headers, body: JSON.stringify(input) });
     assert.equal((await post(fields)).status, 403);

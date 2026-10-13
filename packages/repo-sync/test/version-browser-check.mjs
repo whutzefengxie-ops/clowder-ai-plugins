@@ -29,7 +29,6 @@ try {
     }
     const server = createReceiverServer(
       new Receiver({ ...f.config, mode: 'continuous', internalPaths: [], mergePaths: [] }),
-      { demoMerge: f.merge },
     );
     await new Promise((done) => server.listen(0, '127.0.0.1', done));
     const base = `http://127.0.0.1:${server.address().port}`;
@@ -61,6 +60,7 @@ try {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         await page.screenshot({ path: join(evidence, 'version-conflict-mobile.png'), fullPage: true });
         await page.setViewportSize({ width: 1440, height: 1100 });
+        await page.getByText(/冲突文件（/).click();
         await page.getByRole('button', { name: '查看并处理冲突' }).click();
         await page.getByLabel('处理方式').selectOption('manual');
         await page.getByLabel('人工合并后的完整内容').fill('手工合并介绍\n\n运行说明\n\n内部联系说明\n');
@@ -75,14 +75,15 @@ try {
         fullPage: true,
       });
       await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
+      await page.locator('[data-pr-confirm]').check();
       await page.getByRole('button', { name: '登记 PR，进入审核' }).click();
-      const [pr] = await Promise.all([
-        page.waitForEvent('popup'),
-        page.getByRole('link', { name: '打开内部 PR ↗' }).click(),
-      ]);
-      await pr.getByRole('button', { name: '模拟平台审核通过并合入' }).click();
-      await pr.getByRole('heading', { name: '模拟平台已执行 Git 合入' }).waitFor({ timeout: 20000 });
-      await pr.close();
+      await f.merge(
+        (
+          await (
+            await configuredReceiver({ ...f.config, mode: undefined, internalPaths: undefined, mergePaths: undefined })
+          ).status()
+        ).active,
+      );
       await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).click();
       await page.getByRole('heading', { name: '当前已接收版本' }).waitFor({ timeout: 20000 });
       const receiver = await configuredReceiver({

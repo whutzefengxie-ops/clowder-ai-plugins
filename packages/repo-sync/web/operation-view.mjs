@@ -21,6 +21,9 @@ const actions = {
   tags: '读取上游 tag',
   discover: '读取上游交付',
   'select-tag': '核对目标版本',
+  pr: '登记 / 纠正内部 PR 引用',
+  'clear-pr': '撤销错误 PR 引用',
+  'create-pr': '查询 / 自动创建内部 PR',
 };
 const marks = { DONE: '✓', RUNNING: '●', FAILED: '×', PENDING: '○' };
 const esc = (value) =>

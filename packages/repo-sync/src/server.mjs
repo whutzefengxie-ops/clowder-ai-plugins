@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import packageInfo from '../package.json' with { type: 'json' };
 import { dispatch } from './actions.mjs';
 import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
@@ -21,6 +22,10 @@ const assets = new Map([
   ['/connections.mjs', 'connections.mjs'],
   ['/operations.mjs', 'operations.mjs'],
   ['/operation-view.mjs', 'operation-view.mjs'],
+  ['/files.mjs', 'files.mjs'],
+  ['/pr.mjs', 'pr.mjs'],
+  ['/diagnostics.mjs', 'diagnostics.mjs'],
+  ['/issues.mjs', 'issues.mjs'],
 ]);
 export function createReceiverServer(receiver, options = {}) {
   const token = randomBytes(32).toString('hex');
@@ -28,7 +33,16 @@ export function createReceiverServer(receiver, options = {}) {
   const tasks = new Tasks(current, async (input) =>
     options.connection ? options.connection.run(input, options) : dispatch(receiver, input, options),
   );
-  options = { ...options, tasks };
+  options = {
+    ...options,
+    tasks,
+    runtime: {
+      productVersion: packageInfo.version,
+      apiVersion: 2,
+      instanceId: randomBytes(12).toString('hex'),
+      startedAt: new Date().toISOString(),
+    },
+  };
   const server = createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -83,7 +97,7 @@ async function post(receiver, options, token, input, response) {
     await get(receiver, options, token, '/api/status', response);
   else
     send(response, 200, {
-      result: ['heads', 'tags', 'conflict'].includes(input.action) ? result : null,
+      result: ['heads', 'tags', 'conflict', 'baseline-file'].includes(input.action) ? result : null,
       state: await receiver.status(),
     });
   return receiver;
@@ -97,9 +111,8 @@ function sendError(response, error) {
   return send(response, status, safeError(error));
 }
 async function get(receiver, options, token, path, response) {
-  const demoPr = options.demoMerge && /^\/demo\/pr\/[a-f0-9]{24}$/.test(path);
-  if (assets.has(path) || demoPr) {
-    const file = demoPr ? 'index.html' : assets.get(path);
+  if (assets.has(path)) {
+    const file = assets.get(path);
     const type = file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html';
     response.setHeader('Content-Type', `${type}; charset=utf-8`);
     response.end(await readFile(resolve(web, file)));
@@ -109,6 +122,7 @@ async function get(receiver, options, token, path, response) {
   const {
     sourceUrl,
     internalUrl,
+    internalWebUrl,
     sourceBranch,
     targetBranch,
     mode,
@@ -125,6 +139,8 @@ async function get(receiver, options, token, path, response) {
       ? {
           sourceUrl,
           internalUrl,
+          internalWebUrl,
+          prMode: receiver.config.pullRequests ? 'automatic' : 'manual',
           sourceBranch,
           targetBranch,
           mode,
@@ -136,8 +152,12 @@ async function get(receiver, options, token, path, response) {
         }
       : null,
     connection: options.connection?.describe(),
-    demoLinks: options.demoLinks,
-    synthetic: Boolean(options.demoMerge),
+    platform: {
+      prMode: receiver?.config.pullRequests ? 'automatic' : 'manual',
+      repositoryUrl: receiver?.config.internalWebUrl ?? null,
+    },
+    service: 'production',
+    runtime: options.runtime,
     operation: await options.tasks.latest(),
   });
 }

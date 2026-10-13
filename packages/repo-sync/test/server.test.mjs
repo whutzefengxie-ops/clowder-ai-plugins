@@ -32,3 +32,25 @@ test('localhost API rejects foreign Origin, foreign Host, missing tokens and arb
     await new Promise((done) => server.close(done));
   }
 });
+test('public settings retain the web repository and automatic capability without exposing executable configuration', async () => {
+  const receiver = {
+    config: {
+      internalWebUrl: 'https://codehub.example/core',
+      pullRequests: { mode: 'command', find: { command: 'D:/private/secret-adapter.exe', args: ['private-argument'] } },
+    },
+    status: async () => null,
+  };
+  const server = createReceiverServer(receiver);
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  try {
+    const value = await fetch(`http://127.0.0.1:${server.address().port}/api/status`).then((response) =>
+      response.json(),
+    );
+    assert.equal(value.config.internalWebUrl, receiver.config.internalWebUrl);
+    assert.equal(value.config.prMode, 'automatic');
+    assert.equal(value.platform.prMode, 'automatic');
+    assert.doesNotMatch(JSON.stringify(value), /secret-adapter|private-argument/);
+  } finally {
+    await server.shutdown();
+  }
+});

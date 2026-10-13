@@ -1,11 +1,24 @@
 import { fail, objectUrl } from './config.mjs';
 
-export function mapIssue(state, delivery, sourceId, internalId, url) {
+export function mapIssue(state, delivery, sourceId, internalId, url, options = {}) {
   const issue = delivery.issues.find((item) => item.sourceId === sourceId);
   if (!issue || !/^[\w-]+$/.test(String(internalId))) fail('ISSUE_MAPPING_INVALID', '来源 Issue 或内部身份无效');
   const existing = state.issues[sourceId];
-  if (existing && (existing.internalId !== String(internalId) || existing.url !== url))
-    fail('ISSUE_MAPPING_CONFLICT', '同一来源已存在不同内部映射，暂停核对');
+  if (existing && (existing.internalId !== String(internalId) || existing.url !== url)) {
+    if (delivery.status !== 'ISSUES_REQUIRED' || delivery.candidate || existing.receipts.length)
+      fail('ISSUE_MAPPING_FROZEN', '候选已冻结或 Issue 已有接收记录，不能改写映射；请在内部平台核对并保留原交付');
+    if (options.previousId !== existing.internalId || options.previousUrl !== existing.url)
+      fail('ISSUE_MAPPING_CONFLICT', '更换 Issue 需要确认当前编号和链接，请刷新后在纠正入口处理');
+    const next = objectUrl(url);
+    existing.history ??= [];
+    existing.history.push({
+      internalId: existing.internalId,
+      url: existing.url,
+      time: new Date().toISOString(),
+    });
+    existing.internalId = String(internalId);
+    existing.url = next;
+  }
   state.issues[sourceId] = existing ?? { internalId: String(internalId), url: objectUrl(url), receipts: [] };
 }
 export async function recordReceipts(state, delivery, observations, receiver) {

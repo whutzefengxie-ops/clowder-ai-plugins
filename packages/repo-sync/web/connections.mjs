@@ -5,7 +5,7 @@ export function firstUse() {
 }
 function connectionForm(config, connection, esc) {
   const version = !config || config.mode === 'version';
-  return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection.revision ?? '')}"><div class="split"><label>外部 GitHub 仓库地址<input name="sourceUrl" required value="${esc(config?.sourceUrl ?? '')}" placeholder="https://github.com/组织/仓库.git"></label><label>内部 Git 仓库地址<input name="internalUrl" required value="${esc(config?.internalUrl ?? '')}" placeholder="git@内部域名:团队/仓库.git"></label><label>外部交付分支<input name="sourceBranch" required value="${esc(config?.sourceBranch ?? 'main')}"></label><label>内部合入分支<input name="targetBranch" required value="${esc(config?.targetBranch ?? 'main')}"></label></div><p>支持 HTTPS 或 SSH Git 地址。请使用本机 Git 凭据管理器或 SSH 密钥，地址中不要带 Token、密码或查询参数。</p><label for="repository-mode">同步模式</label><select id="repository-mode" name="mode"><option value="version" ${version ? 'selected' : ''}>按 tag 更新 · 保留内部差异 · 一个同步 PR</option><option value="continuous" ${version ? '' : 'selected'}>同步开发过程 · 搬运 Issue / PR · 核心文件完全一致</option></select><div data-policy ${version ? '' : 'hidden'}><div class="split"><label>内部保留文件 / 目录（每行一项）<textarea name="internalPaths" rows="3" placeholder="internal-docs/&#10;README.internal.md">${esc((config?.internalPaths ?? []).join('\n'))}</textarea></label><label>共同修改的文件（每行一项）<textarea name="mergePaths" rows="3" placeholder="README.md">${esc((config?.mergePaths ?? []).join('\n'))}</textarea></label></div><p>内部保留路径完整保留；共同修改的文件三方合并。目录以 / 结尾，不支持通配符，其余文件必须与基线一致。</p></div><div data-closure ${version ? 'hidden' : ''}><label><input type="checkbox" name="commitClosureVerified" ${config?.commitClosureVerified ? 'checked' : ''}>我已在内部测试仓验证原始提交消息不会误关 Issue</label><p>开发过程模式保留原始 commit 消息。未完成平台实测时可配置和核验基线，程序会阻止候选推送。此项是你的实测声明。</p></div><p>默认只执行 <b>Git 基础完整性检查</b>（git fsck）。项目构建、单元测试和插件兼容检查需要在本地私有 JSON 的 checks 中补充。网页不接受执行命令。</p><button class="primary" type="submit">保存仓库配置，继续核验基线 →</button></form>`;
+  return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection.revision ?? '')}"><div class="split"><label>外部 GitHub 仓库地址<input name="sourceUrl" required value="${esc(config?.sourceUrl ?? '')}" placeholder="https://github.com/组织/仓库.git"></label><label>内部 Git 仓库地址<input name="internalUrl" required value="${esc(config?.internalUrl ?? '')}" placeholder="git@内部域名:团队/仓库.git"></label><label>外部交付分支<input name="sourceBranch" required value="${esc(config?.sourceBranch ?? 'main')}"></label><label>内部仓库网页地址（建议填写）<input name="internalWebUrl" type="url" value="${esc(config?.internalWebUrl ?? '')}" placeholder="https://内部平台/团队/仓库"></label><label>内部合入分支<input name="targetBranch" required value="${esc(config?.targetBranch ?? 'main')}"></label></div><p>支持 HTTPS 或 SSH Git 地址。请使用本机 Git 凭据管理器或 SSH 密钥，地址中不要带 Token、密码或查询参数。</p><label for="repository-mode">同步模式</label><select id="repository-mode" name="mode"><option value="version" ${version ? 'selected' : ''}>按 tag 更新 · 保留内部差异 · 一个同步 PR</option><option value="continuous" ${version ? '' : 'selected'}>同步开发过程 · 搬运 Issue / PR · 核心文件完全一致</option></select><div data-policy ${version ? '' : 'hidden'}><div class="split"><label>内部保留文件 / 目录（每行一项）<textarea name="internalPaths" rows="3" placeholder="internal-docs/&#10;README.internal.md">${esc((config?.internalPaths ?? []).join('\n'))}</textarea></label><label>共同修改的文件（每行一项）<textarea name="mergePaths" rows="3" placeholder="README.md">${esc((config?.mergePaths ?? []).join('\n'))}</textarea></label></div><p>内部保留路径完整保留；共同修改的文件三方合并。目录以 / 结尾，不支持通配符，其余文件必须与基线一致。</p></div><div data-closure ${version ? 'hidden' : ''}><label><input type="checkbox" name="commitClosureVerified" ${config?.commitClosureVerified ? 'checked' : ''}>我已在内部测试仓验证原始提交消息不会误关 Issue</label><p>开发过程模式保留原始 commit 消息。未完成平台实测时可配置和核验基线，程序会阻止候选推送。此项是你的实测声明。</p></div><p><b>PR 创建方式：${config?.prMode === 'automatic' ? '已接入私有平台适配器' : '手工在内部平台创建，再登记链接'}。</b>普通 Git 只能推送候选分支。自动创建须在私有 JSON 接入平台查询/创建命令；网页不接收命令或凭据。</p><p>默认只执行 <b>Git 基础完整性检查</b>（git fsck）。项目构建、单元测试和插件兼容检查需要在本地私有 JSON 的 checks 中补充。网页不接受执行命令。</p><button class="primary" type="submit">保存仓库配置，继续核验基线 →</button></form>`;
 }
 function summary(config, esc) {
   return `<div class="split"><div><small>外部来源</small>${esc(config.sourceUrl)}<p>交付分支：${esc(config.sourceBranch)}</p></div><div><small>内部接收</small>${esc(config.internalUrl)}<p>合入分支：${esc(config.targetBranch)}</p></div></div><p>同步方式：${config.mode === 'version' ? '按 tag 更新，只创建一个内部同步 PR' : '按 main 的 PR 落地顺序接收开发过程'}</p>${config.mode === 'version' ? `<p>内部保留：${esc((config.internalPaths ?? []).join('、') || '无')}<br>共同修改：${esc((config.mergePaths ?? []).join('、') || '无')}</p>` : ''}`;
@@ -27,6 +27,7 @@ export function repositoryInput(fields) {
     action: 'configure-repositories',
     ...fields,
     expectedRevision: fields.expectedRevision || null,
+    internalWebUrl: fields.internalWebUrl?.trim() ?? '',
     commitClosureVerified: fields.commitClosureVerified === 'on',
   };
   for (const key of ['internalPaths', 'mergePaths'])
@@ -41,14 +42,12 @@ export function repositoryInput(fields) {
   return input;
 }
 export function captureDraft() {
-  return [...document.querySelectorAll('form[data-form="configure-repositories"], form[data-form="adopt"]')].map(
-    (form) => ({
-      kind: form.dataset.form,
-      values: [...form.elements]
-        .filter((element) => element.name)
-        .map((element) => ({ name: element.name, value: element.value, checked: element.checked })),
-    }),
-  );
+  return [...document.querySelectorAll('form[data-form]')].map((form) => ({
+    kind: form.dataset.form,
+    values: [...form.elements]
+      .filter((element) => element.name && !['expectedRevision', 'previousUrl', 'deliveryId'].includes(element.name))
+      .map((element) => ({ name: element.name, value: element.value, checked: element.checked })),
+  }));
 }
 export function restoreDraft(drafts) {
   for (const draft of drafts) {

@@ -9,7 +9,7 @@ const [operation, configPath, ...args] = process.argv.slice(2);
 try {
   if (!configPath)
     throw new Error(
-      '用法：clowder-repo-sync <setup|serve|status|adopt|discover|tags|select-tag|start|issue|prepare|resolve|cancel-version|pr|recover|receipts|unlock> <私有配置.json> [参数]',
+      '用法：clowder-repo-sync <setup|serve|status|adopt|discover|tags|select-tag|start|issue|prepare|resolve|cancel-version|pr|clear-pr|create-pr|recover|receipts|unlock> <私有配置.json> [参数]',
     );
   const connection = ['setup', 'serve'].includes(operation) ? await createConnection(configPath) : null;
   const receiver = connection
@@ -25,7 +25,7 @@ try {
         });
       });
     console.log(`真实仓库工作台：http://127.0.0.1:${port}/`);
-    console.log('未预置演示数据；请在本机网页配置仓库和基线。平台 Issue / PR 由用户创建。');
+    console.log('正式服务：请在本机网页配置仓库与基线。未配置平台适配器时，PR 在内部平台手工创建。');
   };
   const actions = {
     status: () => receiver.status(),
@@ -34,7 +34,9 @@ try {
     start: () => receiver.start(),
     issue: () => receiver.linkIssue(args[0], args[1], args[2]),
     prepare: () => receiver.prepare(),
-    pr: () => receiver.linkPr(args[0]),
+    pr: () => receiver.linkPr(args[0], { previousUrl: args[1] }),
+    'clear-pr': () => receiver.linkPr(null, { previousUrl: args[0] }),
+    'create-pr': () => receiver.createPr(),
     recover: () => receiver.recover(),
     receipts: async () => receiver.receipts(JSON.parse(await readFile(args[0], 'utf8'))),
     unlock: () => receiver.store.unlock(args[0] === '--confirm-no-writers'),

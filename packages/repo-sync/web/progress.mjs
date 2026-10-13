@@ -1,4 +1,4 @@
-export function progressSteps(delivery, state, checkProfile) {
+export function progressSteps(delivery, state, checkProfile, prMode = 'manual') {
   const status = delivery.status;
   const pushed = ['PR_REQUIRED', 'WAITING_APPROVAL', 'CODE_ACCEPTED_PENDING_METADATA', 'COMPLETE'].includes(status);
   const complete = status === 'COMPLETE';
@@ -22,7 +22,10 @@ export function progressSteps(delivery, state, checkProfile) {
         ['推送并回读候选分支', pushed],
       ],
     ],
-    ['登记内部 PR', [['复制模板并登记 PR 地址', Boolean(delivery.prUrl)]]],
+    [
+      '创建 / 登记内部 PR',
+      [[prMode === 'automatic' ? '查询/创建并回读内部 PR' : '在平台创建并登记 PR 地址', Boolean(delivery.prUrl)]],
+    ],
     ['审核并合入', [['在平台正常审核合入', Boolean(delivery.acceptedInternal)]]],
     [
       '核验与接收记录',

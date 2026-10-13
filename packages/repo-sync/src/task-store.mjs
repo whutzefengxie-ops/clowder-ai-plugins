@@ -4,7 +4,18 @@ import { join } from 'node:path';
 import { fail } from './config.mjs';
 import { writePrivate } from './private-config.mjs';
 
-export const taskActions = new Set(['heads', 'adopt', 'discover', 'prepare', 'recover', 'tags', 'select-tag']);
+export const taskActions = new Set([
+  'heads',
+  'adopt',
+  'discover',
+  'prepare',
+  'recover',
+  'tags',
+  'select-tag',
+  'pr',
+  'clear-pr',
+  'create-pr',
+]);
 const keys = new Set([
   'action',
   'requestId',
@@ -14,6 +25,8 @@ const keys = new Set([
   'deliveryId',
   'expectedBinding',
   'expectedRevision',
+  'url',
+  'previousUrl',
 ]);
 export function taskInput(input) {
   if (!taskActions.has(input?.action)) fail('UNKNOWN_ACTION', '此操作不支持后台执行');
@@ -44,6 +57,9 @@ export function taskPlan(action) {
     heads: probes,
     adopt: [...fetch, ['baseline-check', '核验 U0 / I0 与历史'], ['baseline-save', '登记已有基线']],
     tags: [['source-tags', '读取上游 tag']],
+    pr: [['platform-pr', '核验候选并登记 PR 引用']],
+    'clear-pr': [['platform-pr', '核验未合入并撤销错误引用']],
+    'create-pr': [['platform-pr', '查询/创建并回读内部 PR']],
   };
   return (plans[action] ?? fetch).map(([key, label]) => ({ id: key, key, label, status: 'PENDING' }));
 }
@@ -54,8 +70,8 @@ export async function readTask(config, id) {
     if (!id) id = JSON.parse(await readFile(join(folder, 'latest.json'), 'utf8')).id;
     if (!/^[a-f0-9]{32}$/.test(id)) fail('TASK_UNREADABLE', '任务记录格式无效，请在本机核对');
     const value = JSON.parse(await readFile(join(folder, `${id}.json`), 'utf8'));
-    if (value.id !== id || value.bindingId !== config.bindingId || !Array.isArray(value.steps))
-      fail('TASK_UNREADABLE', '任务记录不属于当前绑定或格式无效');
+    if (value.bindingId !== config.bindingId) return null;
+    if (value.id !== id || !Array.isArray(value.steps)) fail('TASK_UNREADABLE', '任务记录不属于当前绑定或格式无效');
     return value;
   } catch (error) {
     if (error.code === 'ENOENT') return null;

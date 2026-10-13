@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { versionPolicy } from './policy.mjs';
+import { validatePrConfig } from './pull-requests.mjs';
 
 export function fail(code, message, details) {
   const error = new Error(message);
@@ -77,6 +78,7 @@ export function validateConfig(input) {
   }
   normalizeCheckProfile(config);
   validateTimeouts(config.timeouts);
+  validatePrConfig(config);
   return config;
 }
 function validateTimeouts(values) {

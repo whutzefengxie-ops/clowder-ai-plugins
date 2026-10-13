@@ -185,12 +185,10 @@ td {
   border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
-.demo-links {
-  padding: 10px;
-  background: #f3ede4;
-  border-radius: 6px;
-}
+
 pre {
+  max-height: 320px;
+  overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 12px;
@@ -260,4 +258,50 @@ a {
   .task {
     padding: 20px;
   }
+}
+.file-list {
+  margin: 12px 0;
+}
+.file-tools,
+.file-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.file-tools label {
+  flex: 1;
+  min-width: 160px;
+}
+.file-tree {
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid #ded7cf;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 12px 0;
+}
+.file-tree ul {
+  list-style: none;
+  padding-left: 16px;
+  margin: 8px 0;
+}
+.file-tree summary,
+.file-row span {
+  overflow-wrap: anywhere;
+}
+.file-row {
+  padding: 8px 0;
+  border-bottom: 1px solid #e8e0d7;
+}
+.file-row small,
+.file-actions {
+  display: block;
+}
+.file-actions button {
+  margin: 4px 6px 0 0;
+}
+.bounded-text {
+  max-height: 320px;
+  overflow: auto;
 }
