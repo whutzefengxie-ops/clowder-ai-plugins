@@ -11,6 +11,7 @@ import { checkPlan } from './plan.mjs';
 import { prepareDelivery } from './preparation.mjs';
 import { git } from './process.mjs';
 import { createPr, linkPr, prUrl } from './pull-requests.mjs';
+import { recordDelivery } from './recording.mjs';
 import { event, Store } from './store.mjs';
 import { assertProjection } from './trees.mjs';
 import { cancelVersion, selectTag, sourceStillValid, tags, versionTemplate } from './version.mjs';
@@ -35,6 +36,8 @@ export class Receiver {
       if (!state) fail('NOT_ADOPTED', '先核验并登记两侧已有基线');
       if (execution()?.deliveryId && this.active(state)?.id !== execution().deliveryId)
         fail('DELIVERY_CHANGED', '活动交付已变化，已在写锁内停止旧页面操作；请刷新核对');
+      const original = this.active(state);
+      if (original) recordDelivery(original, this.config, 'execution', state.issues);
       try {
         await action(state);
       } catch (error) {
@@ -47,6 +50,8 @@ export class Receiver {
         await phase('ledger-save', '保存交付台账', () => this.store.save(state), false);
         throw error;
       }
+      const recorded = original ?? this.active(state);
+      if (recorded) recordDelivery(recorded, this.config, 'execution', state.issues);
       await phase('ledger-save', '保存交付台账', () => this.store.save(state), false);
       return state;
     });
@@ -114,6 +119,7 @@ export class Receiver {
     if (base !== heads.upstream) fail('SOURCE_UNPROVEN', '交付清单没有完整覆盖冻结上游范围');
     state.queue = structuredClone(plans);
     state.latest = heads.upstream;
+    state.scannedAt = new Date().toISOString();
     event(state, null, `已冻结 ${plans.length} 笔连续上游交付`);
   }
   async start(expectedTarget) {
@@ -141,6 +147,7 @@ export class Receiver {
         candidate: null,
         issueResults: {},
       };
+      recordDelivery(delivery, this.config, 'start');
       delivery.commits = (
         await git(this.git.directory, ['rev-list', '--reverse', `${delivery.base.upstream}..${delivery.target}`])
       ).split('\n');
@@ -158,7 +165,12 @@ export class Receiver {
   async linkIssue(sourceId, internalId, url, options) {
     return this.change(async (state) => {
       const delivery = this.requireActive(state);
-      mapIssue(state, delivery, sourceId, internalId, prUrl(this.config, url, 'Issue'), options);
+      await phase(
+        'issue-mapping',
+        '登记 / 纠正 Issue 来源映射',
+        () => mapIssue(state, delivery, sourceId, internalId, prUrl(this.config, url, 'Issue'), options),
+        false,
+      );
       delete delivery.error;
       event(state, delivery, '内部 Issue 来源映射已登记');
     });
@@ -214,7 +226,12 @@ export class Receiver {
         fail('CODE_NOT_ACCEPTED', '先核验实际 main 并记录接受版本');
       if ((await this.git.fetch()).internal !== delivery.acceptedInternal)
         fail('ACCEPTED_HEAD_CONFLICT', '保存接收记录前 main 已改变，暂停核对');
-      await recordReceipts(state, delivery, observations, this.git);
+      await phase(
+        'receipts-save',
+        '核对 Issue 状态并保存本笔接收记录',
+        () => recordReceipts(state, delivery, observations, this.git),
+        false,
+      );
       delivery.status = 'COMPLETE';
       delete delivery.error;
       state.queue.shift();
@@ -242,13 +259,13 @@ export class Receiver {
     return selectTag(this, name);
   }
   cancelVersion() {
-    return cancelVersion(this);
+    return phase('version-cancel', '撤销未发布交付并保留历史', () => cancelVersion(this));
   }
   conflict(path) {
     return readConflict(this, path);
   }
   resolve(path, choice, content) {
-    return resolveConflict(this, path, choice, content);
+    return phase('conflict-resolution', '保存原交付的冲突处理', () => resolveConflict(this, path, choice, content));
   }
 }
 function recordFailure(delivery, error, preserveError) {

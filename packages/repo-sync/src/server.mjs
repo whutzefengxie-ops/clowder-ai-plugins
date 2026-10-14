@@ -9,6 +9,7 @@ import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
 import { body, requestPath, requireToken, send } from './http.mjs';
 import { publicPlatform } from './pr-settings.mjs';
+import { recordDetail, recordList } from './records.mjs';
 import { configure } from './settings.mjs';
 import { Tasks } from './tasks.mjs';
 
@@ -28,6 +29,18 @@ const assets = new Map([
   ['/diagnostics.mjs', 'diagnostics.mjs'],
   ['/issues.mjs', 'issues.mjs'],
   ['/platform.mjs', 'platform.mjs'],
+  ...[
+    'ui.mjs',
+    'history.mjs',
+    'workflow.mjs',
+    'workbench.mjs',
+    'action-policy.mjs',
+    'conflict-draft.mjs',
+    'stage-facts.mjs',
+    'attempts.mjs',
+    'actionbar.mjs',
+    'journey.css',
+  ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
   const token = randomBytes(32).toString('hex');
@@ -54,12 +67,13 @@ export function createReceiverServer(receiver, options = {}) {
     );
     try {
       const path = requestPath(request, server.address()?.port);
-      if (options.connection && path.startsWith('/api/')) receiver = await options.connection.current();
+      if (path.startsWith('/api/')) receiver = await current();
+      if (await recordRequest(request, response, receiver, tasks, token, path)) return;
       if (path.startsWith('/api/tasks')) {
         requireToken(request, token);
         return await taskRequest(request, response, path, tasks);
       }
-      if (request.method === 'GET') return await get(receiver, options, token, path, response);
+      if (request.method === 'GET') return await get(receiver, options, token, path, response, request.url);
       if (request.method !== 'POST' || path !== '/api/action') return send(response, 404, { code: 'NOT_FOUND' });
       requireToken(request, token);
       if (tasks.busy()) fail('OPERATION_RUNNING', '已有任务执行中，请等待或取消原任务；不能修改绑定或重复操作');
@@ -115,7 +129,7 @@ function sendError(response, error) {
       : 409;
   return send(response, status, safeError(error));
 }
-async function get(receiver, options, token, path, response) {
+async function get(receiver, options, token, path, response, url = '') {
   if (assets.has(path)) {
     const file = assets.get(path);
     const type = file.endsWith('.mjs') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html';
@@ -137,9 +151,19 @@ async function get(receiver, options, token, path, response) {
     commitClosureVerified,
     bindingId,
   } = receiver?.config ?? {};
+  const state = receiver ? await receiver.status() : null;
+  const compact = new URL(url || '/', 'http://localhost').searchParams.get('compact') === '1';
   return send(response, 200, {
     token,
-    state: receiver ? await receiver.status() : null,
+    state:
+      state && compact
+        ? {
+            ...state,
+            deliveries: state.active ? [state.active] : [],
+            events: [],
+            deliveryCount: state.deliveries.length,
+          }
+        : state,
     config: receiver
       ? {
           sourceUrl,
@@ -171,4 +195,24 @@ export function listen(server, port = 5187) {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', () => resolvePromise(server));
   });
+}
+
+async function recordRequest(request, response, receiver, tasks, token, path) {
+  if (path === '/api/records' || /^\/api\/records\/[a-f0-9]{24}$/.test(path)) {
+    requireToken(request, token);
+    if (request.method !== 'GET') {
+      send(response, 404, { code: 'NOT_FOUND' });
+      return true;
+    }
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    send(
+      response,
+      200,
+      path === '/api/records'
+        ? await recordList(receiver, params)
+        : await recordDetail(receiver, path.split('/').at(-1), params, tasks),
+    );
+    return true;
+  }
+  return false;
 }

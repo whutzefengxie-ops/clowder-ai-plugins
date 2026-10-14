@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { readText } from './atomic-file.mjs';
 import { fail } from './config.mjs';
 import { writePrivate } from './private-config.mjs';
+import { validateSnapshot } from './recording.mjs';
 
 export const taskActions = new Set([
   'heads',
@@ -92,6 +93,7 @@ export async function readTask(config, id) {
     }
     if (!/^[a-f0-9]{32}$/.test(id)) fail('TASK_UNREADABLE', '任务记录格式无效，请在本机核对');
     const value = JSON.parse(await readText(join(folder, `${id}.json`)));
+    validateTaskVersion(value);
     if (value.bindingId !== config.bindingId) {
       if (explicit) fail('TASK_BINDING_CHANGED', '原请求属于其他仓库绑定，暂停；不可当成未使用的请求标识覆盖');
       return null;
@@ -135,13 +137,20 @@ export function publicTask(value, owned, canRetryPersistence = false) {
   const { id, action, status, startedAt, updatedAt, finishedAt, steps, result, error, cancellable } = value;
   return {
     id,
+    schema: value.schema,
+    deliveryId: value.deliveryId,
+    configSnapshot: value.configSnapshot,
     action,
     status,
     startedAt,
     updatedAt,
     finishedAt,
-    steps: steps.map(({ id, label, status, startedAt, finishedAt, progress, error }) => ({
+    steps: steps.map(({ id, key, stage, group, parentId, label, status, startedAt, finishedAt, progress, error }) => ({
       id,
+      key,
+      stage,
+      group,
+      parentId,
       label,
       status,
       startedAt,
@@ -156,4 +165,23 @@ export function publicTask(value, owned, canRetryPersistence = false) {
       : {}),
     cancellable: Boolean(owned && cancellable && status === 'RUNNING'),
   };
+}
+
+function validateTaskVersion(value) {
+  if (value.schema !== undefined && value.schema !== 2) fail('TASK_UNREADABLE', '任务记录版本不支持，不能当旧格式重建');
+  if (value.schema === 2) {
+    if (value.deliveryId !== null && !/^[a-f0-9]{24}$/.test(value.deliveryId ?? ''))
+      fail('TASK_UNREADABLE', '任务同步身份无效');
+    try {
+      validateSnapshot(value.configSnapshot);
+    } catch {
+      fail('TASK_UNREADABLE', '任务配置摘要损坏，保留原记录');
+    }
+    if (
+      value.steps?.some(
+        (step) => !Number.isInteger(step.stage) || step.stage < 0 || step.stage > 5 || typeof step.group !== 'string',
+      )
+    )
+      fail('TASK_UNREADABLE', '任务步骤归属无效');
+  }
 }

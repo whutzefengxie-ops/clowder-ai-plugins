@@ -1,190 +1,58 @@
-import { configuration, firstUse, repositoryInput } from './connections.mjs';
+import { nextAction } from './action-policy.mjs';
+import { restoreConflict, saveConflict } from './conflict-draft.mjs';
+import { captureDraft, configuration, repositoryInput, restoreDraft } from './connections.mjs';
 import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
-import { fileTree, hydrateFiles } from './files.mjs';
-import { issueForms } from './issues.mjs';
+import { hydrateFiles } from './files.mjs';
+import { createHistory } from './history.mjs';
+import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
 import { platformSettings } from './platform.mjs';
-import { prPanel } from './pr.mjs';
-import { progressSteps } from './progress.mjs';
-import { receiptFields } from './receipts.mjs';
-import { conflictEditor, conflictOptions, tagSelector, versionPreview } from './version.mjs';
+import { button, esc, sha, stageOf } from './ui.mjs';
+import { conflictEditor } from './version.mjs';
+import { workbench } from './workbench.mjs';
+import { actionBar, attempts } from './workflow.mjs';
 
 const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
 let snapshot;
-let view = 'workbench';
-const operations = createOperations({ snapshot: () => snapshot, refresh, completed: showActionResult, errorPanel });
+let view = new URL(location.href).searchParams.get('view') === 'configuration' ? 'configuration' : 'workbench';
+let mobileDetail = !!new URL(location.href).searchParams.get('record');
 let availableTags = [];
-const esc = (value) =>
-  String(value ?? '').replace(
-    /[&<>"']/g,
-    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
-  );
-const sha = (value) => `<code title="${esc(value)}">${esc(value)}</code>`;
-const button = (action, label) => `<button type="button" class="primary" data-action="${action}">${label}</button>`;
-async function refresh() {
-  const response = await fetch('/api/status', { signal: AbortSignal.timeout(8000) });
-  const result = await response.json();
-  if (!response.ok) throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
-  snapshot = result;
-  if (!snapshot.state && snapshot.operation) view = 'configuration';
-  render();
-  operations.observe(snapshot.operation);
+const records = createHistory(() => snapshot, render);
+const operations = createOperations({
+  snapshot: () => snapshot,
+  refresh,
+  completed: showActionResult,
+  errorPanel,
+  onTask,
+});
+function draftKey() {
+  return `repo-sync-draft:${snapshot?.config?.bindingId ?? 'setup'}:${view}:${records.get().selected}`;
 }
-const action = (input) => operations.action(input);
-const states = {
-  ISSUES_REQUIRED: [
-    '在内部平台创建或复用 Issue',
-    '登记来源与内部对象的对应。已有映射可直接复用；候选分支推送前先完成映射。',
-  ],
-  PUSH_RESULT_UNKNOWN: ['候选分支推送结果待确认', '先核对同名 ref 的实际 SHA。复用相同候选，冲突时暂停。'],
-  PR_REQUIRED: [
-    '候选已推送，在内部平台创建 PR',
-    '使用下方标题和正文，选择展示的候选分支与目标分支。创建后登记具体 PR 链接。',
-  ],
-  WAITING_APPROVAL: [
-    '在内部 PR 完成审核与合入',
-    '打开具体 PR，在平台正常审核合入；回来核验。程序只读取 Git 结果，不替代平台审批。',
-  ],
-  CODE_ACCEPTED_PENDING_METADATA: [
-    '代码已接受，更新 Issue 接收状态',
-    '按平台实际状态保存本笔记录。有后续交付时保持打开，本笔仍可完成；接收条件满足后在平台关闭并确认。',
-  ],
-};
-function versionPrimary(active, state) {
-  if (snapshot.config.mode !== 'version') return null;
-  if (!active) return state.queue.length ? button('start', `开始更新至 ${esc(state.queue[0].source.tag)} →`) : '';
-  if (active.status !== 'CODE_PREPARE_REQUIRED') return null;
-  if (active.error?.code === 'CONTENT_CONFLICT')
-    return '<a class="button primary" href="#conflict-options">解决文件冲突 →</a>';
-  return button('prepare', '合并文件、检查并推送候选 →');
+function saveDraft() {
+  try {
+    sessionStorage.setItem(draftKey(), JSON.stringify(captureDraft()));
+  } catch {}
 }
-function primary(active, state) {
-  const versionAction = versionPrimary(active, state);
-  if (versionAction !== null) return versionAction;
-  if (!active)
-    return state.queue.length
-      ? button('start', `同步上游 PR #${state.queue[0].source.number} →`)
-      : button('discover', '检查上游更新');
-  if (needsWebRepository(active)) return '<a class="button primary" href="#pr-form">配置网页地址，继续 PR →</a>';
-  if (active.error || active.status === 'PUSH_RESULT_UNKNOWN') return button('recover', '核对原交付并恢复');
-  if (active.status === 'ISSUES_REQUIRED' && active.issues.every((issue) => state.issues[issue.sourceId]))
-    return button('prepare', '检查并推送候选分支 →');
-  if (active.status === 'WAITING_APPROVAL')
-    return `<a class="button primary" href="${esc(active.prUrl)}" target="_blank" rel="noopener">打开内部 PR ↗</a><button type="button" data-action="recover">已在平台合入，核验 Git 结果</button>`;
-  const destinations = {
-    ISSUES_REQUIRED: ['issue-mappings', '登记内部 Issue 对应 →'],
-    PR_REQUIRED: [
-      'pr-form',
-      snapshot.platform?.prMode === 'automatic' ? '查询 / 创建内部 PR →' : '在平台创建并登记 PR →',
-    ],
-    CODE_ACCEPTED_PENDING_METADATA: ['receipt-form', '确认 Issue 接收记录 →'],
-  };
-  const [id, label] = destinations[active.status];
-  return `<a class="button primary" href="#${id}">${label}</a>`;
+function savedDraft() {
+  try {
+    return JSON.parse(sessionStorage.getItem(draftKey())) ?? [];
+  } catch {
+    return [];
+  }
 }
-function workflow(active, state = snapshot.state) {
-  const marks = { done: '✓', current: '●', pending: '○', failed: '×' };
-  return `<p>最近读取的内部 HEAD：${sha(state.observedInternal ?? state.accepted.internal)}${state.observedInternal && state.observedInternal !== state.accepted.internal ? ' · 尚未登记为接受版本' : ''}</p><ol class="flow">${progressSteps(
-    active,
-    state,
-    snapshot.config.checkProfile,
-    snapshot.platform?.prMode,
-  )
-    .map(
-      (group) =>
-        `<li><b>${group.label}</b>${group.children.map((step) => `<small data-step-state="${step.status}" class="${step.status === 'failed' ? 'bad' : step.status === 'done' ? 'good' : ''}">${marks[step.status]} ${step.name}</small>`).join('')}</li>`,
-    )
-    .join('')}</ol>`;
+function expandedKey() {
+  return `${draftKey()}:expanded`;
 }
-function currentForm(active, state) {
-  const anchors = {
-    ISSUES_REQUIRED: 'issue-mappings',
-    PR_REQUIRED: 'pr-form',
-    CODE_ACCEPTED_PENDING_METADATA: 'receipt-form',
-  };
-  return `<div id="${anchors[active.status] ?? 'step-content'}">${currentFormContent(active, state)}</div>`;
-}
-function currentFormContent(active, state) {
-  if (active.status === 'CODE_PREPARE_REQUIRED')
-    return `${versionPreview(active, esc, sha)}${conflictOptions(active, esc)}<section class="card"><button type="button" data-action="cancel-version">撤销未发布交付，重新选择版本</button><p>历史记录保留。已发布候选必须先恢复，不能撤销。</p></section>`;
-  if (active.status === 'ISSUES_REQUIRED') return issueForms(active, state, esc);
-  if (['PR_REQUIRED', 'WAITING_APPROVAL'].includes(active.status)) return prPanel(snapshot, esc);
-  if (active.status === 'CODE_ACCEPTED_PENDING_METADATA')
-    return `<section class="card"><form data-form="receipts"><h3>确认平台实际状态并保存接收记录</h3>${receiptFields(active, state, esc, sha)}<button type="submit" class="primary">保存本笔接收记录，完成同步</button><p>此操作记录人工核对结果，不向内部平台发送关单请求。</p></form></section>`;
-  return '';
-}
-function idlePresentation(state) {
-  if (!state.queue.length) return ['本轮交付已完成', '可检查新更新，也可展开每笔记录回看过程。'];
-  if (snapshot.config.mode === 'version')
-    return [`已选择 ${esc(state.queue[0].source.tag)}`, '目标与内部基线已核对，点击开始生成本次版本交付。'];
-  return ['有上游更新可以接收', '按 main 实际接受顺序逐笔处理，内部 main 在平台合入前保持原版本。'];
-}
-function workbench() {
-  const state = snapshot.state;
-  if (!snapshot.config) return firstUse();
-  if (!state)
-    return `<section class="card task"><h2>先确认两侧已有基线</h2><p>连接已从私有配置载入，登记外部已同步版本与内部当前版本即可开始。</p><button type="button" data-view="configuration" class="primary">配置同步基线 →</button></section>`;
-  const active = state.active;
-  if (snapshot.config.mode === 'version' && !active && !state.queue.length)
-    return `${tagSelector(availableTags, esc, sha)}${versionHistory(state)}`;
-  const [title, description] = active ? taskPresentation(active, state) : idlePresentation(state);
-  if (!active && !state.queue.length && state.accepted.upstream !== state.latest)
-    return `<section class="card task"><h2>读取上游交付清单</h2><p>Git 已读取到更新版本。先关联 PR、Issue 与实际提交并冻结范围，再发起同步。</p>${button('discover', '检查上游更新')}</section>`;
-  return `<section class="card task"><div class="task-top"><div><span class="badge">${active ? esc(active.status) : '准备就绪'}</span><h2>${title}</h2><p>${description}</p></div><div class="task-actions">${primary(active, state)}</div></div>${active ? `<p>候选分支：${esc(active.branch)} → ${esc(snapshot.config.targetBranch)}</p>${workflow(active)}` : ''}</section><section class="card versions"><div><small>已接受上游</small>${sha(state.accepted.upstream)}</div><div><small>对应内部 commit</small>${sha(state.accepted.internal)}</div><div><small>冻结扫描目标</small>${sha(state.latest)}<small>${state.queue.length} 笔待完成交付</small></div></section>${
-    active?.error
-      ? `<div class="card bad">× ${esc(active.error.code)}<p>${esc(active.error.message)}</p>${
-          active.error.details?.paths
-            ? `${fileTree(
-                active.error.details.paths.map((path) => ({ path, kind: '异常', category: 'merge' })),
-                '异常文件清单',
-              )}`
-            : ''
-        }</div>`
-      : ''
-  }${active ? currentForm(active, state) : ''}<section class="card"><h3>本轮同步与审计</h3>${
-    state.deliveries
-      .map(
-        (delivery) =>
-          `<details><summary>${esc(delivery.source.title)} · ${esc(delivery.status)}</summary><p>${esc(delivery.id)} · ${esc(delivery.branch)}</p>${delivery.prUrl ? `<p><a href="${esc(delivery.prUrl)}" target="_blank" rel="noopener">打开对应内部 PR ↗</a></p>` : ''}<p>目标 ${sha(delivery.target)} → 内部 ${sha(delivery.acceptedInternal ?? '待接受')}</p><details><summary>${delivery.mode === 'version' ? '上游版本提交范围（不重放提交）' : '本笔原始 commit 对应'}</summary><pre>${esc(delivery.commits.map((commit) => (delivery.mode === 'version' ? commit : `${commit} → ${commit}`)).join('\n'))}</pre><small>${delivery.mode === 'version' ? '来源 SHA 用于版本追溯；内部候选是一次内容更新提交。' : '原始对象 SHA 保留；内部接收节点单独记录。'}</small></details><pre>${esc(
-            state.events
-              .filter((event) => event.deliveryId === delivery.id)
-              .map((event) => `${event.time} ${event.message}`)
-              .join('\n'),
-          )}</pre>${Object.values(delivery.issueResults)
-            .map(
-              (result) =>
-                `<small>${result.state === 'open' ? 'Issue 保持打开' : 'Issue 已关闭'} · 接收记录已保存${result.pending.length ? '，等待后续交付' : ''}</small>`,
-            )
-            .join('')}</details>`,
-      )
-      .join('') || '<p>开始同步后，这里按每笔交付显示执行记录。</p>'
-  }</section>`;
-}
-function taskPresentation(active, state) {
-  if (needsWebRepository(active))
-    return [
-      '先配置内部仓库网页地址',
-      '点击配置入口，填写浏览器中的 HTTPS 仓库首页。SSH 的域名和端口可以不同，原候选与基线保留。',
-    ];
-  if (active.status === 'PR_REQUIRED' && snapshot.platform?.prMode === 'automatic' && !active.error)
-    return ['候选已发布，查询 / 创建内部 PR', '使用私有平台适配器，先查询再创建并回读；随后在真实平台审核。'];
-  if (active.status === 'CODE_PREPARE_REQUIRED' && !active.error)
-    return [
-      `准备更新至 ${esc(active.source.tag)}`,
-      '核对下方文件范围。内部专有文件保留，共同文件三方合并；只生成一个同步 PR。',
-    ];
-  if (active.error) return ['执行暂停，先核对原交付', active.error.message];
-  if (active.status === 'ISSUES_REQUIRED' && active.issues.every((issue) => state.issues[issue.sourceId]))
-    return ['内部 Issue 已就绪，准备同步代码', '点击检查并推送候选分支。原始提交保留，内部 main 仍等待平台审批。'];
-  return states[active.status] ?? ['核对当前结果', '恢复原交付后继续。'];
-}
-function needsWebRepository(active) {
-  return (
-    snapshot.connection &&
-    !snapshot.platform?.repositoryUrl &&
-    ['PR_REQUIRED', 'WAITING_APPROVAL'].includes(active.status)
-  );
+function restoreExpansion() {
+  try {
+    const expanded = JSON.parse(sessionStorage.getItem(expandedKey()));
+    if (expanded)
+      for (const element of content.querySelectorAll('[data-stage]'))
+        element.open = expanded.includes(element.dataset.stage);
+  } catch {}
+  const currentStage = content.querySelector(`[data-stage="${nextAction(snapshot, snapshot.state?.active).stage}"]`);
+  if (records.get().selected === 'current') currentStage?.setAttribute('open', '');
 }
 function render() {
   document.getElementById('mode').textContent = snapshot.config
@@ -192,41 +60,73 @@ function render() {
     : '正式服务 · 等待仓库配置';
   content.innerHTML =
     view === 'configuration'
-      ? configuration(snapshot, esc, sha, button) + platformSettings(snapshot, esc)
-      : workbench();
-  const badge = content.querySelector('.task .badge');
-  if (badge && snapshot.state?.active)
-    badge.textContent = snapshot.state.active.error
-      ? '执行异常'
-      : snapshot.state.active.status === 'WAITING_APPROVAL'
-        ? '等待内部审核'
-        : '完成当前步骤';
-  renderFreshness();
-  renderDiagnostics();
+      ? `${configuration(snapshot, esc, sha, button)}${platformSettings(snapshot, esc)}<div id="operation"></div><div id="error-slot"></div>`
+      : workbench(snapshot, records.get(), availableTags, mobileDetail);
+  content.querySelector('#error-slot')?.append(errorPanel);
+  restoreConflict(snapshot, content);
+  restoreDraft(savedDraft());
+  restoreExpansion();
+  if (view === 'configuration') {
+    const baseline = content.querySelector('form[data-form="adopt"]')?.closest('.card');
+    const panel = diagnostics(snapshot.operation?.error, snapshot, esc);
+    if (panel) (baseline ?? content).insertAdjacentHTML(baseline ? 'beforeend' : 'afterbegin', panel);
+  }
   hydrateFiles(content);
+  onTask(snapshot.operation);
   operations.lock();
 }
-function renderDiagnostics() {
-  const panel = diagnostics(snapshot.state?.active?.error ?? snapshot.operation?.error, snapshot, esc);
-  const baseline = content.querySelector('form[data-form="adopt"]')?.closest('.card');
-  if (panel) (baseline ?? content).insertAdjacentHTML(baseline ? 'beforeend' : 'afterbegin', panel);
-}
-function renderFreshness() {
-  if (view === 'workbench' && snapshot.state) {
-    const freshness = document.createElement('p');
-    freshness.className = 'badge';
-    freshness.textContent =
-      snapshot.state.accepted.upstream === snapshot.state.latest
-        ? snapshot.state.active
-          ? '代码已接收至本轮最新 · 本笔记录待完成'
-          : '代码与本轮扫描目标一致'
-        : '代码尚未接收至本轮扫描的最新版本';
-    content.prepend(freshness);
+function onTask(task) {
+  if (!snapshot) return;
+  snapshot.operation = task;
+  const record = records.get().detail;
+  const historical = records.get().selected !== 'current' && records.get().selected !== snapshot.state?.active?.id;
+  showActivity(task);
+  if (historical) return;
+  const nodes = content.querySelectorAll('[data-attempts-stage]');
+  if (nodes.length) {
+    updateAttempts(nodes, record, task, historical);
+    const footer = content.querySelector('.next-action');
+    const policy = nextAction(snapshot, snapshot.state.active);
+    if (footer && footer.dataset.policy !== JSON.stringify(policy)) {
+      footer.outerHTML = actionBar(policy, false);
+      content.querySelector('.next-action').dataset.policy = JSON.stringify(policy);
+    }
+    if (task?.status === 'RUNNING')
+      content
+        .querySelector(`[data-stage="${policy.stage || stageOf(snapshot.state.active)}"]`)
+        ?.setAttribute('open', '');
+  } else {
+    const panel = content.querySelector('#operation');
+    if (panel) panel.innerHTML = renderTask(task);
   }
 }
+function updateAttempts(nodes, record, task, historical) {
+  const opened = new Set(
+    [...content.querySelectorAll('[data-attempt][open]')].map(
+      (item) => `${item.closest('[data-stage]').dataset.stage}:${item.dataset.attempt}`,
+    ),
+  );
+  for (const node of nodes) node.innerHTML = attempts(Number(node.dataset.attemptsStage), record, task, historical);
+  for (const node of content.querySelectorAll('[data-attempt]'))
+    if (opened.has(`${node.closest('[data-stage]').dataset.stage}:${node.dataset.attempt}`)) node.open = true;
+}
+async function refresh() {
+  saveDraft();
+  const response = await fetch('/api/status?compact=1', { signal: AbortSignal.timeout(8000) });
+  const result = await response.json();
+  if (!response.ok) throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
+  if (!snapshot && result.state?.active) mobileDetail = true;
+  snapshot = result;
+  if (!snapshot.state && snapshot.operation) view = 'configuration';
+  await records.load(true);
+  render();
+  operations.observe(snapshot.operation);
+}
+const action = (input) => operations.action(input);
 document.addEventListener('click', async (event) => {
-  const element = event.target.closest('button');
+  const element = event.target.closest('button, [data-reveal]');
   if (!element) return;
+  await navigate(element);
   if (element.dataset.rulePath) stageRule(element);
   if (element.hasAttribute('data-baseline-read')) {
     const result = await action({
@@ -239,13 +139,23 @@ document.addEventListener('click', async (event) => {
   }
   if (element.dataset.conflictPath) {
     const result = await action({ action: 'conflict', path: element.dataset.conflictPath });
-    if (result) document.getElementById('conflict-editor').innerHTML = conflictEditor(result.result, esc);
+    if (result) {
+      saveConflict(snapshot, result.result);
+      document.getElementById('conflict-editor').innerHTML = conflictEditor(result.result, esc);
+      saveDraft();
+    }
   }
   if (element.dataset.view) {
+    saveDraft();
     view = element.dataset.view;
+    const url = new URL(location.href);
+    if (view === 'configuration') url.searchParams.set('view', view);
+    else url.searchParams.delete('view');
+    history.replaceState(null, '', url);
     render();
   }
   if (element.dataset.action) {
+    mobileDetail = true;
     const result = await action({
       action: element.dataset.action,
       deliveryId: snapshot.state?.active?.id,
@@ -254,6 +164,32 @@ document.addEventListener('click', async (event) => {
     showActionResult(element.dataset.action, result);
   }
 });
+async function navigate(element) {
+  if (element.dataset.reveal) {
+    const target = document.getElementById(element.dataset.reveal);
+    for (let parent = target; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') parent.open = true;
+    target?.querySelector('input, button, select')?.focus({ preventScroll: true });
+  }
+  if (element.hasAttribute('data-expand-all'))
+    for (const stage of content.querySelectorAll('[data-stage]')) stage.open = true;
+  if (element.dataset.record) {
+    saveDraft();
+    mobileDetail = true;
+    await records.select(element.dataset.record);
+  }
+  if (element.hasAttribute('data-record-back')) {
+    mobileDetail = false;
+    saveDraft();
+    render();
+  }
+  if (element.hasAttribute('data-record-page')) await records.move(Number(element.dataset.recordPage));
+  if (element.hasAttribute('data-reload-record')) {
+    await records.load(true);
+    render();
+  }
+  if (element.hasAttribute('data-more-tasks')) await records.moreTasks();
+}
 function showActionResult(kind, result) {
   if (!result) return;
   if (kind === 'tags') {
@@ -268,12 +204,14 @@ function showActionResult(kind, result) {
     const heads = document.getElementById('observed-heads');
     if (heads)
       heads.innerHTML = `<p>读取成功：外部最新 ${sha(result.result.upstream)}<br>内部当前 ${sha(result.result.internal)}。请核对并填写上次已同步的 U0。</p>`;
+    saveDraft();
   }
 }
 document.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.target;
   const fields = Object.fromEntries(new FormData(form));
+  if (form.hasAttribute('data-record-filter')) return records.filter(fields);
   let input =
     form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
   if (input.action === 'configure')
@@ -300,31 +238,15 @@ document.addEventListener('submit', async (event) => {
   if (['configure', 'configure-repositories', 'configure-pr'].includes(input.action) && result) {
     const confirmation = document.createElement('p');
     confirmation.setAttribute('role', 'status');
-    const messages = {
+    confirmation.textContent = {
       configure: '同步方式与文件规则已保存，请登记已有基线。',
       'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
       'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
-    };
-    confirmation.textContent = messages[input.action];
+    }[input.action];
     content.prepend(confirmation);
   }
 });
-
-function versionHistory(state) {
-  return `<section class="card"><h3>当前已接收版本</h3><p>${esc(state.accepted.tag ?? '已登记初始基线')} · 外部 ${sha(state.accepted.upstream)} → 内部 ${sha(state.accepted.internal)}</p><h3>每次版本更新与审计</h3>${
-    state.deliveries
-      .map(
-        (delivery) =>
-          `<details><summary>${esc(delivery.source.tag)} · ${esc(delivery.status)}</summary><p>外部 ${sha(delivery.target)} → 内部 ${sha(delivery.acceptedInternal ?? '待接受')}</p>${delivery.prUrl ? `<a href="${esc(delivery.prUrl)}" target="_blank" rel="noopener">打开对应内部 PR ↗</a>` : ''}<pre>${esc(
-            state.events
-              .filter((event) => event.deliveryId === delivery.id)
-              .map((event) => `${event.time} ${event.message}`)
-              .join('\n'),
-          )}</pre></details>`,
-      )
-      .join('') || '<p>尚无版本更新记录。</p>'
-  }</section>`;
-}
+document.addEventListener('input', saveDraft);
 document.addEventListener('change', (event) => {
   if (event.target.matches('[name="mode"]')) {
     const form = event.target.closest('form');
@@ -333,9 +255,31 @@ document.addEventListener('change', (event) => {
     if (policy) policy.hidden = event.target.value !== 'version';
     if (closure) closure.hidden = event.target.value === 'version';
   }
+  saveDraft();
 });
-
+document.addEventListener(
+  'toggle',
+  (event) => {
+    if (!event.target.matches('[data-stage]')) return;
+    try {
+      sessionStorage.setItem(
+        expandedKey(),
+        JSON.stringify([...content.querySelectorAll('[data-stage][open]')].map((item) => item.dataset.stage)),
+      );
+    } catch {}
+  },
+  true,
+);
 refresh().catch((error) => {
   errorPanel.textContent = error.message;
   errorPanel.hidden = false;
 });
+
+function showActivity(task) {
+  const activity = document.getElementById('current-activity');
+  if (activity)
+    activity.textContent =
+      task && ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status)
+        ? `当前同步：${task.status} · 可点击“当前同步”返回查看`
+        : '';
+}

@@ -66,7 +66,7 @@ try {
   assert.equal(await page.locator('#operation [data-operation-state="RUNNING"]').count(), 0);
   assert.equal((await receiver.status()).active.status, 'WAITING_APPROVAL');
   assert.equal(JSON.parse(await fs.readFile(f.resultFile)).count, 1);
-  assert.equal(await page.locator('[data-action="recover"]').isDisabled(), true);
+  assert.equal(await page.locator('[data-action="recover"]').count(), 0, 'pending record exposes only record repair');
   await page.reload();
   await page.getByRole('heading', { name: '只补存执行记录' }).waitFor();
   for (const width of [1440, 390]) {

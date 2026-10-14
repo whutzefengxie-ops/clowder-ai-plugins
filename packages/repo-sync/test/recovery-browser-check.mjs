@@ -54,7 +54,7 @@ fs.rename = async (from, to) => {
 };
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
-  await page.getByRole('heading', { name: '先配置内部仓库网页地址', level: 2 }).waitFor();
+  await page.getByRole('heading', { name: '先配置内部仓库网页地址', level: 3 }).waitFor();
   await page.getByRole('link', { name: '配置网页地址，继续 PR →' }).waitFor();
   assert.equal(await page.locator('[data-form="pr"]').count(), 0);
   const settings = page.locator('[data-form="configure-pr"]');
@@ -86,7 +86,8 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(evidence, 'ledger-save-failed-mobile.png'), fullPage: true });
   denied = false;
-  await page.getByText('链接填错了？纠正或撤销引用').click();
+  const correction = page.getByText('链接填错了？纠正或撤销引用');
+  if (!(await correction.evaluate((element) => element.closest('details').open))) await correction.click();
   await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();
   await page.getByRole('button', { name: '撤销错误引用，返回 PR 创建步骤' }).click();
   await page.getByRole('button', { name: '登记 PR，进入审核' }).waitFor({ timeout: 20000 });
@@ -104,6 +105,10 @@ try {
   console.log(
     'PASS: SSH:2222 to independent HTTPS origin; inline settings preserve baseline/candidate; durable write error and failed phase survive refresh; safe withdrawal retry; real Git merge; mobile.',
   );
+} catch (error) {
+  console.log('Browser errors:', errors, '\nVisible page:', await page.locator('body').innerText());
+  await page.screenshot({ path: join(evidence, 'failure.png'), fullPage: true });
+  throw error;
 } finally {
   fs.rename = rename;
   await page.close();

@@ -47,7 +47,7 @@ async function publishCandidate(receiver, state, delivery) {
     : [];
   delivery.status = 'PUSH_RESULT_UNKNOWN';
   event(state, delivery, '候选推送意图已保存；结果不明时先读取同名 ref');
-  await receiver.store.save(state);
+  await phase('publish-intent', '保存候选与 PR 发布意图', () => receiver.store.save(state), false);
   await phase(
     'candidate-publish',
     gitCreation ? '推送候选并触发内部 PR 创建' : '推送并回读候选分支',

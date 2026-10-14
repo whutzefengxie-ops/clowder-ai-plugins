@@ -4,6 +4,7 @@ import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
 import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
+import { recordDelivery } from './recording.mjs';
 import { configuredReceiver } from './settings.mjs';
 
 const allowed = new Set([
@@ -84,7 +85,17 @@ export async function createConnection(file) {
     checkFrozenPr(active, receiver.config, next);
     await writePrivate(path, next);
     loaded = false;
-    return current();
+    const configured = await current();
+    if (active)
+      await configured.store.locked(async () => {
+        const state = await configured.read();
+        const pending = configured.active(state);
+        if (pending) {
+          recordDelivery(pending, configured.config, 'configuration', state.issues);
+          await configured.store.save(state);
+        }
+      });
+    return configured;
   }
   return {
     current,

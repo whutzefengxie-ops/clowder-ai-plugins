@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fail } from './config.mjs';
+import { phase } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
 import { matches } from './policy.mjs';
 import { git } from './process.mjs';
@@ -32,8 +33,12 @@ export class VersionGitReceiver extends GitReceiver {
     const index = (args) =>
       import('./process.mjs').then(({ command }) => command('git', ['-C', this.directory, ...args], { env }));
     await index(['read-tree', target]);
-    await preserveFiles(index, source, local, incoming, this.config.internalPaths);
-    await mergeFiles(index, this.directory, folder, source, local, incoming, this.config.mergePaths, resolutions);
+    await phase('internal-preserve', '保留内部专有文件', () =>
+      preserveFiles(index, source, local, incoming, this.config.internalPaths),
+    );
+    await phase('file-merge', '三方合并共同文件', () =>
+      mergeFiles(index, this.directory, folder, source, local, incoming, this.config.mergePaths, resolutions),
+    );
     const tree = await index(['write-tree']);
     const head = await this.mergeNode(tree, [accepted.internal], `repo-sync version ${id}`);
     await git(this.directory, ['update-ref', `refs/sync/deliveries/${id}`, head]);

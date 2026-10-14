@@ -1,4 +1,5 @@
 import { fail } from './config.mjs';
+import { validateRecording } from './recording.mjs';
 
 const sha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const pair = (value) => value && sha(value.upstream) && sha(value.internal);
@@ -46,6 +47,7 @@ function assertDelivery(delivery, identities, statuses) {
     (delivery.candidate !== null && !sha(delivery.candidate))
   )
     fail('LEDGER_INVALID', '交付身份、状态或冻结基线无效，暂停；不可跳过原交付或重建台账');
+  validateRecording(delivery);
   if (
     delivery.status === 'WAITING_APPROVAL' &&
     (!sha(delivery.candidate) ||

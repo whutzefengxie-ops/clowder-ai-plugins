@@ -49,7 +49,11 @@ try {
     const before = await receiver.status();
     assert.equal((await receiver.git.fetch()).internal, before.accepted.internal);
     assert.match(before.templates.body, /内部 #318/);
-    assert.equal(await page.locator('[data-step-state="done"]').count(), 5);
+    assert.equal(
+      await page.locator('[data-stage-state="done"]').count(),
+      2,
+      'scope and preparation finished; publication waits for PR reference',
+    );
     await page.getByLabel('内部 PR 具体链接').fill(`https://codehub.example/core/pull/${index + 1}`);
     await page.locator('[data-pr-confirm]').check();
     await page.getByRole('button', { name: '登记 PR，进入审核' }).click();

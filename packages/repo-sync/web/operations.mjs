@@ -21,8 +21,7 @@ const longActions = new Set([
 const active = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
 const blocked = (task) => active.has(task?.status) || task?.persistence?.status === 'FAILED';
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
-export function createOperations({ snapshot, refresh, completed, errorPanel }) {
-  const panel = document.getElementById('operation');
+export function createOperations({ snapshot, refresh, completed, errorPanel, onTask }) {
   let busy = false;
   let watching;
   let current;
@@ -32,11 +31,12 @@ export function createOperations({ snapshot, refresh, completed, errorPanel }) {
     for (const element of document.querySelectorAll(
       'button[data-action], [data-rule-path], [data-baseline-read], [data-conflict-path], form button, input, textarea, select',
     ))
-      element.disabled = busy;
+      if (!element.closest('.record-list')) element.disabled = busy;
   }
   function show(task) {
     current = task;
-    panel.innerHTML = renderTask(task);
+    if (onTask) onTask(task);
+    else document.getElementById('operation').innerHTML = renderTask(task);
   }
   async function request(url, input) {
     const response = await fetch(url, {

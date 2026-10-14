@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { fail } from './config.mjs';
 import { runExecution, safeError } from './execution.mjs';
+import { configSnapshot, phaseLocation } from './recording.mjs';
 import { Store } from './store.mjs';
 import { publicTask, readTask, saveTask, taskInput, taskPlan } from './task-store.mjs';
 
@@ -38,7 +39,17 @@ export class Tasks {
         ...value,
         status: 'RUNNING',
         cancellable: false,
-        steps: [...value.steps, { id: 'execution-record', label: '保存执行记录', status: 'RUNNING' }],
+        steps: [
+          ...value.steps,
+          {
+            id: 'execution-record',
+            key: 'execution-record',
+            stage: 5,
+            group: 'result',
+            label: '保存执行记录',
+            status: 'RUNNING',
+          },
+        ],
       };
     return publicTask(value, owned, !this.executing && !this.repairing);
   }
@@ -83,22 +94,31 @@ export class Tasks {
     const allowCancel = ['heads', 'adopt', 'tags', 'prepare'].includes(input.action);
     this.context = {
       signal: this.controller.signal,
+      taskId: input.requestId,
+      action: input.action,
       deliveryId: input.deliveryId,
+      associate: (id) => {
+        this.value.deliveryId = id;
+        this.persist();
+      },
       allowCancel,
       cancellable: allowCancel,
       report: (event) => this.report(event),
     };
     this.value = {
+      schema: 2,
       id: input.requestId,
       inputHash: hash,
       ownerPid: process.pid,
       bindingId: receiver.config.bindingId,
+      deliveryId: input.deliveryId ?? null,
+      configSnapshot: configSnapshot(receiver.config),
       action: input.action,
       status: 'RUNNING',
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       cancellable: allowCancel,
-      steps: taskPlan(input.action),
+      steps: taskPlan(input.action).map((step) => ({ ...step, ...phaseLocation(input.action, step.key) })),
     };
     try {
       await saveTask(this.config, this.value, true);
@@ -123,15 +143,7 @@ export class Tasks {
   report(event) {
     if (!['RUNNING', 'CANCELLING'].includes(this.value?.status)) return;
     if (event.kind === 'start') {
-      let step = this.value.steps.find((step) => step.key === event.id && step.status === 'PENDING');
-      if (!step) {
-        step = { id: `${event.id}-${this.value.steps.length}`, key: event.id, label: event.label };
-        this.value.steps.push(step);
-      }
-      step.status = 'RUNNING';
-      step.startedAt = new Date().toISOString();
-      this.step = step;
-      this.value.cancellable = event.cancellable;
+      this.startPhase(event);
     } else if (event.kind === 'progress' && this.step) {
       const { phase, percent, completed, total } = event;
       this.step.progress = { phase, percent, completed, total };
@@ -146,6 +158,20 @@ export class Tasks {
     }
     this.value.updatedAt = new Date().toISOString();
     this.persist();
+  }
+  startPhase(event) {
+    const parent = this.step;
+    let step = this.value.steps.find((step) => step.key === event.id && step.status === 'PENDING');
+    if (!step) {
+      step = { id: `${event.id}-${this.value.steps.length}`, key: event.id, label: event.label };
+      this.value.steps.push(step);
+    }
+    step.status = 'RUNNING';
+    Object.assign(step, phaseLocation(this.value.action, event.id, parent));
+    if (parent) step.parentId = parent.id;
+    step.startedAt = new Date().toISOString();
+    this.step = step;
+    this.value.cancellable = event.cancellable;
   }
   progressDue() {
     if (Date.now() - (this.lastProgressSave ?? 0) < 500) return false;
@@ -174,7 +200,13 @@ export class Tasks {
       this.value.error = safeError(failure);
       let step = this.step ?? this.value.steps.findLast((step) => step.status === 'FAILED');
       if (!step) {
-        step = { id: 'execution-failed', label: '启动 / 执行任务', status: 'FAILED' };
+        step = {
+          id: 'execution-failed',
+          key: 'execution-failed',
+          ...phaseLocation(this.value.action, 'execution-failed'),
+          label: '启动 / 执行任务',
+          status: 'FAILED',
+        };
         this.value.steps.push(step);
       }
       step.status = 'FAILED';

@@ -45,6 +45,12 @@ export function repositoryInput(fields) {
 export function captureDraft() {
   return [...document.querySelectorAll('form[data-form]')].map((form) => ({
     kind: form.dataset.form,
+    open: form.closest('details')?.open ?? false,
+    openSummary: form.closest('details')?.querySelector(':scope > summary')?.textContent ?? '',
+    reference: form.elements.namedItem('previousUrl')?.value ?? '',
+    source: form.dataset.source ?? '',
+    path: form.elements.namedItem('path')?.value ?? '',
+    deliveryId: form.elements.namedItem('deliveryId')?.value ?? '',
     values: [...form.elements]
       .filter((element) => element.name && !['expectedRevision', 'previousUrl', 'deliveryId'].includes(element.name))
       .map((element) => ({ name: element.name, value: element.value, checked: element.checked })),
@@ -52,7 +58,14 @@ export function captureDraft() {
 }
 export function restoreDraft(drafts) {
   for (const draft of drafts) {
-    const form = document.querySelector(`form[data-form="${draft.kind}"]`);
+    const form = [...document.querySelectorAll('form[data-form]')].find(
+      (item) =>
+        item.dataset.form === draft.kind &&
+        (item.dataset.source ?? '') === (draft.source ?? '') &&
+        (item.elements.namedItem('path')?.value ?? '') === (draft.path ?? '') &&
+        (item.elements.namedItem('previousUrl')?.value ?? '') === (draft.reference ?? '') &&
+        (item.elements.namedItem('deliveryId')?.value ?? '') === (draft.deliveryId ?? ''),
+    );
     if (!form) continue;
     restoreForm(form, draft);
   }
@@ -70,5 +83,6 @@ function restoreForm(form, draft) {
   const closure = form.querySelector('[data-closure]');
   if (policy) policy.hidden = !version;
   if (closure) closure.hidden = version;
-  form.closest('details')?.setAttribute('open', '');
+  const parent = form.closest('details');
+  if (draft.open && parent?.querySelector(':scope > summary')?.textContent === draft.openSummary) parent.open = true;
 }

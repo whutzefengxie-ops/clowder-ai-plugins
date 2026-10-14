@@ -45,6 +45,7 @@ export async function selectTag(receiver, name) {
       },
     ];
     state.latest = tag.commit;
+    state.scannedAt = new Date().toISOString();
     state.observedInternal = heads.internal;
     event(state, null, `已冻结目标 tag ${name}、来源 SHA 与内部基线；只创建一个版本更新 PR`);
   });
