@@ -1,0 +1,46 @@
+.repository-fields {
+  align-items: start;
+}
+.repository-fields fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.repository-fields legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.repository-fields label {
+  display: block;
+  margin: 12px 0;
+}
+[data-issue-api] {
+  margin-top: 16px;
+}
+[data-issue-api][hidden],
+[data-issue-token][hidden],
+[data-issue-environment][hidden] {
+  display: none;
+}
+[data-secret-form] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+[data-secret-form] label,
+[data-secret-form] p {
+  flex-basis: 100%;
+  margin: 0;
+}
+#closure-settings {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 18px;
+}
+#closure-settings label {
+  display: block;
+  margin: 16px 0;
+}

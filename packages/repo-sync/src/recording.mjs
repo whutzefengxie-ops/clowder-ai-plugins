@@ -51,7 +51,7 @@ export function validateSnapshot(snapshot) {
     snapshot.fingerprint !== fingerprint(snapshot) ||
     !Number.isInteger(snapshot.checkCount) ||
     snapshot.checkCount < 0 ||
-    !['manual', 'git', 'command'].includes(snapshot.prTransport) ||
+    !['manual', 'git', 'command', 'gitlab'].includes(snapshot.prTransport) ||
     !['custom', 'git-integrity'].includes(snapshot.checkProfile)
   )
     fail('RECORD_INVALID', '历史配置摘要损坏或版本不支持，保留原记录，不能用当前配置替代');

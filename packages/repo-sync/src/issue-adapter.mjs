@@ -1,5 +1,6 @@
 import { fail, objectUrl } from './config.mjs';
 import { gitlabIssue } from './gitlab-issues.mjs';
+import { authenticationStatus } from './issue-auth.mjs';
 import { command } from './process.mjs';
 
 export function validateIssueConfig(config) {
@@ -10,7 +11,7 @@ export function validateIssueConfig(config) {
   if (!config.internalWebUrl) fail('INVALID_ISSUE_CONFIG', 'Issue 自动化需要内部仓库网页地址，用于核验回执归属');
   objectUrl(config.internalWebUrl);
   if (value.mode === 'command') validateIssueCommand(value);
-  else validateIssueApi(config, value);
+  else validateGitlabApi(config, value);
   if (
     value.timeoutMs !== undefined &&
     (!Number.isInteger(value.timeoutMs) || value.timeoutMs < 1000 || value.timeoutMs > 300000)
@@ -84,7 +85,13 @@ export function publicIssues(config) {
         mode: value.mode,
         automatic: true,
         ...(value.mode === 'gitlab'
-          ? { apiUrl: value.apiUrl, projectId: String(value.projectId), tokenEnv: value.tokenEnv }
+          ? {
+              apiUrl: value.apiUrl,
+              projectId: String(value.projectId),
+              tokenEnv: value.tokenEnv,
+              authMode: value.authMode ?? 'environment',
+              authentication: authenticationStatus(config),
+            }
           : {}),
       }
     : { mode: 'manual', automatic: false };
@@ -99,7 +106,7 @@ function validateIssueCommand(value) {
   )
     fail('INVALID_ISSUE_CONFIG', 'Issue 适配器需要私有配置中的固定 executable 与 args');
 }
-function validateIssueApi(config, value) {
+export function validateGitlabApi(config, value) {
   let url;
   try {
     url = new URL(value.apiUrl);
@@ -115,7 +122,11 @@ function validateIssueApi(config, value) {
     url.hash ||
     !url.pathname.endsWith('/api/v4') ||
     !/^[\w./-]+$/.test(String(value.projectId ?? '')) ||
-    !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.tokenEnv ?? '')
+    String(value.projectId ?? '')
+      .split('/')
+      .some((part) => ['', '.', '..'].includes(part)) ||
+    (value.authMode !== undefined && !['session', 'environment'].includes(value.authMode)) ||
+    (value.authMode !== 'session' && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.tokenEnv ?? ''))
   )
     fail('INVALID_ISSUE_CONFIG', 'API 需为 HTTPS /api/v4；项目 ID 与 Token 环境变量名称必须有效，不能填写凭据');
 }

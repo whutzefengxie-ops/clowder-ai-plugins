@@ -9,7 +9,9 @@ import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
 import { body, requestPath, requireToken, send } from './http.mjs';
 import { publicIssues } from './issue-adapter.mjs';
-import { publicPlatform } from './pr-settings.mjs';
+import { clearIssueTokens } from './issue-auth.mjs';
+import { issueAuthRequest } from './issue-auth-http.mjs';
+import { publicApi, publicPlatform } from './pr-settings.mjs';
 import { recordDetail, recordList } from './records.mjs';
 import { checkProjectInput, projectRequest, serverScopes } from './server-projects.mjs';
 import { configure } from './settings.mjs';
@@ -47,6 +49,10 @@ const assets = new Map([
     'projects.css',
     'project-scope.mjs',
     'project-view.mjs',
+    'repository-fields.mjs',
+    'closure-settings.mjs',
+    'issue-auth.mjs',
+    'connection.css',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -76,12 +82,7 @@ export function createReceiverServer(receiver, options = {}) {
           : send(response, 404, { code: 'NOT_FOUND' });
       if (await projectRequest(request, response, options, token, path)) return;
       const context = await scopes.scope(request.url);
-      const { tasks } = context;
-      if (await recordRequest(request, response, context.receiver, tasks, token, path)) return;
-      if (path.startsWith('/api/tasks')) {
-        requireToken(request, token);
-        return await taskRequest(request, response, path, tasks, context.options.projectId);
-      }
+      if (await privateRequest(request, response, path, context, token, options.runtime.instanceId)) return;
       if (request.method === 'GET')
         return await get(context.receiver, context.options, token, path, response, request.url);
       await executionRequest(request, response, path, context, scopes, token);
@@ -91,6 +92,7 @@ export function createReceiverServer(receiver, options = {}) {
   });
   server.shutdown = async () => {
     await scopes.close();
+    clearIssueTokens(options.runtime.instanceId);
     if (server.listening) await new Promise((done) => server.close(done));
   };
   return server;
@@ -137,7 +139,11 @@ async function post(receiver, options, token, input, response) {
     receiver = await options.connection.current();
   } else if (input.action === 'configure') receiver = await configure(receiver, input);
   else result = await dispatch(receiver, input, options);
-  if (['configure', 'configure-repositories', 'configure-pr', 'configure-issues'].includes(input.action))
+  if (
+    ['configure', 'configure-repositories', 'configure-pr', 'configure-issues', 'configure-closure'].includes(
+      input.action,
+    )
+  )
     await get(receiver, options, token, '/api/status', response);
   else
     send(response, 200, {
@@ -205,6 +211,7 @@ async function get(receiver, options, token, path, response, url = '') {
           commitClosureVerified,
           bindingId,
           issueAutomation: publicIssues(receiver.config),
+          platformApi: publicApi(receiver.config),
         }
       : null,
     connection: options.connection?.describe(),
@@ -247,4 +254,16 @@ async function recordRequest(request, response, receiver, tasks, token, path) {
 
 async function workspaceSnapshot(options) {
   return options.workspace ? { workspace: await options.workspace() } : {};
+}
+
+async function privateRequest(request, response, path, context, token, owner) {
+  const { tasks } = context;
+  if (await issueAuthRequest(request, response, path, context, token, owner)) return true;
+  if (await recordRequest(request, response, context.receiver, tasks, token, path)) return true;
+  if (path.startsWith('/api/tasks')) {
+    requireToken(request, token);
+    await taskRequest(request, response, path, tasks, context.options.projectId);
+    return true;
+  }
+  return false;
 }

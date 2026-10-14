@@ -3,6 +3,37 @@ import test from 'node:test';
 import { invokeIssue, validateIssueConfig, verifyIssue } from '../src/issue-adapter.mjs';
 import { gitlabPlatform as platform } from './gitlab-fixture.mjs';
 
+test('legacy CodeHub MR paths link and close the mapped Issue without accepting another repository', async () => {
+  const p = await platform({ legacy: true });
+  try {
+    const issue = await invokeIssue(p.config, { ...p.request, operation: 'create' }),
+      r = {
+        ...p.request,
+        internalId: issue.internalId,
+        pr: {
+          url: 'https://internal.example/team/core/merge_requests/2',
+          head: 'head',
+          branch: 'sync/key',
+          targetBranch: 'main',
+        },
+      };
+    const linked = await invokeIssue(p.config, { ...r, operation: 'link' });
+    assert.equal(linked.links.length, 1);
+    assert.equal((await invokeIssue(p.config, { ...r, operation: 'update', desiredState: 'closed' })).state, 'closed');
+    await assert.rejects(
+      () =>
+        invokeIssue(p.config, {
+          ...r,
+          pr: { ...r.pr, url: 'https://internal.example/team/core-other/merge_requests/2' },
+          operation: 'link',
+        }),
+      { code: 'ISSUE_PR_INVALID' },
+    );
+  } finally {
+    await p.close();
+  }
+});
+
 test('built-in GitLab adapter creates, links through real API readback and updates only the mapped Issue', async () => {
   const p = await platform();
   try {

@@ -4,7 +4,9 @@ import { facts } from './stage-facts.mjs';
 export { attempts, actionBar };
 
 import { nextAction } from './action-policy.mjs';
+import { closureSettings } from './closure-settings.mjs';
 import { diagnostics } from './diagnostics.mjs';
+import { authenticationForm } from './issue-auth.mjs';
 import { autoIssuePanel } from './issue-settings.mjs';
 import { issueForms } from './issues.mjs';
 import { prPanel } from './pr.mjs';
@@ -35,6 +37,7 @@ function substeps(stage, d, record, snapshot) {
   const groups = {
     1: [['冻结目标、范围与 U0 / I0', true]],
     2: [
+      ...closureSteps(d, record, snapshot),
       [
         d.mode === 'version'
           ? '核对文件规则与内部差异'
@@ -95,7 +98,7 @@ function stageForm(stage, delivery, snapshot) {
   if (stage === 2 && delivery.status === 'CODE_PREPARE_REQUIRED')
     return `${conflictOptions(delivery)}<button type="button" data-action="cancel-version">撤销未发布交付，重新选择版本</button><p>历史保留，已发布候选不能直接撤销。</p>`;
   if (stage === 2 && delivery.status === 'ISSUES_REQUIRED')
-    return `<div id="issue-mappings">${snapshot.config?.issueAutomation?.automatic ? autoIssuePanel(delivery, snapshot.state, esc) : issueForms(delivery, snapshot.state, esc)}</div>`;
+    return `${closureSettings(snapshot, esc)}${authenticationForm(snapshot.config)}<div id="issue-mappings">${snapshot.config?.issueAutomation?.automatic ? autoIssuePanel(delivery, snapshot.state, esc) : issueForms(delivery, snapshot.state, esc)}</div>`;
   if (stage === 3 && ['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status)) return prPanel(snapshot, esc);
   if (stage === 5 && delivery.status === 'CODE_ACCEPTED_PENDING_METADATA')
     if (snapshot.config?.issueAutomation?.automatic)
@@ -153,4 +156,17 @@ function stageFailure(snapshot, delivery, historical) {
 
 function issueTransport(record, snapshot) {
   return record?.configurations.at(-1)?.snapshot.issueTransport ?? snapshot.config?.issueAutomation?.mode ?? 'manual';
+}
+
+function closureSteps(d, record, snapshot) {
+  return d.mode === 'version'
+    ? []
+    : [
+        [
+          '确认提交消息不会关闭内部同号 Issue',
+          Boolean(
+            record?.configurations.at(-1)?.snapshot.commitClosureVerified ?? snapshot.config?.commitClosureVerified,
+          ),
+        ],
+      ];
 }

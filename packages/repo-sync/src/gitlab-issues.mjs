@@ -16,9 +16,10 @@ function receipt(r, item, links = []) {
 }
 function prId(config, pr) {
   const base = config.internalWebUrl.replace(/\/$/, '');
-  if (!pr?.url?.startsWith(`${base}/-/merge_requests/`))
-    fail('ISSUE_PR_INVALID', 'GitLab 关联需要此仓库的具体 MR 地址');
-  const id = pr.url.slice(`${base}/-/merge_requests/`.length);
+  const relative = pr?.url?.startsWith(`${base}/`) ? pr.url.slice(base.length) : '',
+    match = /^\/(?:-\/)?merge_requests\/(\d+)$/.exec(relative);
+  if (!match) fail('ISSUE_PR_INVALID', 'GitLab 关联需要此仓库的具体 MR 地址');
+  const id = match[1];
   if (!/^\d+$/.test(id)) fail('ISSUE_PR_INVALID', 'MR 编号无效');
   return id;
 }

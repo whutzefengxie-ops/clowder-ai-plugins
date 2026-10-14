@@ -163,7 +163,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
         checkOutcome(operation);
         value = { result: operation.result };
       } else {
-        const configure = ['configure', 'configure-repositories', 'configure-pr', 'configure-issues'].includes(
+        const configure = ['configure', 'configure-repositories', 'configure-pr', 'configure-issues','configure-closure'].includes(
           input.action,
         );
         value = await request(

@@ -197,7 +197,10 @@ export class Receiver {
     if (!delivery.issues.every((issue) => state.issues[issue.sourceId]))
       fail('ISSUES_REQUIRED', '先登记全部内部 Issue 映射');
     if (this.config.mode !== 'version' && this.config.commitClosureVerified !== true)
-      fail('PLATFORM_CLOSURE_UNVERIFIED', '先实测原始 commit 不会误关内部 Issue；配置未确认，禁止推送');
+      fail(
+        'PLATFORM_CLOSURE_UNVERIFIED',
+        '请在准备代码步骤查看并确认提交消息关单规则：外部 Closes #123 可能关闭内部同号 Issue。原基线保留，确认前不发布候选。',
+      );
     if (!this.config.checks?.length) fail('CHECKS_REQUIRED', '至少配置一项核心/插件检查，不能把未检查当通过');
   }
   linkPr(url, options) {

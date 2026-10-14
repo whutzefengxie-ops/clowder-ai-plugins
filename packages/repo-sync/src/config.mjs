@@ -81,6 +81,17 @@ export function validateConfig(input) {
   validateTimeouts(config.timeouts);
   validatePrConfig(config);
   validateIssueConfig(config);
+  if (
+    config.issues?.mode === 'gitlab' &&
+    config.pullRequests?.mode === 'gitlab' &&
+    ['apiUrl', 'projectId', 'authMode', 'tokenEnv'].some(
+      (key) => String(config.issues[key] ?? '') !== String(config.pullRequests[key] ?? ''),
+    )
+  )
+    fail(
+      'PLATFORM_API_SCOPE_CONFLICT',
+      'Issue 与 PR 的内置 API 必须使用同一个平台项目和认证设置，请在当前仓库统一核对。',
+    );
   return config;
 }
 function validateTimeouts(values) {

@@ -4,10 +4,11 @@ import { captureDraft, configuration, repositoryInput, restoreDraft } from './co
 import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
 import { hydrateFiles } from './files.mjs';
 import { createHistory } from './history.mjs';
+import { createIssueAuthentication } from './issue-auth.mjs';
 import { issueSettings } from './issue-settings.mjs';
 import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
-import { platformSettings } from './platform.mjs';
+import { platformSettings, serviceLabel } from './platform.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { createProjectNavigation } from './projects.mjs';
 import { button, esc, sha, stageOf } from './ui.mjs';
@@ -22,6 +23,7 @@ let view = new URL(location.href).searchParams.get('view') === 'configuration' ?
 let mobileDetail = !!new URL(location.href).searchParams.get('record');
 let availableTags = [];
 const projectNavigation = createProjectNavigation(() => snapshot, saveDraft);
+const issueAuthentication = createIssueAuthentication(() => snapshot, refresh, errorPanel);
 const records = createHistory(() => snapshot, render);
 const operations = createOperations({
   snapshot: () => snapshot,
@@ -60,9 +62,7 @@ function restoreExpansion() {
   if (records.get().selected === 'current') currentStage?.setAttribute('open', '');
 }
 function render() {
-  document.getElementById('mode').textContent = snapshot.config
-    ? `正式服务 · PR ${snapshot.platform?.transport === 'git' ? 'Git 自动创建' : snapshot.platform?.prMode === 'automatic' ? '平台适配器创建' : '手工创建'}`
-    : '正式服务 · 等待仓库配置';
+  document.getElementById('mode').textContent = serviceLabel(snapshot);
   content.innerHTML =
     view === 'configuration'
       ? `${configuration(snapshot, esc, sha, button)}${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}<div id="operation"></div><div id="error-slot"></div>`
@@ -222,7 +222,10 @@ function showActionResult(kind, result) {
 document.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.target;
+  if (form.hasAttribute('data-secret-form')) return issueAuthentication.submit(form);
+  const issueToken = issueAuthentication.take(form);
   const fields = Object.fromEntries(new FormData(form));
+  delete fields.issueToken;
   if (form.hasAttribute('data-record-filter')) return records.filter(fields);
   let input =
     form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
@@ -236,6 +239,7 @@ document.addEventListener('submit', async (event) => {
               .filter(Boolean)
           : [];
   if (input.action === 'issue') input.sourceId = form.dataset.source;
+  if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
   if (input.action === 'receipts')
     input = {
       action: 'receipts',
@@ -247,18 +251,27 @@ document.addEventListener('submit', async (event) => {
       })),
     };
   const result = await action(input);
-  if (['configure', 'configure-repositories', 'configure-pr', 'configure-issues'].includes(input.action) && result) {
-    const confirmation = document.createElement('p');
-    confirmation.setAttribute('role', 'status');
-    confirmation.textContent = {
-      configure: '同步方式与文件规则已保存，请登记已有基线。',
-      'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
-      'configure-issues': 'Issue 自动化设置已保存。回到本笔同步继续创建或回读原对象。',
-      'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
-    }[input.action];
-    content.prepend(confirmation);
-  }
+  if (!(await issueAuthentication.complete(result, issueToken))) return;
+  showConfigurationConfirmation(input.action, result);
 });
+function showConfigurationConfirmation(action, result) {
+  if (
+    !result ||
+    !['configure', 'configure-repositories', 'configure-pr', 'configure-issues', 'configure-closure'].includes(action)
+  )
+    return;
+  const confirmation = document.createElement('p');
+  confirmation.setAttribute('role', 'status');
+  confirmation.textContent = {
+    configure: '同步方式与文件规则已保存，请登记已有基线。',
+    'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
+    'configure-issues': 'Issue 自动化设置已保存。回到本笔同步继续创建或回读原对象。',
+    'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
+    'configure-closure': '关单规则确认已保存。原基线与 Issue 映射保留，可继续本笔同步。',
+  }[action];
+  content.prepend(confirmation);
+}
+
 document.addEventListener('input', saveDraft);
 document.addEventListener('change', (event) => {
   if (event.target.matches('[name="mode"]')) {

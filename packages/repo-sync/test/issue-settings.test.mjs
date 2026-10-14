@@ -6,6 +6,7 @@ import test from 'node:test';
 import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { publicIssues } from '../src/issue-adapter.mjs';
+import { issueConfiguration } from '../src/issue-settings.mjs';
 import { repositories } from './fixtures.mjs';
 import { issuePlatform } from './issue-fixtures.mjs';
 
@@ -111,4 +112,70 @@ test('a failed initial lookup does not freeze incorrect adapter configuration be
   });
   assert.equal((await connection.current()).config.issues.tokenEnv, 'CORRECT_TOKEN');
   assert.equal((await platform.read()).creates, 0);
+});
+
+test('an adopted project can confirm the closure rule without changing its original baseline, active ID or candidate', async () => {
+  const f = await repositories(),
+    folder = await mkdtemp(join(tmpdir(), 'repo-sync-closure-')),
+    file = join(folder, 'config.json');
+  await writeFile(file, JSON.stringify({ ...f.config, commitClosureVerified: false }));
+  const connection = await createConnection(file),
+    receiver = await connection.current();
+  await receiver.adopt(f.u0, f.i0);
+  await receiver.setQueue(f.plans);
+  await receiver.start();
+  const before = await receiver.read();
+  await assert.rejects(
+    () =>
+      connection.run({
+        action: 'configure-closure',
+        expectedRevision: connection.describe().revision,
+        confirmed: false,
+      }),
+    { code: 'CLOSURE_CONFIRMATION_REQUIRED' },
+  );
+  await connection.run({
+    action: 'configure-closure',
+    expectedRevision: connection.describe().revision,
+    confirmed: true,
+  });
+  const next = await connection.current(),
+    after = await next.read();
+  assert.equal(next.config.commitClosureVerified, true);
+  assert.equal(after.activeId, before.activeId);
+  assert.equal(Object.hasOwn(after, 'active'), false);
+  assert.deepEqual(after.initial, before.initial);
+  assert.deepEqual(after.accepted, before.accepted);
+  assert.equal(after.deliveries[0].candidate, before.deliveries[0].candidate);
+  assert.equal(after.deliveries[0].configurations.at(-1).snapshot.commitClosureVerified, true);
+});
+
+test('compatible Issue links infer a project path; other platform links never silently become GitLab APIs', () => {
+  const config = { internalWebUrl: 'https://internal.example/team/core' };
+  assert.deepEqual(
+    issueConfiguration(config, {
+      issueMode: 'gitlab',
+      issuePageUrl: 'https://internal.example/team/core/-/issues/7',
+      issueAuthMode: 'session',
+    }),
+    { mode: 'gitlab', apiUrl: 'https://internal.example/api/v4', projectId: 'team/core', authMode: 'session' },
+  );
+  assert.throws(
+    () =>
+      issueConfiguration(config, {
+        issueMode: 'gitlab',
+        issuePageUrl: 'https://internal.example/projectman/scrum/uuid/task/detail/7',
+        issueAuthMode: 'session',
+      }),
+    { code: 'ISSUE_API_UNSUPPORTED' },
+  );
+  assert.throws(
+    () =>
+      issueConfiguration(config, {
+        issueMode: 'gitlab',
+        issuePageUrl: 'https://other.example/team/core/issues/7',
+        issueAuthMode: 'session',
+      }),
+    { code: 'ISSUE_API_UNSUPPORTED' },
+  );
 });

@@ -48,24 +48,7 @@ export async function createConnection(file, options = {}) {
       fail('CONFIGURATION_CHANGED', '配置已变化，请刷新后重新核对，未覆盖原配置');
     if (!editable)
       fail('CONFIGURATION_READ_ONLY', '已登记基线或使用手工配置，不能在向导覆盖；另一套绑定请使用新的私有配置文件');
-    const next = validateConfig({
-      ...(receiver?.config ?? {}),
-      configurationSource: 'workbench',
-      sourceUrl: input.sourceUrl,
-      internalUrl: input.internalUrl,
-      internalWebUrl: input.internalWebUrl || undefined,
-      pullRequests: prConfiguration(receiver?.config, input.prMode),
-      issues: issueConfiguration(receiver?.config, input),
-      sourceBranch: input.sourceBranch,
-      targetBranch: input.targetBranch,
-      mode: input.mode,
-      internalPaths: input.internalPaths,
-      mergePaths: input.mergePaths,
-      commitClosureVerified: input.commitClosureVerified,
-      stateDir: dirname(path),
-      checks: receiver?.config.checks ?? [{ command: 'git', args: ['fsck', '--no-reflogs'] }],
-      checkProfile: receiver?.config.checkProfile ?? 'git-integrity',
-    });
+    const next = repositoryConfiguration(receiver?.config, input, path);
     next.stateDir = stateDirectory(path, next.bindingId, options);
     githubRepository(next.sourceUrl);
     const candidate = await configuredReceiver(next);
@@ -82,7 +65,7 @@ export async function createConnection(file, options = {}) {
     const next = validateConfig({
       ...receiver.config,
       internalWebUrl: input.internalWebUrl,
-      pullRequests: prConfiguration(receiver.config, input.prMode),
+      pullRequests: prConfiguration({ ...receiver.config, internalWebUrl: input.internalWebUrl }, input.prMode, input),
     });
     const existing = await receiver.status();
     checkIssueSettings(existing, receiver.config, next);
@@ -102,6 +85,12 @@ export async function createConnection(file, options = {}) {
       });
     return configured;
   }
+  const editors = new Map([
+    ['configure-repositories', save],
+    ['configure-pr', savePlatform],
+    ['configure-issues', saveIssues],
+    ['configure-closure', saveClosure],
+  ]);
   return {
     current,
     describe: () => ({
@@ -114,9 +103,8 @@ export async function createConnection(file, options = {}) {
     save: (input) => configurationLock(path, () => save(input)),
     run: (input, options = {}) =>
       configurationLock(path, async () => {
-        if (input.action === 'configure-repositories') return save(input);
-        if (input.action === 'configure-pr') return savePlatform(input);
-        if (input.action === 'configure-issues') return saveIssues(input);
+        const editor = editors.get(input.action);
+        if (editor) return editor(input);
         const bound = await current();
         if (!bound) fail('CONFIGURATION_REQUIRED', '请先保存真实仓库配置，再登记已有基线');
         verifyExecutionInput(input, bound, revision);
@@ -149,6 +137,30 @@ export async function createConnection(file, options = {}) {
       });
     return configured;
   }
+  async function saveClosure(input) {
+    await current();
+    if (
+      !receiver ||
+      receiver.config.mode !== 'continuous' ||
+      input.expectedRevision !== revision ||
+      input.confirmed !== true ||
+      Object.keys(input).some((key) => !['action', 'expectedRevision', 'confirmed'].includes(key))
+    )
+      fail('CLOSURE_CONFIRMATION_REQUIRED', '请在当前项目读完关单规则说明并明确确认，配置变化时需刷新重核对。');
+    const next = validateConfig({ ...receiver.config, commitClosureVerified: true });
+    await writePrivate(path, next);
+    loaded = false;
+    const configured = await current();
+    await configured.store.locked(async () => {
+      const state = await configured.read();
+      const active = state && configured.active(state);
+      if (active) {
+        recordDelivery(active, configured.config, 'configuration', state.issues);
+        await configured.store.save(state);
+      }
+    });
+    return configured;
+  }
 }
 function verifyExecutionInput(input, bound, revision) {
   if (input.expectedBinding && input.expectedBinding !== bound.config.bindingId)
@@ -161,4 +173,28 @@ function stateDirectory(path, bindingId, options) {
   return options.stateDirectory
     ? options.stateDirectory(bindingId)
     : join(dirname(path), 'bindings', bindingId.slice(0, 24));
+}
+
+function repositoryConfiguration(previous = {}, input, path) {
+  return validateConfig({
+    ...(previous ?? {}),
+    configurationSource: 'workbench',
+    sourceUrl: input.sourceUrl,
+    internalUrl: input.internalUrl,
+    internalWebUrl: input.internalWebUrl || undefined,
+    pullRequests: prConfiguration({ ...previous, internalWebUrl: input.internalWebUrl }, input.prMode, input),
+    issues:
+      input.mode === 'version'
+        ? undefined
+        : issueConfiguration({ ...previous, internalWebUrl: input.internalWebUrl }, input),
+    sourceBranch: input.sourceBranch,
+    targetBranch: input.targetBranch,
+    mode: input.mode,
+    internalPaths: input.internalPaths,
+    mergePaths: input.mergePaths,
+    commitClosureVerified: input.commitClosureVerified ?? previous.commitClosureVerified ?? false,
+    stateDir: dirname(path),
+    checks: previous.checks ?? [{ command: 'git', args: ['fsck', '--no-reflogs'] }],
+    checkProfile: previous.checkProfile ?? 'git-integrity',
+  });
 }

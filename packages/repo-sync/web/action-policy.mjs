@@ -56,7 +56,7 @@ function deliveryPolicy(snapshot, delivery) {
     };
   if (delivery.status === 'COMPLETE') return { stage: 5, text: '本笔同步已完成，内外对应与接收结果已保存。' };
   if (delivery.status === 'CANCELLED') return { stage: 2, text: '本笔已撤销。保留原记录，请返回当前同步选择新目标。' };
-  const reference = referencePolicy(snapshot, delivery);
+  const reference = referencePolicy(snapshot, delivery) ?? closurePolicy(snapshot, delivery);
   if (reference) return reference;
   const issueAction = issuePolicy(snapshot, delivery);
   if (issueAction) return issueAction;
@@ -182,5 +182,21 @@ function issuePolicy(snapshot, delivery) {
         action: 'sync-issues',
         label: '核验 / 更新原 Issue 并完成同步',
       };
+  return null;
+}
+
+function closurePolicy(snapshot, delivery) {
+  if (
+    snapshot.connection &&
+    snapshot.config?.mode === 'continuous' &&
+    snapshot.config.commitClosureVerified !== true &&
+    delivery.status === 'ISSUES_REQUIRED'
+  )
+    return {
+      stage: 2,
+      text: '首次发布前确认提交消息的关单规则，避免外部编号关闭内部同号 Issue。只需对这个接收仓库确认一次。',
+      anchor: 'closure-settings',
+      label: '确认提交消息关单规则 →',
+    };
   return null;
 }

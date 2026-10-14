@@ -1,11 +1,11 @@
 import { createServer } from 'node:http';
 
 const mrUrl = 'https://internal.example/team/core/-/merge_requests/2';
-function mergeRoute(state, method, payload) {
+function mergeRoute(state, method, payload, url = mrUrl) {
   if (method === 'PUT') state.description = payload.description;
   return {
     description: state.description,
-    web_url: mrUrl,
+    web_url: url,
     sha: state.mismatch ? 'wrong' : 'head',
     source_branch: 'sync/key',
     target_branch: 'main',
@@ -25,7 +25,8 @@ function issueRoute(state, path, method, payload) {
   if (!state.issue) return [];
   return state.duplicate ? [state.issue, state.issue] : [state.issue];
 }
-export async function gitlabPlatform() {
+export async function gitlabPlatform(options = {}) {
+  const currentMrUrl = options.legacy ? mrUrl.replace('/-/', '/') : mrUrl;
   const state = { description: '', writes: 0, mismatch: false, denied: false, duplicate: false };
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -40,9 +41,11 @@ export async function gitlabPlatform() {
       path = new URL(req.url, 'http://localhost').pathname;
     if (req.method !== 'GET') state.writes++;
     if (path.endsWith('/related_merge_requests'))
-      return res.end(JSON.stringify(state.description.includes('[repo-sync-link:key:2]') ? [{ web_url: mrUrl }] : []));
+      return res.end(
+        JSON.stringify(state.description.includes('[repo-sync-link:key:2]') ? [{ web_url: currentMrUrl }] : []),
+      );
     const result = path.endsWith('/merge_requests/2')
-      ? mergeRoute(state, req.method, payload)
+      ? mergeRoute(state, req.method, payload, currentMrUrl)
       : issueRoute(state, path, req.method, payload);
     res.end(JSON.stringify(result));
   });

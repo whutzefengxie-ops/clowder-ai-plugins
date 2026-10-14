@@ -1,9 +1,10 @@
 import { fail } from './config.mjs';
+import { issueToken } from './issue-auth.mjs';
+import { trustSystemCA } from './system-ca.mjs';
 
-export function gitlabApi(config) {
-  const settings = config.issues,
-    token = process.env[settings.tokenEnv];
-  if (!token) fail('ISSUE_AUTH_REQUIRED', `请在启动服务的环境中设置 ${settings.tokenEnv}，只在网页填写变量名称`);
+export function gitlabApi(config, settings = config.issues, family = 'ISSUE') {
+  trustSystemCA();
+  const token = issueToken(config, settings);
   const base = `${settings.apiUrl.replace(/\/$/, '')}/projects/${encodeURIComponent(settings.projectId)}`;
   async function request(path, method = 'GET', payload) {
     let response;
@@ -15,12 +16,12 @@ export function gitlabApi(config) {
         ...(payload ? { body: JSON.stringify(payload) } : {}),
         signal: AbortSignal.timeout(settings.timeoutMs ?? 30000),
       });
-    } catch {
-      fail('ISSUE_API_UNAVAILABLE', '内部 Issue API 连接失败或超时；请核对网络、证书与服务，不重复创建');
+    } catch (error) {
+      unavailable(error, family);
     }
     if (!response.ok) {
       await response.body?.cancel();
-      fail('ISSUE_API_REJECTED', `内部 Issue API 拒绝请求（HTTP ${response.status}）；请核对权限与配置后回读原对象`);
+      fail(`${family}_API_REJECTED`, `内部平台 API 拒绝请求（HTTP ${response.status}）；请核对权限与配置后回读原对象`);
     }
     const chunks = [];
     let size = 0;
@@ -61,4 +62,17 @@ function nextPage(response, page) {
   if (!/^\d+$/.test(response.next) || Number(response.next) <= Number(page))
     fail('ISSUE_RESPONSE_INVALID', '内部 Issue API 分页未前进，停止而非截断');
   return true;
+}
+
+function unavailable(error, family) {
+  if (
+    ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT'].includes(
+      error.cause?.code,
+    )
+  )
+    fail(
+      `${family}_API_TLS_UNTRUSTED`,
+      'Node 未信任平台证书链。将企业 CA 安装到系统受信任证书库并重启；旧版 Node 24 使用 node --use-system-ca 启动。不要关闭证书校验。',
+    );
+  fail(`${family}_API_UNAVAILABLE`, '内部平台 API 连接失败或超时；请核对网络、证书与服务，不重复创建');
 }

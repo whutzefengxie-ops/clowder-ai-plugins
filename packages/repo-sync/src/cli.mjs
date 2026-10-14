@@ -23,7 +23,9 @@ try {
         });
       });
     console.log(`真实仓库工作台：http://127.0.0.1:${port}/`);
-    console.log('正式服务：请在本机配置仓库、基线和 PR 创建方式；支持 Git 自动创建，审核合入仍在平台完成。');
+    console.log(
+      '正式服务：请在本机配置仓库、基线和 PR 创建方式；支持平台 API / Git 扩展自动创建，审核合入仍在平台完成。',
+    );
   };
   const actions = {
     status: () => receiver.status(),

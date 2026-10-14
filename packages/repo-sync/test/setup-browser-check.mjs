@@ -52,8 +52,8 @@ try {
   );
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByLabel('同步模式', { exact: true }).selectOption('continuous');
-  assert.ok(await page.getByRole('checkbox').isVisible());
-  assert.equal(await page.getByRole('checkbox').isChecked(), false);
+  assert.equal(await page.locator('[name="commitClosureVerified"]').count(),0);
+  assert.ok(await page.getByLabel('Issue 创建与关单方式').isVisible());
   await page.getByLabel('同步模式', { exact: true }).selectOption('version');
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), '');
   assert.equal(await page.getByLabel('内部 Git 仓库地址').inputValue(), '');
