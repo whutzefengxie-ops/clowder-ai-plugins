@@ -13,31 +13,25 @@ async function pushChange(f, directory, file, content) {
   if (directory === f.review) await git(directory, ['push', 'origin', 'main']);
   return git(directory, ['rev-parse', 'HEAD']);
 }
-test('version: text conflict is shown, restart preserves it, manual resolution resumes one candidate', async () => {
+test('version: divergent preserved text is retained whole across restart, without file merging or resolution APIs', async () => {
   const f = await versionRepositories();
   const i0 = await pushChange(f, f.review, 'README.md', '内部新版介绍\n\n运行说明\n\n内部联系说明\n');
   let receiver = new Receiver(f.config);
   await receiver.adopt(f.u0, i0);
   await receiver.selectTag('v2.0.0');
   await receiver.start();
-  await assert.rejects(() => receiver.prepare(), { code: 'CONTENT_CONFLICT' });
-  const paused = await receiver.status();
-  assert.deepEqual(paused.active.error.details.paths, ['README.md']);
-  assert.equal(await receiver.git.remoteBranch(paused.active.branch), null);
-  receiver = new Receiver(f.config);
-  assert.match((await receiver.conflict('README.md')).upstream, /新版介绍/);
-  assert.equal((await receiver.conflict('README.md')).deliveryId, paused.active.id);
-  await assert.rejects(() => receiver.resolve('../core.txt', 'internal'), { code: 'RESOLUTION_NOT_ALLOWED' });
-  assert.equal((await receiver.status()).active.error.code, 'CONTENT_CONFLICT');
-  await receiver.resolve('README.md', 'manual', '人工合并介绍\n\n运行说明\n\n内部联系说明\n');
   await receiver.prepare();
+  const prepared = (await receiver.status()).active;
+  receiver = new Receiver(f.config);
   const active = (await receiver.status()).active;
-  assert.equal(active.id, paused.active.id);
+  assert.equal(active.id, prepared.id);
   assert.equal(
     await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]),
-    '人工合并介绍\n\n运行说明\n\n内部联系说明',
+    '内部新版介绍\n\n运行说明\n\n内部联系说明',
   );
-  await assert.rejects(() => receiver.resolve('README.md', 'internal'), { code: 'RESOLUTION_NOT_ALLOWED' });
+  assert.equal(receiver.resolve, undefined);
+  assert.equal(receiver.conflict, undefined);
+  assert.equal(await receiver.git.remoteBranch(active.branch), active.candidate);
 });
 test('version: moved tag blocks publication and an unpublished delivery can be cancelled without erasing audit', async () => {
   const f = await versionRepositories();

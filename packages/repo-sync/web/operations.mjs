@@ -1,4 +1,5 @@
 import { captureDraft, restoreDraft } from './connections.mjs';
+import { clearConfigurationErrors, showConfigurationError } from './form-errors.mjs';
 import { renderTask } from './operation-view.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 
@@ -17,7 +18,6 @@ const longActions = new Set([
   'issue',
   'sync-issues',
   'receipts',
-  'resolve',
   'cancel-version',
 ]);
 const active = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
@@ -31,7 +31,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
   let retryingOriginal = false;
   function lock() {
     for (const element of document.querySelectorAll(
-      'button[data-action], [data-rule-path], [data-baseline-read], [data-conflict-path], form button, input, textarea, select',
+      'button[data-action], [data-rule-path], [data-baseline-read], form button, input, textarea, select',
     ))
       if (!element.closest('.record-list, [data-project-navigation]')) element.disabled = busy;
   }
@@ -55,6 +55,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
     if (!response.ok) {
       const error = new Error(`${value.code}：${value.message ?? '请求未完成'}`);
       error.code = value.code;
+      error.details = value.details;
       throw error;
     }
     return value;
@@ -146,13 +147,20 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
   function checkOutcome(operation) {
     if (operation.persistence?.status === 'FAILED')
       throw new Error('TASK_STORE_FAILED：业务已结束，但执行记录未保存。请只补存原记录，不重复执行。');
-    if (operation.status !== 'SUCCEEDED')
-      throw new Error(`${operation.error?.code ?? operation.status}：${operation.error?.message ?? '当前操作未完成'}`);
+    if (operation.status !== 'SUCCEEDED') {
+      const error = new Error(
+        `${operation.error?.code ?? operation.status}：${operation.error?.message ?? '当前操作未完成'}`,
+      );
+      error.code = operation.error?.code;
+      error.details = operation.error?.details;
+      throw error;
+    }
   }
-  async function action(input) {
+  async function action(input, formKind) {
     if (busy) return;
     busy = true;
     errorPanel.hidden = true;
+    clearConfigurationErrors(formKind);
     const drafts = captureDraft();
     lock();
     let operation;
@@ -163,9 +171,13 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
         checkOutcome(operation);
         value = { result: operation.result };
       } else {
-        const configure = ['configure', 'configure-repositories', 'configure-pr', 'configure-issues','configure-closure'].includes(
-          input.action,
-        );
+        const configure = [
+          'configure',
+          'configure-repositories',
+          'configure-pr',
+          'configure-issues',
+          'configure-closure',
+        ].includes(input.action);
         value = await request(
           '/api/action',
           configure
@@ -192,8 +204,8 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
         /* Preserve the visible form if the server is unavailable. */
       }
       restoreDraft(drafts);
-      errorPanel.textContent = error.message;
-      errorPanel.hidden = false;
+      lock();
+      showConfigurationError(formKind, error, errorPanel);
     } finally {
       lock();
     }

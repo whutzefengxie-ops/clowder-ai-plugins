@@ -12,7 +12,7 @@ export function progressSteps(delivery, state, checkProfile, prMode = 'manual') 
           version ? '核对文件规则与内部差异' : '登记内部 Issue 映射',
           version || delivery.issues.every((issue) => state.issues[issue.sourceId]),
         ],
-        [version ? '保留内部文件与三方合并' : '构造原始对象候选', Boolean(delivery.candidate)],
+        [version ? '保留内部文件并构造候选' : '构造原始对象候选', Boolean(delivery.candidate)],
         [
           checkProfile === 'git-integrity' || delivery.checks?.profile === 'git-integrity'
             ? 'Git 基础完整性检查'

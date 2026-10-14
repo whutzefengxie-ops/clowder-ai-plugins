@@ -6,7 +6,7 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
-test('version: tag update preserves internal files, merges README, uses one PR and recovers without Issues', async () => {
+test('version: tag update fully preserves internal README, strictly updates core, uses one PR and recovers without Issues', async () => {
   const f = await versionRepositories();
   let receiver = new Receiver(f.config);
   await receiver.adopt(f.u0, f.i0);
@@ -23,10 +23,7 @@ test('version: tag update preserves internal files, merges README, uses one PR a
   assert.equal(await git(receiver.git.directory, ['show', `${head}:core.txt`]), 'release two');
   assert.equal(await git(receiver.git.directory, ['show', `${head}:internal-docs/guide.md`]), '内部独立说明');
   assert.equal(await git(receiver.git.directory, ['show', `${head}:OWNED.md`]), '内部维护说明');
-  assert.equal(
-    await git(receiver.git.directory, ['show', `${head}:README.md`]),
-    '新版介绍\n\n运行说明\n\n内部联系说明',
-  );
+  assert.equal(await git(receiver.git.directory, ['show', `${head}:README.md`]), '介绍\n\n运行说明\n\n内部联系说明');
   assert.equal(await receiver.git.isAncestor(f.u1, head), false);
   assert.match(state.templates.title, /v2\.0\.0/);
   assert.doesNotMatch(state.templates.body, /Fixes #71/);

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
+import { git } from '../src/process.mjs';
 import { createProjectWorkspace } from '../src/projects.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
@@ -48,7 +49,38 @@ try {
   await form.getByLabel('PR 创建方式', { exact: true }).selectOption('gitlab');
   await form.getByLabel('Issue 创建与关单方式').selectOption('gitlab');
   await form.getByLabel('内部 Issue 网页链接').fill(`${platform.web}/issues`);
-  await form.getByLabel('内部平台 API 地址').fill(platform.api);
+  assert.equal(await form.getByLabel('内部平台 API 地址').isVisible(), false);
+  assert.equal(await form.getByLabel('API 项目 ID / 路径').isVisible(), false);
+  assert.match(await form.locator('[data-issue-inference]').textContent(), /自动推断/);
+  await form.getByText('高级接口设置（可选：覆盖自动推断）', { exact: true }).click();
+  await form.getByLabel('内部平台 API 地址').fill('innersource/team_G/core');
+  await form.getByLabel('Token 提供方式').selectOption('environment');
+  await form.getByLabel('API 项目 ID / 路径').fill('https://web.example/team/core');
+  const originalConfig = await readFile(file, 'utf8');
+  await form.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
+  await form.locator('[data-field-error]').first().waitFor({ timeout: 5000 });
+  assert.equal(await form.locator('[aria-invalid="true"]').count(), 3);
+  assert.equal(await page.locator('form[data-form="configure-pr"] [aria-invalid="true"]').count(), 0);
+  assert.equal(await page.locator('#error').isVisible(), false);
+  assert.equal(await page.evaluate(() => document.activeElement?.name), 'issueApiUrl');
+  assert.equal(await form.getByLabel('内部平台 API 地址').inputValue(), 'innersource/team_G/core');
+  assert.equal(await readFile(file, 'utf8'), originalConfig);
+  await page.screenshot({ path: join(evidence, 'connection-field-errors.png'), fullPage: true });
+  await form.getByLabel('内部平台 API 地址').fill(`${platform.api}/`);
+  assert.equal(await form.locator('[aria-invalid="true"]').count(), 2);
+  await form.getByLabel('API 项目 ID / 路径').fill('innersource%2Fteam_G%2Fcore');
+  await form.getByLabel('Token 提供方式').selectOption('session');
+  await form.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
+  await form.getByLabel('API 项目 ID / 路径').fill('https://web.example/team/core');
+  await form.getByText('高级接口设置（可选：覆盖自动推断）', { exact: true }).click();
+  await form.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
+  await form.locator('[data-field-error="issueProjectId"]').waitFor();
+  assert.equal(await form.getByLabel('API 项目 ID / 路径').isVisible(), true);
+  assert.equal(await page.evaluate(() => document.activeElement?.name), 'issueProjectId');
+  assert.equal(await form.getByLabel('内部平台 Token', { exact: true }).inputValue(), '');
+  assert.equal(await readFile(file, 'utf8'), originalConfig);
+  assert.equal(await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token), false);
+  await form.getByLabel('API 项目 ID / 路径').fill('innersource%2Fteam_G%2Fcore');
   await form.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
   assert.equal(await form.locator('[name="issueTokenEnv"]').isVisible(), false);
   assert.equal(await form.locator('[name="commitClosureVerified"]').count(), 0);
@@ -57,7 +89,30 @@ try {
   assert.ok(internal.x > source.x);
   assert.equal(await form.locator('[data-repository="source"] [name="targetBranch"]').count(), 0);
   await page.screenshot({ path: join(evidence, 'connection-groups-desktop.png'), fullPage: true });
+  await form.getByLabel('内部平台 API 地址').fill('');
+  await form.getByLabel('API 项目 ID / 路径').fill('');
   await form.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
+  await page.getByText('仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。', { exact: true }).waitFor();
+  const inferred = (await (await projects.connection()).current()).config;
+  assert.equal(inferred.issues.apiUrl, 'https://codehub.example/api/v4');
+  assert.equal(inferred.issues.projectId, 'innersource/team_G/core');
+  if (!(await form.isVisible())) await page.getByText('修改尚未启用的仓库配置', { exact: true }).click();
+  await form.getByText('高级接口设置（可选：覆盖自动推断）', { exact: true }).click();
+  await form.getByLabel('内部平台 API 地址').fill(`${platform.api}/`);
+  await form.getByLabel('API 项目 ID / 路径').fill('innersource%2Fteam_G%2Fcore');
+  const [saved] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().includes('/api/action') && response.request().method() === 'POST',
+    ),
+    form.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click(),
+  ]);
+  assert.equal(saved.status(), 200);
+  await saved.finished();
+  await page.locator('[data-secret-form]').getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
+  await page.getByRole('button', { name: '提供 / 更换 Token（本次服务）', exact: true }).click();
+  await page
+    .getByText('Token 已提供，仅在本次服务内存。下一步点击只读验证，尚未创建或修改 Issue。', { exact: true })
+    .waitFor();
   await page.getByRole('button', { name: '验证平台接口（只读）', exact: true }).click();
   await page.getByText(/项目 API 只读核验通过/).waitFor();
   const connection = await projects.connection(),
@@ -68,9 +123,19 @@ try {
   assert.equal(await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token), false);
   await page.reload();
   assert.equal(await page.locator('input[type="password"]').inputValue(), '');
+  await git(f.review, ['commit', '--allow-empty', '-m', 'internal history after initial import']);
+  await git(f.review, ['push', 'origin', 'main']);
+  const currentInternal = await git(f.review, ['rev-parse', 'HEAD']);
   await page.getByRole('button', { name: '读取两侧当前版本', exact: true }).click();
   await page.locator('#upstream').fill(f.u0);
   await page.locator('#internal').fill(f.i0);
+  await page.getByRole('button', { name: '核验并登记已有基线', exact: true }).click();
+  await page.locator('[data-field-error="internal"]').waitFor({ timeout: 30000 });
+  assert.equal(await receiver.status(), null);
+  await page.getByRole('button', { name: '读取两侧当前版本', exact: true }).click();
+  await page.getByText(/读取成功：外部最新/).waitFor();
+  assert.equal(await page.locator('#upstream').inputValue(), f.u0);
+  assert.equal(await page.locator('#internal').inputValue(), currentInternal);
   await page.getByRole('button', { name: '核验并登记已有基线', exact: true }).click();
   await page.getByRole('button', { name: '进入同步工作台 →', exact: true }).click();
   await receiver.setQueue(f.plans);
@@ -103,7 +168,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: grouped repository configuration, direct private Token, parsed project path, API host differs from web, inline closure guidance after adoption, two real Git PRs via API, shared Issue association/closure, refresh and desktop/mobile.',
+    'PASS: field-level errors, submitted form isolation, focus and disclosure recovery, no config changes on failure, private Token and draft recovery, encoded project path and trailing API slash, grouped configuration, API and web host separation, two real Git PRs, shared Issue association/closure, refresh and desktop/mobile.',
   );
 } catch (error) {
   await page.screenshot({ path: join(evidence, 'connection-failure.png'), fullPage: true });

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
 import { fail, validateConfig } from './config.mjs';
-import { readConflict, resolveConflict } from './conflicts.mjs';
+import { configurationErrors } from './configuration-errors.mjs';
 import { continuousPreview } from './continuous-preview.mjs';
 import { execution, phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
@@ -71,7 +71,7 @@ export class Receiver {
       await phase('baseline-check', '核验 U0 / I0 与历史', async () => {
         upstream = await this.git.sha(upstream);
         internal = await this.git.sha(internal);
-        if (heads.internal !== internal) fail('STALE_INTERNAL_HEAD', '内部基线不是当前 main，重新读取后确认');
+        if (heads.internal !== internal) configurationErrors([['internal', 'head']], 'STALE_INTERNAL_HEAD');
         if (!(await this.git.isAncestor(upstream, heads.upstream)))
           fail('BASELINE_HISTORY_MISMATCH', 'U0 不在外部交付分支历史中，请重新选择上次已同步版本；未登记基线');
         if (this.config.mode === 'version') await this.git.baseline(upstream, internal);
@@ -284,12 +284,6 @@ export class Receiver {
   }
   cancelVersion() {
     return phase('version-cancel', '撤销未发布交付并保留历史', () => cancelVersion(this));
-  }
-  conflict(path) {
-    return readConflict(this, path);
-  }
-  resolve(path, choice, content) {
-    return phase('conflict-resolution', '保存原交付的冲突处理', () => resolveConflict(this, path, choice, content));
   }
 }
 function recordFailure(delivery, error, preserveError) {

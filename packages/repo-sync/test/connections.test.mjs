@@ -13,8 +13,8 @@ const fields = {
   internalUrl: 'git@codehub.example:team/core.git',
   sourceBranch: 'main',
   targetBranch: 'main',
-  internalPaths: ['internal-docs/'],
-  mergePaths: ['README.md'],
+  internalPaths: ['internal-docs/', 'README.md'],
+  mergePaths: [],
   commitClosureVerified: false,
   expectedRevision: null,
 };

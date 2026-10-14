@@ -56,12 +56,12 @@ try {
   assert.equal(original.expectedTarget, f.u1);
   await page.screenshot({ path: join(evidence, 'same-request-resend.png'), fullPage: true });
   await page.getByRole('button', { name: '重送原请求（保持同一标识）' }).click();
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).waitFor({ timeout: 30000 });
   assert.equal(startPosts, 2);
   const receiver = await connection.current();
   assert.equal((await receiver.status()).deliveries.length, 1);
   denyTerminal = true;
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.getByRole('heading', { name: '只补存执行记录' }).waitFor({ timeout: 30000 });
   assert.equal(await page.locator('#operation [data-operation-state="RUNNING"]').count(), 0);
   assert.equal((await receiver.status()).active.status, 'WAITING_APPROVAL');

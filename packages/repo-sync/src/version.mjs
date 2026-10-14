@@ -74,7 +74,7 @@ export async function cancelVersion(receiver) {
   });
 }
 export function versionTemplate(delivery) {
-  const descriptions = { internal: '保留内部版本', merge: '三方合并', upstream: '跟随上游' };
+  const descriptions = { internal: '完整保留内部版本', upstream: '跟随上游' };
   return {
     title: `[版本更新] ${delivery.source.tag}`,
     body: [

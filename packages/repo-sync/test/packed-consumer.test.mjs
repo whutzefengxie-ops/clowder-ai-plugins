@@ -35,6 +35,11 @@ test('packed plugin installs in a fresh consumer and launches exact stdio and we
   assert.equal(packed.name, '@clowder-ai/repo-sync');
   assert.ok(packed.files.some((file) => file.path === 'dist/mcp-entrypoint.mjs'));
   assert.ok(packed.files.some((file) => file.path === 'web/index.html'));
+  assert.ok(
+    packed.files.every(
+      (file) => !['dist/text-merge.mjs', 'dist/conflicts.mjs', 'web/conflict-draft.mjs'].includes(file.path),
+    ),
+  );
   assert.ok(packed.files.some((file) => file.path === 'npm-shrinkwrap.json'));
   assert.ok(packed.files.every((file) => !/^(test|examples|prototype)\//.test(file.path)));
   assert.ok(

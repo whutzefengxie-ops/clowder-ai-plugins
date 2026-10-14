@@ -47,13 +47,6 @@ function deliveryPolicy(snapshot, delivery) {
     ].includes(delivery.status)
   )
     return { stage: 0, text: '同步状态不受支持，请保留记录并核对版本，不能重新执行。' };
-  if (delivery.error?.code === 'CONTENT_CONFLICT')
-    return {
-      stage: 2,
-      text: '候选尚未发布。逐个处理下方冲突文件，再执行检查与推送。',
-      anchor: 'conflict-options',
-      label: '解决文件冲突 →',
-    };
   if (delivery.status === 'COMPLETE') return { stage: 5, text: '本笔同步已完成，内外对应与接收结果已保存。' };
   if (delivery.status === 'CANCELLED') return { stage: 2, text: '本笔已撤销。保留原记录，请返回当前同步选择新目标。' };
   const reference = referencePolicy(snapshot, delivery) ?? closurePolicy(snapshot, delivery);
@@ -146,7 +139,7 @@ function preparationPolicy(snapshot, delivery) {
       ? '请先在本机修正配置的项目检查，再检查同一个候选。'
       : '核对范围后执行代码准备、检查及候选发布。',
     action: 'prepare',
-    label: delivery.mode === 'version' ? '合并文件、检查并推送候选 →' : '检查并推送候选分支 →',
+    label: delivery.mode === 'version' ? '保留文件、检查并推送候选 →' : '检查并推送候选分支 →',
   };
 }
 

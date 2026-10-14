@@ -1,8 +1,8 @@
 import { nextAction } from './action-policy.mjs';
-import { restoreConflict, saveConflict } from './conflict-draft.mjs';
 import { captureDraft, configuration, repositoryInput, restoreDraft } from './connections.mjs';
 import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
 import { hydrateFiles } from './files.mjs';
+import { initializeFormErrors } from './form-errors.mjs';
 import { createHistory } from './history.mjs';
 import { createIssueAuthentication } from './issue-auth.mjs';
 import { issueSettings } from './issue-settings.mjs';
@@ -12,7 +12,6 @@ import { platformSettings, serviceLabel } from './platform.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { createProjectNavigation } from './projects.mjs';
 import { button, esc, sha, stageOf } from './ui.mjs';
-import { conflictEditor } from './version.mjs';
 import { workbench } from './workbench.mjs';
 import { actionBar, attempts } from './workflow.mjs';
 
@@ -68,7 +67,6 @@ function render() {
       ? `${configuration(snapshot, esc, sha, button)}${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}<div id="operation"></div><div id="error-slot"></div>`
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   content.querySelector('#error-slot')?.append(errorPanel);
-  restoreConflict(snapshot, content);
   restoreDraft(savedDraft());
   restoreExpansion();
   if (view === 'configuration') {
@@ -130,7 +128,8 @@ async function refresh() {
   render();
   operations.observe(snapshot.operation);
 }
-const action = (input) => operations.action(input);
+initializeFormErrors();
+const action = (input, form) => operations.action(input, form?.dataset.form);
 document.addEventListener('click', async (event) => {
   const element = event.target.closest('button, [data-reveal]');
   if (!snapshot || !element) return;
@@ -144,17 +143,6 @@ document.addEventListener('click', async (event) => {
       path: document.querySelector('[data-baseline-path]').value,
     });
     if (result) document.getElementById('baseline-file-content').innerHTML = baselineContent(result.result, esc);
-  }
-  if (element.dataset.conflictPath) {
-    const result = await action({
-      action: 'conflict',
-      path: element.dataset.conflictPath,
-    });
-    if (result) {
-      saveConflict(snapshot, result.result);
-      document.getElementById('conflict-editor').innerHTML = conflictEditor(result.result, esc);
-      saveDraft();
-    }
   }
   if (element.dataset.view) changeView(element.dataset.view);
   if (element.dataset.action) {
@@ -232,8 +220,8 @@ document.addEventListener('submit', async (event) => {
   if (input.action === 'configure')
     for (const key of ['internalPaths', 'mergePaths'])
       input[key] =
-        key === 'internalPaths' || fields.mode === 'version'
-          ? fields[key]
+        key === 'internalPaths' || fields.mergePaths
+          ? (fields[key] ?? '')
               .split(/\r?\n/)
               .map((value) => value.trim())
               .filter(Boolean)
@@ -250,7 +238,7 @@ document.addEventListener('submit', async (event) => {
         state: fields[issue.sourceId],
       })),
     };
-  const result = await action(input);
+  const result = await action(input, form);
   if (!(await issueAuthentication.complete(result, issueToken))) return;
   showConfigurationConfirmation(input.action, result);
 });
@@ -276,9 +264,7 @@ document.addEventListener('input', saveDraft);
 document.addEventListener('change', (event) => {
   if (event.target.matches('[name="mode"]')) {
     const form = event.target.closest('form');
-    const policy = form.querySelector('[data-merge-policy]');
     const closure = form.querySelector('[data-closure]');
-    if (policy) policy.hidden = event.target.value !== 'version';
     if (closure) closure.hidden = event.target.value === 'version';
   }
   saveDraft();

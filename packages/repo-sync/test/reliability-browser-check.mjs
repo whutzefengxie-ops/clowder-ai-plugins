@@ -49,7 +49,7 @@ try {
     await tree.getByText('file.txt', { exact: true }).waitFor();
     assert.equal(await tree.locator('.file-row').count(), 1);
     await page.screenshot({ path: join(evidence, 'file-tree.png') });
-    await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+    await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
     await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });
     const candidate = (await receiver.status()).active.candidate;
     await page.getByLabel('内部 PR 具体链接').fill('https://elsewhere.example/core/pull/1');
@@ -98,7 +98,7 @@ try {
     const tree = page.locator('[data-file-tree]').first();
     await page.getByText('完整文件差异（3）').click();
     await tree.getByLabel('搜索文件').fill('README.md');
-    await tree.getByRole('button', { name: '设为共同修改' }).click();
+    await tree.getByRole('button', { name: '完整保留内部' }).click();
     await tree.getByLabel('搜索文件').fill('OWNED.md');
     await tree.getByRole('button', { name: '完整保留内部' }).click();
     await tree.getByLabel('搜索文件').fill('guide.md');
@@ -106,7 +106,7 @@ try {
     await page.locator('[data-baseline-path]').selectOption('README.md');
     await page.getByRole('button', { name: '查看两侧文件内容' }).click();
     await page.locator('#baseline-file-content').getByText('内部联系说明', { exact: false }).waitFor();
-    assert.match(await page.getByLabel('共同修改的文件（每行一项）').inputValue(), /README.md/);
+    assert.match(await page.getByLabel('内部保留文件 / 目录（每行一项）').inputValue(), /README.md/);
     await page.getByRole('button', { name: '保存同步方式与规则' }).click();
     await page.getByText('同步方式与文件规则已保存，请登记已有基线。').waitFor();
     assert.equal(await page.getByLabel('外部已同步版本 U0（完整 SHA）').inputValue(), b.u0);

@@ -12,7 +12,6 @@ export async function dispatch(receiver, input, options = {}) {
       'pr',
       'clear-pr',
       'create-pr',
-      'resolve',
       'recover',
       'receipts',
       'cancel-version',
@@ -37,8 +36,6 @@ export async function dispatch(receiver, input, options = {}) {
     tags: () => receiver.tags(),
     'select-tag': () => receiver.selectTag(input.tag),
     'cancel-version': () => receiver.cancelVersion(),
-    conflict: () => receiver.conflict(input.path),
-    resolve: () => receiver.resolve(input.path, input.choice, input.content),
     'baseline-file': () => receiver.store.locked(() => baselineFile(receiver, input)),
   };
   if (!Object.hasOwn(actions, input.action)) fail('UNKNOWN_ACTION', '未知操作');

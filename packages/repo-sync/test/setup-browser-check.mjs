@@ -52,7 +52,7 @@ try {
   );
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByLabel('同步模式', { exact: true }).selectOption('continuous');
-  assert.equal(await page.locator('[name="commitClosureVerified"]').count(),0);
+  assert.equal(await page.locator('[name="commitClosureVerified"]').count(), 0);
   assert.ok(await page.getByLabel('Issue 创建与关单方式').isVisible());
   await page.getByLabel('同步模式', { exact: true }).selectOption('version');
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), '');
@@ -62,8 +62,8 @@ try {
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');
   await page.getByLabel('外部交付分支').fill('releases');
-  await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md');
-  await page.getByLabel('共同修改的文件（每行一项）').fill('README.md');
+  await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md\nREADME.md');
+  assert.equal(await page.locator('[name="mergePaths"]').count(), 0);
   await page.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
   await page.getByRole('alert').filter({ hasText: 'INVALID_URL' }).waitFor();
   assert.equal(await page.getByLabel('内部 Git 仓库地址').inputValue(), internal, 'error preserves draft');
@@ -98,7 +98,7 @@ try {
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
   await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
   await page.getByText('Git 基础完整性检查', { exact: false }).waitFor();
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
   await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
   await page.locator('[data-pr-confirm]').check();
@@ -115,7 +115,7 @@ try {
   const restarted = await createConnection(file);
   assert.equal((await (await restarted.current()).status()).accepted.tag, 'v2.0.0');
   assert.equal(restarted.describe().editable, false);
-  assert.match(await readFile(join(f.review, 'README.md'), 'utf8'), /新版介绍[\s\S]*内部联系说明/);
+  assert.equal(await readFile(join(f.review, 'README.md'), 'utf8'), '介绍\n\n运行说明\n\n内部联系说明\n');
   assert.equal(await readFile(join(f.review, 'internal-docs', 'guide.md'), 'utf8'), '内部独立说明\n');
   await page.reload();
   await page.getByRole('heading', { name: '当前已接收版本' }).waitFor();

@@ -38,8 +38,8 @@ export async function versionRepositories() {
       sourceBranch: 'releases',
       mode: 'version',
       commitClosureVerified: false,
-      internalPaths: ['internal-docs/', 'OWNED.md'],
-      mergePaths: ['README.md'],
+      internalPaths: ['internal-docs/', 'OWNED.md', 'README.md'],
+      mergePaths: [],
     },
   };
 }

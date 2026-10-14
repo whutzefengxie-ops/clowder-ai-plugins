@@ -12,7 +12,6 @@ import { issueForms } from './issues.mjs';
 import { prPanel } from './pr.mjs';
 import { receiptFields } from './receipts.mjs';
 import { esc, labels, sha, stageOf, title, when } from './ui.mjs';
-import { conflictOptions } from './version.mjs';
 
 const names = ['确认同步范围', '准备代码', '发布候选与创建 PR', '内部审核合入', '核验并保存结果'];
 
@@ -46,7 +45,7 @@ function substeps(stage, d, record, snapshot) {
             : '创建 / 复用并回读内部 Issue',
         d.mode === 'version' || mapped,
       ],
-      [d.mode === 'version' ? '保留内部文件、三方合并并构造候选' : '获取原始提交并构造候选', Boolean(d.candidate)],
+      [d.mode === 'version' ? '保留内部文件并构造核心一致的候选' : '获取原始提交并构造候选', Boolean(d.candidate)],
       [
         (d.checks?.profile ??
           record?.configurations.at(-1)?.snapshot.checkProfile ??
@@ -96,7 +95,7 @@ function substeps(stage, d, record, snapshot) {
 }
 function stageForm(stage, delivery, snapshot) {
   if (stage === 2 && delivery.status === 'CODE_PREPARE_REQUIRED')
-    return `${conflictOptions(delivery)}<button type="button" data-action="cancel-version">撤销未发布交付，重新选择版本</button><p>历史保留，已发布候选不能直接撤销。</p>`;
+    return '<button type="button" data-action="cancel-version">撤销未发布交付，重新选择版本</button><p>历史保留，已发布候选不能直接撤销。</p>';
   if (stage === 2 && delivery.status === 'ISSUES_REQUIRED')
     return `${closureSettings(snapshot, esc)}${authenticationForm(snapshot.config)}<div id="issue-mappings">${snapshot.config?.issueAutomation?.automatic ? autoIssuePanel(delivery, snapshot.state, esc) : issueForms(delivery, snapshot.state, esc)}</div>`;
   if (stage === 3 && ['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status)) return prPanel(snapshot, esc);

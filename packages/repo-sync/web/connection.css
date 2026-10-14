@@ -44,3 +44,34 @@
   display: block;
   margin: 16px 0;
 }
+[aria-invalid="true"] {
+  border: 2px solid #b03326;
+}
+.field-error {
+  display: block;
+  margin-top: 8px;
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.form-errors {
+  padding: 12px;
+  border: 1px solid #b03326;
+  border-radius: 8px;
+}
+.field-purpose {
+  display: block;
+  font-weight: 400;
+  color: #6f6258;
+}
+.issue-inference {
+  padding: 12px;
+  background: #fff3e7;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+[data-issue-advanced] {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}

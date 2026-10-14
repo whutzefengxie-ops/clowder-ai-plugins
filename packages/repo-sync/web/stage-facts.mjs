@@ -14,7 +14,7 @@ function scopeFacts(d, record, historical, snapshot) {
 function preparationFacts(d, record, historical, _snapshot) {
   return `${d.preview ? versionPreview(d, esc, sha) : ''}<p>候选 ${sha(d.candidate ?? '尚未构造')}<br>检查配置 ${esc(d.checks?.profile ?? '尚无检查结果')} · 已检查 head ${sha(d.checks?.head ?? '尚无检查结果')}</p>${
     historical
-      ? `<details><summary>本笔 Issue 映射与冲突处理</summary>${(record?.issues ?? []).map((issue) => `<p>${esc(issue.sourceId)} → ${esc(issue.mapping?.internalId ?? '未记录')}${issue.mapping?.url ? ` · <a href="${esc(issue.mapping.url)}" target="_blank" rel="noopener">内部 Issue ↗</a>` : ''}</p>`).join('') || '<p>版本模式无 Issue 搬运。</p>'}${Object.entries(
+      ? `<details><summary>本笔 Issue 映射与旧版处理记录</summary>${(record?.issues ?? []).map((issue) => `<p>${esc(issue.sourceId)} → ${esc(issue.mapping?.internalId ?? '未记录')}${issue.mapping?.url ? ` · <a href="${esc(issue.mapping.url)}" target="_blank" rel="noopener">内部 Issue ↗</a>` : ''}</p>`).join('') || '<p>版本模式无 Issue 搬运。</p>'}${Object.entries(
           d.resolutions ?? {},
         )
           .map(([path, value]) => `<p>${esc(path)} · ${esc(value.choice)}（内容保留在本机，不在记录列表展开）</p>`)
@@ -39,7 +39,7 @@ function configurationFacts(record, historical) {
   return `<details><summary>当时配置与来源</summary>${entries
     .map((entry) => {
       const c = entry.snapshot;
-      return `<article><h4>${when(entry.time)} · ${entry.source === 'start' ? '发起时冻结' : entry.source === 'configuration' ? '配置修改' : '执行时观察'}</h4><p>外部 ${esc(c.sourceUrl)} · ${esc(c.sourceBranch)}<br>内部 ${esc(c.internalUrl)} · ${esc(c.targetBranch)}<br>网页 ${esc(c.internalWebUrl ?? '未配置')}<br>模式 ${esc(c.mode)} · PR ${esc(c.prTransport)} · Issue ${esc(c.issueTransport ?? '未记录')}<br>保留路径 ${esc(c.internalPaths?.join('、') || '无')}<br>合并路径 ${esc(c.mergePaths?.join('、') || '无')}<br>检查 ${esc(c.checkProfile)}（${c.checkCount} 项）；摘要不包含命令与凭据。<br>配置指纹 ${sha(c.fingerprint)}</p></article>`;
+      return `<article><h4>${when(entry.time)} · ${entry.source === 'start' ? '发起时冻结' : entry.source === 'configuration' ? '配置修改' : '执行时观察'}</h4><p>外部 ${esc(c.sourceUrl)} · ${esc(c.sourceBranch)}<br>内部 ${esc(c.internalUrl)} · ${esc(c.targetBranch)}<br>网页 ${esc(c.internalWebUrl ?? '未配置')}<br>模式 ${esc(c.mode)} · PR ${esc(c.prTransport)} · Issue ${esc(c.issueTransport ?? '未记录')}<br>保留路径 ${esc(c.internalPaths?.join('、') || '无')}${c.mergePaths?.length ? `<br>旧版共同文件规则（已停用）：${esc(c.mergePaths.join('、'))}` : ''}<br>检查 ${esc(c.checkProfile)}（${c.checkCount} 项）；摘要不包含命令与凭据。<br>配置指纹 ${sha(c.fingerprint)}</p></article>`;
     })
     .join(
       '',

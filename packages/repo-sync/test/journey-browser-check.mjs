@@ -27,7 +27,7 @@ try {
   await page.locator('[name="tag"]').selectOption('v2.0.0');
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
   await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
   assert.equal(await page.locator('[data-stage]').count(), 5);
   assert.equal(await page.locator('main > #operation').count(), 0, 'execution belongs inside a stage');
@@ -89,21 +89,26 @@ try {
     completedTasks,
     'new selection cannot rewrite completed history',
   );
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
-  await page.getByRole('heading', { name: '解决共同文件冲突' }).waitFor({ timeout: 30000 });
-  assert.equal(await page.locator('[data-stage="2"][data-stage-state="failed"]').count(), 1);
-  await page.getByText(/冲突文件（/).click();
-  await page.getByRole('button', { name: '查看并处理冲突' }).click();
-  await page.getByLabel('处理方式').selectOption('manual');
-  await page.getByLabel('人工合并后的完整内容').fill('draft preserved across history and reload\n');
+  const originalChecks = receiver.git.checks.bind(receiver.git);
+  let failCheck = true;
+  receiver.git.checks = async (head) => {
+    if (failCheck) {
+      failCheck = false;
+      throw Object.assign(new Error('synthetic one-time check failure'), { code: 'COMMAND_FAILED' });
+    }
+    return originalChecks(head);
+  };
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
+  await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
+  const failedCandidate = (await receiver.status()).active.candidate;
   await page.locator(`[data-record="${active.id}"]`).click();
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
+  await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
   await page.reload();
-  assert.equal(
-    await page.getByLabel('人工合并后的完整内容').inputValue(),
-    'draft preserved across history and reload\n',
-  );
-  await page.getByRole('button', { name: '保存此冲突处理结果' }).click();
+  await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
+  assert.equal(await page.locator('[data-stage="2"][data-stage-state="failed"]').count(), 1);
+  assert.equal((await receiver.status()).active.candidate, failedCandidate);
+  assert.equal(await page.locator('[data-form="resolve"], [name="mergePaths"]').count(), 0);
   const checks = receiver.git.checks.bind(receiver.git);
   const gate = new Promise((done) => {
     releaseCheck = done;
@@ -114,7 +119,7 @@ try {
     await gate;
     return checks(head);
   };
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.waitForFunction(() => document.querySelector('[data-operation-state="RUNNING"]'));
   await page.locator(`[data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
@@ -130,7 +135,11 @@ try {
   );
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
-  assert.ok((await page.locator('[data-stage="2"] [data-attempt]').count()) >= 3);
+  assert.equal(
+    await page.locator('[data-stage="2"] [data-attempt]').count(),
+    2,
+    'one failed check and one recovery remain visible without a removed resolution action',
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   const bar = await page.locator('.next-action').boundingBox();
   assert.ok(bar.y + bar.height <= 844 && bar.y > 0);

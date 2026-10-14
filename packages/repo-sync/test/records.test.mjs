@@ -29,7 +29,7 @@ async function fixture() {
     targetBranch: 'main',
     mode: 'version',
     internalPaths: ['internal/'],
-    mergePaths: ['README.md'],
+    mergePaths: [],
     stateDir: folder,
     checks: [{ command: 'git', args: ['fsck', '--no-reflogs'] }],
     checkProfile: 'git-integrity',
@@ -202,7 +202,8 @@ test('new delivery freezes the actual configuration and observation times, not l
   const delivery = (await receiver.status()).active;
   assert.equal(delivery.recordSchema, 1);
   assert.equal(delivery.configurations[0].snapshot.sourceBranch, 'releases');
-  assert.deepEqual(delivery.configurations[0].snapshot.mergePaths, ['README.md']);
+  assert.deepEqual(delivery.configurations[0].snapshot.mergePaths, []);
+  assert.ok(delivery.configurations[0].snapshot.internalPaths.includes('README.md'));
   assert.ok(Number.isFinite(Date.parse(delivery.startedAt)));
   receiver.config.internalWebUrl = 'https://different.example/team/core';
   assert.equal((await receiver.status()).active.configurations[0].snapshot.internalWebUrl, undefined);

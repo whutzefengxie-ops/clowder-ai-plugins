@@ -6,7 +6,7 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
-test('version: binary conflicts offer one-side choice and preserve exact blob bytes', async () => {
+test('version: declared internal binary file is preserved by exact blob while the upstream core is received', async () => {
   const f = await versionRepositories();
   await writeFile(join(f.source, 'README.md'), Buffer.from([1, 0, 2]));
   await git(f.source, ['add', '.']);
@@ -20,15 +20,13 @@ test('version: binary conflicts offer one-side choice and preserve exact blob by
   await receiver.adopt(f.u0, await git(f.review, ['rev-parse', 'HEAD']));
   await receiver.selectTag('v3.0.0');
   await receiver.start();
-  await assert.rejects(() => receiver.prepare(), { code: 'CONTENT_CONFLICT' });
-  assert.equal((await receiver.conflict('README.md')).editable, false);
-  await receiver.resolve('README.md', 'upstream');
   await receiver.prepare();
   const delivery = (await receiver.status()).active;
   assert.equal(
     await git(receiver.git.directory, ['rev-parse', `${delivery.candidate}:README.md`]),
-    await git(f.source, ['rev-parse', 'HEAD:README.md']),
+    await git(f.review, ['rev-parse', 'HEAD:README.md']),
   );
+  assert.equal(await git(receiver.git.directory, ['show', `${delivery.candidate}:core.txt`]), 'release two');
 });
 test('version: tag change during checks blocks publication of a previously built candidate', async () => {
   const f = await versionRepositories();

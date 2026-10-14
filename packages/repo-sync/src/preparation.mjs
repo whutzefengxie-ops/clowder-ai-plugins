@@ -33,7 +33,7 @@ export async function prepareDelivery(receiver, state) {
   if (heads.internal !== delivery.base.internal) fail('RECOVERY_FIRST', 'main 已前进，先核对原交付合入结果');
   await sourceStillValid(receiver, delivery, heads);
   delivery.candidate ??= await phase('candidate-build', '构造同步候选', () =>
-    receiver.git.candidate(delivery.base, delivery.target, delivery.id, delivery.resolutions),
+    receiver.git.candidate(delivery.base, delivery.target, delivery.id),
   );
   await receiver.store.save(state);
   delivery.checks = await phase(

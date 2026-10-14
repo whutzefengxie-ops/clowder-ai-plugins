@@ -1,3 +1,5 @@
+import { updateIssueInference } from './issue-inference.mjs';
+
 export function tokenField() {
   return '<label>内部平台 Token<input type="password" name="issueToken" autocomplete="off" placeholder="输入 Token，不回显原值"></label><p>仅供当前项目的平台 API 使用；只保留在本次服务内存，重启后需要重新输入，不保存到浏览器草稿、配置或执行记录。</p>';
 }
@@ -83,6 +85,10 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
     if (['issueMode', 'issueAuthMode', 'prMode', 'mode'].includes(event.target.name))
       updateIssueFields(event.target.closest('form'));
   });
+  document.addEventListener('input', (event) => {
+    if (['internalWebUrl', 'issuePageUrl', 'issueApiUrl', 'issueProjectId'].includes(event.target.name))
+      updateIssueInference(event.target.closest('form'));
+  });
   return { take, set, submit, provide, complete: (result, token) => (result && token ? provide(token) : true) };
 }
 export function updateIssueFields(form) {
@@ -102,4 +108,5 @@ export function updateIssueFields(form) {
     environment = form.querySelector('[data-issue-environment]');
   if (direct) direct.hidden = auth === 'environment';
   if (environment) environment.hidden = auth !== 'environment';
+  updateIssueInference(form);
 }

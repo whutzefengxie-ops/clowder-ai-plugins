@@ -38,7 +38,6 @@ const assets = new Map([
     'workflow.mjs',
     'workbench.mjs',
     'action-policy.mjs',
-    'conflict-draft.mjs',
     'stage-facts.mjs',
     'attempts.mjs',
     'actionbar.mjs',
@@ -52,6 +51,8 @@ const assets = new Map([
     'repository-fields.mjs',
     'closure-settings.mjs',
     'issue-auth.mjs',
+    'form-errors.mjs',
+    'issue-inference.mjs',
     'connection.css',
   ].map((file) => [`/${file}`, file]),
 ]);

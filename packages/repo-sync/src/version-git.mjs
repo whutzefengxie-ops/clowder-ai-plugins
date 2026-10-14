@@ -5,7 +5,6 @@ import { phase } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
 import { matches } from './policy.mjs';
 import { git } from './process.mjs';
-import { mergeEntry } from './text-merge.mjs';
 import { assertProjection, entries } from './trees.mjs';
 
 export class VersionGitReceiver extends GitReceiver {
@@ -16,7 +15,7 @@ export class VersionGitReceiver extends GitReceiver {
   async baseline(upstream, internal) {
     return assertProjection(this.directory, upstream, internal, this.config);
   }
-  async candidate(accepted, target, id, resolutions = {}) {
+  async candidate(accepted, target, id) {
     const { source, local } = await this.baseline(accepted.upstream, accepted.internal);
     if (!(await this.isAncestor(accepted.upstream, target))) fail('VERSION_NOT_FORWARD', '目标版本不包含上次接收版本');
     await this.checkContent(target);
@@ -35,9 +34,6 @@ export class VersionGitReceiver extends GitReceiver {
     await index(['read-tree', target]);
     await phase('internal-preserve', '保留内部专有文件', () =>
       preserveFiles(index, source, local, incoming, this.config.internalPaths),
-    );
-    await phase('file-merge', '三方合并共同文件', () =>
-      mergeFiles(index, this.directory, folder, source, local, incoming, this.config.mergePaths, resolutions),
     );
     const tree = await index(['write-tree']);
     const head = await this.mergeNode(tree, [accepted.internal], `repo-sync version ${id}`);
@@ -77,27 +73,4 @@ async function preserveFiles(index, source, local, incoming, rules) {
       }
     }
   }
-}
-async function mergeFiles(index, directory, folder, source, local, incoming, paths, resolutions) {
-  const conflicts = [];
-  for (const [number, path] of paths.entries()) {
-    try {
-      const entry = await mergeEntry(
-        directory,
-        join(folder, `file-${number}`),
-        path,
-        source.get(path),
-        local.get(path),
-        incoming.get(path),
-        resolutions[path],
-      );
-      if (entry) await index(['update-index', '--add', '--cacheinfo', entry.mode, entry.object, path]);
-      else await index(['update-index', '--force-remove', '--', path]);
-    } catch (error) {
-      if (error.code !== 'CONTENT_CONFLICT') throw error;
-      conflicts.push(path);
-    }
-  }
-  if (conflicts.length)
-    fail('CONTENT_CONFLICT', '共同修改文件存在冲突，候选尚未推送；请逐个解决后重试', { paths: conflicts });
 }

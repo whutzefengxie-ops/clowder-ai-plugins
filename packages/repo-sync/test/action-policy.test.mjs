@@ -11,7 +11,7 @@ test('action guidance never turns unknown status, PR correction, or history into
     'pr-form',
   );
   assert.equal(nextAction(snapshot, d, true).action, undefined);
-  assert.equal(nextAction(snapshot, { ...d, error: { code: 'CONTENT_CONFLICT' } }).anchor, 'conflict-options');
+  assert.equal(nextAction(snapshot, { ...d, error: { code: 'INTERNAL_PATH_COLLISION' } }).stage, 2);
   assert.equal(nextAction(snapshot, { ...d, status: 'PUSH_RESULT_UNKNOWN' }).action, 'recover');
 });
 test('stop uncertainty and record persistence take priority over otherwise valid business actions', () => {

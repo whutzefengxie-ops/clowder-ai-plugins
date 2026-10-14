@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fail } from './config.mjs';
+import { publicFieldErrors } from './configuration-errors.mjs';
 
 const scope = new AsyncLocalStorage();
 export const execution = () => scope.getStore();
@@ -31,13 +32,15 @@ export function safeError(error) {
       code: 'OPERATION_FAILED',
       message: '操作未完成，请在本机核对工具、目录权限和当前步骤；原始输出不会写入执行记录',
     };
+  const fields = publicFieldErrors(error.details?.fields);
   return {
     code: /^[A-Z_]+$/.test(error.code ?? '') ? error.code : 'OPERATION_FAILED',
     message: error.code ? error.message : '操作未完成，请核对当前步骤；原始输出保留在本机环境',
-    ...(error.details?.paths
+    ...(error.details?.paths || fields.length
       ? {
           details: {
-            paths: error.details.paths,
+            ...(error.details?.paths ? { paths: error.details.paths } : {}),
+            ...(fields.length ? { fields } : {}),
             ...(error.details.differences
               ? {
                   differences: error.details.differences.map(

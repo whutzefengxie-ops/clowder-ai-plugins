@@ -117,12 +117,7 @@ function normalizeCheckProfile(config) {
 function validateMode(config) {
   config.mode ??= 'continuous';
   if (!['continuous', 'version'].includes(config.mode)) fail('INVALID_MODE', '同步模式需要 continuous 或 version');
-  if (config.mode === 'version') Object.assign(config, versionPolicy(config));
-  else {
-    if (config.mergePaths?.length)
-      fail('INVALID_POLICY', '开发过程同步仅允许显式保留路径，共同文件三方合并请使用版本模式');
-    Object.assign(config, versionPolicy({ internalPaths: config.internalPaths, mergePaths: [] }));
-  }
+  Object.assign(config, versionPolicy(config));
 }
 function checkStateLocation(config) {
   for (const repository of [config.sourceUrl, config.internalUrl].filter(isAbsolute)) {

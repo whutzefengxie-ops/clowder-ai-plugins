@@ -17,10 +17,10 @@ const config = {
 test('version policy: path traversal, wildcard, Git internals and overlaps are rejected; mode binds the policy', () => {
   for (const path of ['../secret', '/absolute', 'C:/secret', '.git/config', 'docs/**', 'docs//a', 'docs/./a', 'a\\b'])
     assert.throws(() => validateConfig({ ...config, internalPaths: [path] }), { code: 'INVALID_POLICY' });
-  assert.throws(() => validateConfig({ ...config, internalPaths: ['docs/'], mergePaths: ['docs/a.md'] }), {
+  assert.throws(() => validateConfig({ ...config, internalPaths: ['docs/', 'docs/a.md'] }), {
     code: 'INVALID_POLICY',
   });
-  assert.throws(() => validateConfig({ ...config, mergePaths: ['docs/'] }), { code: 'INVALID_POLICY' });
+  assert.throws(() => validateConfig({ ...config, mergePaths: ['docs/'] }), { code: 'UNSUPPORTED_MERGE_POLICY' });
   assert.notEqual(
     validateConfig(config).bindingId,
     validateConfig({ ...config, internalPaths: ['internal/'] }).bindingId,
@@ -41,5 +41,7 @@ test('version settings: mode choice survives restart; adopted policy cannot be s
   await receiver.adopt(f.u0, f.i0);
   await assert.rejects(() => configure(receiver, { mode: 'continuous' }), { code: 'ALREADY_ADOPTED' });
   await assert.rejects(() => configuredReceiver({ ...f.config, internalPaths: [] }), { code: 'MODE_CONFLICT' });
-  await assert.rejects(() => new Receiver({ ...f.config, mergePaths: [] }).read(), { code: 'BINDING_CONFLICT' });
+  await assert.rejects(() => new Receiver({ ...f.config, internalPaths: ['internal-docs/', 'OWNED.md'] }).read(), {
+    code: 'BINDING_CONFLICT',
+  });
 });

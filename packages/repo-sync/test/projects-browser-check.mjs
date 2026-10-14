@@ -97,7 +97,7 @@ try {
   await page.locator('[name="tag"]').selectOption('v2.0.0');
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
   await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   const cb = await projects.connection(id),
     rb = await cb.current();
   await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });

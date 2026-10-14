@@ -34,7 +34,7 @@ try {
   assert.equal((await connection.current()).config.pullRequests.mode, 'git');
   assert.equal((await (await connection.current()).status()).initial.upstream, f.u0);
   await page.getByRole('button', { name: '同步工作台', exact: true }).click();
-  await page.getByRole('button', { name: '合并文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
   assert.equal(await page.locator('[data-form="pr"]:visible').count(), 0);
   assert.equal(
