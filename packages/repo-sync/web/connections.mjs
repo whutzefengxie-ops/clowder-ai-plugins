@@ -1,3 +1,4 @@
+import { fileRuleFields } from './file-rule-fields.mjs';
 import { updateIssueFields } from './issue-auth.mjs';
 import { issueFields } from './issue-settings.mjs';
 import { prCreationFields, prCreationSummary } from './platform.mjs';
@@ -9,7 +10,7 @@ export function firstUse() {
 }
 function connectionForm(config, connection, esc) {
   const version = !config || config.mode === 'version';
-  return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection.revision ?? '')}">${repositoryFields(config, esc)}${prCreationFields(config)}<label for="repository-mode">同步模式</label><select id="repository-mode" name="mode"><option value="version" ${version ? 'selected' : ''}>按 tag 更新 · 保留内部差异 · 一个同步 PR</option><option value="continuous" ${version ? '' : 'selected'}>同步开发过程 · 搬运 Issue / PR · 核心文件完全一致</option></select><div data-policy><label>内部保留文件 / 目录（每行一项）<textarea name="internalPaths" rows="3" placeholder="internal-docs/&#10;README.internal.md">${esc((config?.internalPaths ?? []).join('\n'))}</textarea></label><p>两种模式都只支持完整保留内部路径；这些文件的外部更新也会跳过。目录以 / 结尾，不支持通配符，其余核心文件必须与外部严格一致。</p></div>${issueFields({ ...config, mode: version ? 'version' : 'continuous' }, esc)}${prCreationSummary(config)}<p>默认只执行 <b>Git 基础完整性检查</b>（git fsck）。项目构建、单元测试和插件兼容检查需要在本地私有 JSON 的 checks 中补充。网页不接受执行命令。</p><button class="primary" type="submit">保存仓库配置，继续核验基线 →</button></form>`;
+  return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection.revision ?? '')}">${repositoryFields(config, esc)}${prCreationFields(config)}<label for="repository-mode">同步模式</label><select id="repository-mode" name="mode"><option value="version" ${version ? 'selected' : ''}>按 tag 更新 · 保留内部差异 · 一个同步 PR</option><option value="continuous" ${version ? '' : 'selected'}>同步开发过程 · 搬运 Issue / PR · 核心文件完全一致</option></select><div data-policy>${fileRuleFields(config?.internalPaths)}</div>${issueFields({ ...config, mode: version ? 'version' : 'continuous' }, esc)}${prCreationSummary(config)}<p>默认只执行 <b>Git 基础完整性检查</b>（git fsck）。项目构建、单元测试和插件兼容检查需要在本地私有 JSON 的 checks 中补充。网页不接受执行命令。</p><button class="primary" type="submit">保存仓库配置，继续核验基线 →</button></form>`;
 }
 function summary(config, esc) {
   return `<div class="split"><div><small>外部来源</small>${esc(config.sourceUrl)}<p>交付分支：${esc(config.sourceBranch)}</p></div><div><small>内部接收</small>${esc(config.internalUrl)}<p>合入分支：${esc(config.targetBranch)}</p></div></div><p>同步方式：${config.mode === 'version' ? '按 tag 更新，只创建一个内部同步 PR' : '按 main 的 PR 落地顺序接收开发过程'}</p>${`<p>内部保留：${esc((config.internalPaths ?? []).join('、') || '无')}</p>`}`;

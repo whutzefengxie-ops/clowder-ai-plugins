@@ -62,3 +62,15 @@ export function setIssueToken(config, token, owner) {
 export function clearIssueTokens(owner) {
   for (const [id, value] of sessions) if (value.owner === owner) sessions.delete(id);
 }
+export function retainIssueToken(previous, next) {
+  const value = session(previous);
+  if (!value || identity(apiSettings(previous)) !== identity(apiSettings(next))) return;
+  if (
+    ['sourceUrl', 'internalUrl', 'internalWebUrl', 'sourceBranch', 'targetBranch'].some(
+      (field) => previous[field] !== next[field],
+    )
+  )
+    return;
+  sessions.set(key(next), value);
+  if (key(previous) !== key(next)) sessions.delete(key(previous));
+}

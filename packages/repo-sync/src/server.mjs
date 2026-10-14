@@ -54,6 +54,10 @@ const assets = new Map([
     'form-errors.mjs',
     'issue-inference.mjs',
     'connection.css',
+    'file-rules.mjs',
+    'file-rule-fields.mjs',
+    'file-rule-selection.mjs',
+    'file-rules.css',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -141,9 +145,14 @@ async function post(receiver, options, token, input, response) {
   } else if (input.action === 'configure') receiver = await configure(receiver, input);
   else result = await dispatch(receiver, input, options);
   if (
-    ['configure', 'configure-repositories', 'configure-pr', 'configure-issues', 'configure-closure'].includes(
-      input.action,
-    )
+    [
+      'configure',
+      'configure-repositories',
+      'configure-file-rules',
+      'configure-pr',
+      'configure-issues',
+      'configure-closure',
+    ].includes(input.action)
   )
     await get(receiver, options, token, '/api/status', response);
   else

@@ -1,6 +1,7 @@
 :root {
   font-family: system-ui, "Microsoft YaHei", sans-serif;
-  color: #24211e;
+  color: var(--text);
+  --text: #24211e;
   background: #fcfaf7;
   --line: #e5ded6;
   --accent: #aa4c08;

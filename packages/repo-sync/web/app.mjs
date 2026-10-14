@@ -1,7 +1,7 @@
 import { nextAction } from './action-policy.mjs';
 import { captureDraft, configuration, repositoryInput, restoreDraft } from './connections.mjs';
-import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
-import { hydrateFiles } from './files.mjs';
+import { baselineContent, diagnostics } from './diagnostics.mjs';
+import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
 import { createHistory } from './history.mjs';
 import { createIssueAuthentication } from './issue-auth.mjs';
@@ -74,7 +74,7 @@ function render() {
     const panel = diagnostics(snapshot.operation?.error, snapshot, esc);
     if (panel) (baseline ?? content).insertAdjacentHTML(baseline ? 'beforeend' : 'afterbegin', panel);
   }
-  hydrateFiles(content);
+  hydrateFileRules();
   onTask(snapshot.operation);
   operations.lock();
 }
@@ -130,11 +130,11 @@ async function refresh() {
 }
 initializeFormErrors();
 const action = (input, form) => operations.action(input, form?.dataset.form);
+initializeFileRules({ snapshot: () => snapshot, action, saveDraft, errorPanel });
 document.addEventListener('click', async (event) => {
   const element = event.target.closest('button, [data-reveal]');
   if (!snapshot || !element) return;
   await navigate(element);
-  if (element.dataset.rulePath) stageRule(element);
   if (element.hasAttribute('data-baseline-read')) {
     const result = await action({
       action: 'baseline-file',
@@ -142,7 +142,11 @@ document.addEventListener('click', async (event) => {
       internal: element.dataset.internal,
       path: document.querySelector('[data-baseline-path]').value,
     });
-    if (result) document.getElementById('baseline-file-content').innerHTML = baselineContent(result.result, esc);
+    if (result) {
+      const viewer = document.getElementById('baseline-file-content');
+      viewer.innerHTML = baselineContent(result.result, esc);
+      viewer.closest('details').open = true;
+    }
   }
   if (element.dataset.view) changeView(element.dataset.view);
   if (element.dataset.action) {

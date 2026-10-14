@@ -62,6 +62,7 @@ try {
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');
   await page.getByLabel('外部交付分支').fill('releases');
+  await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md\nREADME.md');
   assert.equal(await page.locator('[name="mergePaths"]').count(), 0);
   await page.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();

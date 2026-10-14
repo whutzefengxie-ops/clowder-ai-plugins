@@ -1,4 +1,5 @@
 import { captureDraft, restoreDraft } from './connections.mjs';
+import { hydrateFileRules } from './file-rules.mjs';
 import { clearConfigurationErrors, showConfigurationError } from './form-errors.mjs';
 import { renderTask } from './operation-view.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
@@ -31,9 +32,10 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
   let retryingOriginal = false;
   function lock() {
     for (const element of document.querySelectorAll(
-      'button[data-action], [data-rule-path], [data-baseline-read], form button, input, textarea, select',
+      'button[data-action], [data-save-file-rules], [data-remove-rule], [data-baseline-read], form button, input, textarea, select',
     ))
-      if (!element.closest('.record-list, [data-project-navigation]')) element.disabled = busy;
+      if (!element.closest('.record-list, [data-project-navigation]'))
+        element.disabled = busy || element.hasAttribute('data-preserve-disabled');
   }
   function show(task) {
     current = task;
@@ -174,6 +176,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
         const configure = [
           'configure',
           'configure-repositories',
+          'configure-file-rules',
           'configure-pr',
           'configure-issues',
           'configure-closure',
@@ -192,8 +195,11 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
       watching = null;
       busy = false;
       await refresh();
-      if (['heads', 'baseline-file', 'conflict', 'configure', 'configure-repositories'].includes(input.action))
+      if (
+        ['heads', 'baseline-file', 'configure', 'configure-repositories', 'configure-file-rules'].includes(input.action)
+      )
         restoreDraft(drafts);
+      hydrateFileRules();
       return value;
     } catch (error) {
       watching = null;
@@ -204,6 +210,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
         /* Preserve the visible form if the server is unavailable. */
       }
       restoreDraft(drafts);
+      hydrateFileRules();
       lock();
       showConfigurationError(formKind, error, errorPanel);
     } finally {

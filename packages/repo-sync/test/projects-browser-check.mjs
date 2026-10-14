@@ -80,6 +80,7 @@ try {
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://internal.example/other');
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
   await page.getByLabel('同步模式', { exact: true }).selectOption('version');
+  await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('README.md');
   await page.getByLabel('当前同步项目').selectOption('default');
   await page.getByRole('heading', { name: '初始对应', exact: true }).waitFor();

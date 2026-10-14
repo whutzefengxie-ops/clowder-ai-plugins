@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { dispatch } from './actions.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
+import { retainIssueToken } from './issue-auth.mjs';
 import { checkIssueSettings, issueConfiguration, issueInputKeys } from './issue-settings.mjs';
 import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
@@ -87,6 +88,7 @@ export async function createConnection(file, options = {}) {
   }
   const editors = new Map([
     ['configure-repositories', save],
+    ['configure-file-rules', saveFileRules],
     ['configure-pr', savePlatform],
     ['configure-issues', saveIssues],
     ['configure-closure', saveClosure],
@@ -112,6 +114,30 @@ export async function createConnection(file, options = {}) {
         return dispatch(bound, input, options);
       }),
   };
+  async function saveFileRules(input) {
+    if (
+      Object.keys(input).some(
+        (key) => !['action', 'expectedRevision', 'expectedBinding', 'internalPaths'].includes(key),
+      )
+    )
+      fail('INVALID_CONFIGURATION_INPUT', '文件树只接受内部保留路径，不能修改仓库或执行命令');
+    await current();
+    if (!receiver || input.expectedRevision !== revision || input.expectedBinding !== receiver.config.bindingId)
+      fail('CONFIGURATION_CHANGED', '仓库或配置已变化，请刷新后重新核对文件差异，未覆盖原配置');
+    if (!editable)
+      fail('CONFIGURATION_READ_ONLY', '已启用或由本地文件管理的绑定不能从文件树修改规则，原配置与台账保留');
+    const previous = receiver.config;
+    const next = validateConfig({ ...previous, internalPaths: input.internalPaths, mergePaths: [] });
+    next.stateDir = stateDirectory(path, next.bindingId, options);
+    const candidate = await configuredReceiver(next);
+    if (await candidate.status()) fail('ALREADY_ADOPTED', '所选规则已有台账，请使用原配置继续，不能覆盖');
+    if ((await readPrivate(path)).revision !== revision) fail('CONFIGURATION_CHANGED', '私有配置已被修改，请刷新核对');
+    await writePrivate(path, next);
+    loaded = false;
+    const configured = await current();
+    retainIssueToken(previous, configured.config);
+    return configured;
+  }
   async function saveIssues(input) {
     await current();
     if (
