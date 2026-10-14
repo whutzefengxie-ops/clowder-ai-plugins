@@ -24,7 +24,7 @@ function row(item, rules, name, conflicts) {
   const blockage = item.kind === 'conflict' ? '× 冲突待解决' : '× 未声明差异';
   const action =
     rules && item.blocking
-      ? `<span class="file-actions"><button type="button" data-rule-path="${escapeHtml(item.path)}" data-rule-kind="internal">完整保留内部</button><button type="button" data-rule-path="${escapeHtml(item.path)}" data-rule-kind="merge">设为共同修改</button></span>`
+      ? `<span class="file-actions"><button type="button" data-rule-path="${escapeHtml(item.path)}" data-rule-kind="internal">完整保留内部</button>${rules === true ? `<button type="button" data-rule-path="${escapeHtml(item.path)}" data-rule-kind="merge">设为共同修改</button>` : ''}</span>`
       : '';
   return `<li class="file-row"><span title="${escapeHtml(item.path)}">${escapeHtml(name)}</span><small>${escapeHtml(labels[item.kind] ?? item.kind)} · ${item.blocking ? blockage : escapeHtml(labels[item.category] ?? '')}${item.sourceMode && item.internalMode && item.sourceMode !== item.internalMode ? ' · 文件类型/权限变化' : ''}</small>${action}${openConflict}</li>`;
 }
@@ -61,7 +61,13 @@ function render(root) {
     .slice(current.page * 50, (current.page + 1) * 50)
     .map((item) => ({ ...item, display: item.path }));
   root.querySelector('[data-tree-body]').innerHTML = visible.length
-    ? nodes(visible, root.dataset.rules === 'true', Boolean(query), 0, root.dataset.conflicts === 'true')
+    ? nodes(
+        visible,
+        root.dataset.rules === 'true' ? true : root.dataset.rules === 'internal' ? 'internal' : false,
+        Boolean(query),
+        0,
+        root.dataset.conflicts === 'true',
+      )
     : '<p>没有符合条件的文件。</p>';
   root.querySelector('[data-tree-count]').textContent =
     `${items.length} 个匹配文件 · 第 ${current.page + 1} / ${pages} 页`;

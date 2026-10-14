@@ -26,15 +26,15 @@ MCP 只提供 repo_sync_status 和 repo_sync_open_workbench。前者返回受限
 
 支持两种模式：`continuous`（默认）按 main 的实际 PR 落地顺序接收开发过程；`version` 按 tag 接收版本内容并保留声明的内部差异。下面原始对象和 Issue 搬运合同适用于 continuous。version 的内部候选是一次内容更新提交，不要求源 commit 成为内部历史祖先。
 
-外部 GitHub → 内部核心 Git 仓。既有仓库从上次接收的 U0 / 当前内部 I0 登记基线，之后按 main 实际落地范围接收。核心 tree 相同，上游原始对象保留；内部允许初始化衔接和正常接收 merge commit。所有数据保存在操作者指定的私有目录，不写回外部 GitHub。
+外部 GitHub → 内部核心 Git 仓。既有仓库从上次接收的 U0 / 当前内部 I0 登记基线，之后按 main 实际落地范围接收。除显式保留的内部路径外，核心 tree 相同，上游原始对象保留；内部允许初始化衔接和正常接收 merge commit。所有数据保存在操作者指定的私有目录，不写回外部 GitHub。
 
-本包实现真实 Git、持久台账、恢复和 localhost 工作台。内部只使用 Git：Issue 在平台人工创建；PR 可以通过 Git 扩展或私有命令适配器自动创建，在平台审核、合入和核对，界面生成来源模板并登记链接。它不伪造 Git 创建 Issue/PR 的命令，不自动合入、不推 main，也不声称读取了平台审批或关单状态。
+本包实现真实 Git、持久台账、恢复和 localhost 工作台。代码传输使用 Git；PR 通过平台 Git 扩展或私有命令适配器创建。过程模式的 Issue 自动化支持内置 GitLab 兼容 API，以及固定 JSON 命令适配器：自动创建或复用、关联具体 PR、合入核验后按条件更新状态并回读。未配置时明确展示人工模式。审核合入仍在平台完成，不自动合入或推 main。
 
 ## 启动正式服务
 
 ### 使用自己的仓库：空白配置入口
 
-这条入口执行真实 Git，没有预置演示数据或模拟 PR。需要 Node 24+、Git；开发过程模式还需要 GitHub CLI `gh`。本 PR 仍是 Alpha，Issue 仍在平台创建；PR 创建由所选 Git 扩展/命令适配器自动执行，平台策略与实际构建需使用方验证。
+这条入口执行真实 Git，没有预置演示数据或模拟 PR。需要 Node 24+、Git；开发过程模式还需要 GitHub CLI `gh`。本 PR 仍是 Alpha。PR 由所选 Git 扩展/命令适配器自动创建；Issue 由配置的 API/命令适配器自动处理，平台策略与实际构建需使用方验证。
 
 在插件包源码目录执行（路径是示例；配置必须放在所有 Git 工作仓、插件安装与 node_modules 目录之外）：
 
@@ -45,11 +45,11 @@ node src/cli.mjs setup "D:/private/repo-sync/config.json" 5220
 已安装 tgz 的使用方执行 `clowder-repo-sync setup "D:/private/repo-sync/config.json" 5220`。`serve` 也支持这条配置入口。启动只读取本机配置，不执行 Git、不创建演示仓库；首次文件可以不存在。打开终端打印的地址后：
 
 1. 点击**配置真实仓库**，填写外部 GitHub 与内部 Git 地址、两侧分支。使用本机 Git 的 HTTPS 凭据管理器或 SSH 密钥，不在网页填密码/Token。
-2. 选择方式：有内部 README 改动、新文件或插件目录时用**按 tag 更新**，列出内部保留路径与共同修改文件；需要逐笔原始 PR/Issue/commit 时用**同步开发过程**，核心文件须一致。
+2. 选择方式：有内部 README 改动、新文件或插件目录时用**按 tag 更新**，列出内部保留路径与共同修改文件；需要逐笔原始 PR/Issue/commit 时用**同步开发过程**，也可填写内部保留路径，其余核心文件须一致；该模式不支持共同文件三方合并。
 3. 确认 **PR 创建方式**：默认 Git 推送时自动创建；填写内部仓库网页地址以核对回执范围。平台使用其他推送选项时先在私有 JSON 配置。保存后点击**读取两侧当前版本**，使用 `git ls-remote` 轻量检查两侧连接、指定分支与 HEAD，此步不下载对象。HTTPS/SSH 认证需先在本机终端配置好，后台执行不提供交互式终端。内部候选分支写权限将在真正推送时核验；读取成功不证明可以推送或创建 PR。
 4. 填写上次已接收的外部 **U0** 和内部当前 **I0**，点击核验后才开始准备私有对象目录、下载所需历史并登记基线。例如内仓落后 20 个 commit，U0 是上次同步的 A，I0 是内仓当前 HEAD，不能把外部最新 HEAD 当 U0。SHA 可以不同；程序核验文件范围与历史。工具不能从相同内容唯一猜出此前接收版本。
-5. 进入工作台：版本模式读取 tag、选择目标版本；过程模式检查上游 PR/Issue。点击当前步骤按钮继续，程序只推候选分支，不合入 main。
-6. Git 自动模式在准备步骤推送并创建 PR，取得平台返回地址后直接进入审核；只在明确选择手工模式时，按模板创建并登记链接。在平台审核合入后回来点击**已在平台合入，核验 Git 结果**。版本模式随即完成；过程模式再保存人工核对的 Issue 接收记录。
+5. 进入工作台：版本模式读取 tag、选择目标版本；过程模式选择目标 tag、完整 commit SHA 或当前最新版本，读取范围内的 PR/Issue 清单，按合入顺序逐笔接收。点击当前步骤按钮继续，程序只推候选分支，不合入 main。
+6. Git 自动模式在准备步骤推送并创建 PR，取得平台返回地址后直接进入审核；只在明确选择手工模式时，按模板创建并登记链接。在平台审核合入后回来点击**已在平台合入，核验 Git 结果**。版本模式随即完成；过程模式在启用 Issue 自动化后会关联本笔 PR，实际合入核验后自动处理关单并保存平台回读结果；人工方式明确标记为人工登记。
 
 向导只写启动时指定的私有文件；台账分到同目录 `bindings/<绑定身份>/`，不上传外网。地址与规则只能在登记基线前编辑；已启用配置不可在网页覆盖。重启使用同一文件即可续接，另一组仓库使用另一私有配置文件。手工创建的旧配置继续可读，但向导不会覆盖，仍在本机 JSON 中维护。
 
@@ -81,7 +81,7 @@ node src/cli.mjs setup "D:/private/repo-sync/config.json" 5220
 
 基线失败在当前步骤展示完整文件报告，比较外部已同步 U0 与内部当前 I0，不把 U0 之后的正常外部更新算作内部差异。文件清单默认折叠，支持目录树、全量搜索、分类筛选和每页 50 项；共同修改、内部保留及未声明修改明确区分。
 
-首次登记前，可逐文件填入内部保留或共同修改的配置草稿，查看两侧文本，再保存规则并重新核验。选择内部保留会跳过该路径的外部更新；不会默认排除所有不同文件。连续模式须修正基线或通过内部修复 PR 恢复全树一致。已启用规则固定，新增定制须使用新的私有配置和核验后的基线；原台账与未完成交付保留。
+首次登记前，可逐文件填入内部保留或共同修改的配置草稿，查看两侧文本，再保存规则并重新核验。选择内部保留会跳过该路径的外部更新；不会默认排除所有不同文件。连续模式也可显式保留内部路径；未声明的核心差异须修正基线或通过内部修复 PR 处理。已启用规则固定，新增定制须使用新的私有配置和核验后的基线；原台账与未完成交付保留。
 
 PR 步骤先明确创建方式，再提供来源/目标分支、候选 SHA、标题和正文。人工登记需要确认已在平台创建并核对分支；没有平台接口时不声称网页存在性已验证。可以在等待审核阶段展开纠错，替换链接或撤销本机引用；要求旧链接仍匹配、候选未改变、内部 main 未前进。旧链接留在审计记录，不删除候选或平台 PR。已合入时先核验 Git 结果，不能重置。Issue 映射也支持候选冻结前、尚无接收记录的纠正；已使用映射不可改写。
 
@@ -173,6 +173,60 @@ clowder-repo-sync recover private-config.json
 
 冲突处理可用 `resolve private-config.json README.md internal`、`upstream` 或 `manual merged-readme.txt`。未发布的版本交付可用 `cancel-version` 撤销并重新选择；保留审计，已发布分支不允许撤销。网络结果不明仍先恢复原交付，不能另开重复版本。
 
+## 开发过程：目标边界与内部文件保留
+
+目标 tag / 完整 40 位 commit SHA 是本轮终点。工具读取 U0 到终点之间 main 的实际接受边界，不跳过中间 PR、不截断 PR。每次只准备并创建一个对应内部 PR；本笔合入和 Issue 接收完成后开放下一笔。所选终点、扫描时最新 HEAD 和已接受游标分开显示；完成较早 tag 不会显示为已接收全部最新更新。
+
+```json
+{"mode":"continuous","internalPaths":["README.md","README.cn.md","README.en.md","internal-docs/"],"mergePaths":[]}
+```
+
+例如外部 README.md 为英文、README.cn.md 为中文；内部 README.md 为中文、README.en.md 为英文，内部没有 README.cn.md。以上规则保留内部三条路径的内容及不存在状态，上游 README 更新不会覆盖或额外新增这些路径，其余核心文件严格跟随每笔 PR。填写仓库中实际路径，大小写敏感，不支持通配符。工具展示上游变化和内部差异，不自动忽略所有不同文件。
+
+规则贯穿基线、候选和合入检查，随绑定固定。已有台账不能静默加入新规则：保留原台账和未完成交付，为新规则使用独立私有配置 / 台账，并登记经过核验的 U0/I0。没有活动交付时，内部仅保留路径的后续提交可以经核验接管；活动交付期间 main 前进仍暂停核对。
+
+原始上游 Git 对象、消息和祖先不改写；额外接收节点使用“上游核心 + 内部保留路径”的文件树。外部原始 SHA 可追溯，内部接收 SHA 另记；不能说每个历史 commit 的保留文件都已改成内部版。仅文档变化的 PR 仍生成接收历史，不静默跳过；平台拒绝无内容差异 PR 时明确报错，不伪造成功。保留文件与上游核心目录冲突时指出路径，发布前停止。
+
+```bash
+clowder-repo-sync discover private-config.json tag v2.0.0
+clowder-repo-sync discover private-config.json commit <完整40位SHA>
+clowder-repo-sync discover private-config.json latest
+```
+
+标签对象 / commit 一并冻结，每笔执行和接受前重新验证。目标回退、不在配置分支、位于 PR 中间、标签移动 / 删除均暂停。活动交付存在时不能替换范围。
+
+## Issue 自动创建、关联和关单
+
+在“仓库设置 → Issue 自动化设置”选择实际方式。Git 推送扩展提供 PR，Git 本身不提供通用 Issue 命令；仅知道平台支持 Git，不能推断 Issue 协议。
+
+GitLab 兼容 API 可直接配置，无需另写适配器：网页填写 API 地址、项目 ID/路径、Token 环境变量名称。Token 只在启动服务的环境中设置，不填网页，不放仓库地址或配置正文。示例私有配置：
+
+```json
+{
+  "internalWebUrl":"https://internal.example/team/core",
+  "issues":{"mode":"gitlab","apiUrl":"https://internal.example/api/v4","projectId":"team/core","tokenEnv":"REPO_SYNC_INTERNAL_TOKEN","timeoutMs":30000}
+}
+```
+
+API 权限需支持读写项目 Issue、读取 MR 与更新其关联说明。程序完整查询稳定来源标记，创建后再次查询回读；关联时验证本笔 MR 的 head、源分支、目标分支及原生 related_merge_requests 回读。追加普通关联，不靠来源编号猜测关闭对象。依据：[Issue API](https://docs.gitlab.com/api/issues/)、[MR API](https://docs.gitlab.com/api/merge_requests/)。
+
+其他平台在本机私有 JSON 使用固定命令适配器，可在内部调用该平台真实 Git 扩展、CLI 或 API。网页不能提交 executable / args：
+
+```json
+{"issues":{"mode":"command","command":"D:/private/internal-issue-adapter.exe","args":[],"timeoutMs":30000}}
+```
+
+适配器从 UTF-8 stdin 读取 JSON：schema=1、operation=find/create/read/link/update、sourceId、key（bindingId + sourceId 的 SHA-256）、repository、issue（来源 title/body/url 等）、internalId（已映射时）、pr（url/head/branch/targetBranch，关联后）、desiredState（update 时 open/closed）。stdout 必须仅返回 JSON `{"schema":1,"issue":...}`；find 未查到时 issue=null，其他操作不得伪造对象。
+
+对象包括 sourceId、key、internalId（字符串）、url、state=open/closed、links 数组；每条关联包括 url/head/branch/targetBranch。适配器必须核验真实仓库、完整查询同一 key、保证 create / link / update 幂等并回读平台。多个对象、身份或属性不符、状态不明必须失败。原始输出、命令参数与凭据不进入公开记录。此处提供真实执行和校验合同；未提供协议的内部平台需按实际扩展接入。
+
+准备阶段先自动创建/复用全部 Issue，再构造、检查和推送候选；具体 PR 取得后自动关联。平台正常审核合入后，点击“已在平台合入，核验 Git 结果”：核心文件树和祖先通过才推进代码游标，随后回读关联与 Issue 状态。关闭关系且所有 requiredTargets 接受后关单；条件不足保持打开（误提前关闭时恢复打开），普通关联保留状态。映射跨多笔 PR 复用，不按外部编号创建同号对象。
+
+创建意图先落盘；回执丢失后只查询原对象，查不到显示 ISSUE_CREATE_RESULT_UNKNOWN，不再 create。关联与状态更新也先存意图，回读原 PR / Issue；更新已生效但回执丢失时只确认状态，不重写。代码已接受后失败保持 CODE_ACCEPTED_PENDING_METADATA，按钮明确“回读并恢复原 Issue 操作”，不再推代码或创建 PR。首次创建意图后适配器与仓库范围固定；配置变化、损坏记录暂停，异常在相应子步骤展示 × 和安全错误摘要。
+
+未配置 Issue 接口时保留明确人工方式，不能显示自动完成。历史分别标记平台回读 / 人工登记，保留原配置指纹、来源、关联与执行时间。真实内部平台的认证、Git 扩展和关闭语义仍需在其测试项目验收；原始提交跨编号误关风险仍由 commitClosureVerified 实测声明阻止推送。
+
+
 ## 接入实际仓库
 
 1. 在核心仓之外保存私有 JSON 配置。下列地址、目录与命令都是示例，需要按内部环境设置；不要提交真实配置。
@@ -191,14 +245,14 @@ clowder-repo-sync recover private-config.json
 
 2. 使用 Git 自身的凭据管理和 `gh` 已有认证。外部读取仅使用 github.com 的只读 Git/API；不在配置、日志、HTML 中填写 Token、密码或带凭据 URL。`checks` 必须使用可信 executable 与 args，不能通过网页提交 shell 命令。检查在冻结候选的隔离工作目录运行；应覆盖核心、实际构建依赖及独立插件，工具核对检查没有修改核心文件或 HEAD。
 3. 在测试项目核对内部平台关单行为：推分支、创建 PR、合入；编号不一致、初始化前旧历史、同号无关 Issue、多个交付共享 Issue。证明不会误关后才将 `commitClosureVerified` 设为 true。此声明来自使用方实测，工具不能仅凭 Git 验证平台行为。
-4. 以完整 40 位 SHA 登记上次已经同步的 U0、当前内部 I0。I0 必须等于远端当前目标 HEAD；两者 tree 一致，U0 在上游交付历史中。接管只登记，不改变 main。
+4. 以完整 40 位 SHA 登记上次已经同步的 U0、当前内部 I0。I0 必须等于远端当前目标 HEAD；两者在非保留范围一致，U0 在上游交付历史中。接管只登记，不改变 main。
 
 ```bash
 clowder-repo-sync adopt private-config.json <U0> <I0>
 clowder-repo-sync serve private-config.json 5187
 ```
 
-5. 在界面检查上游更新 → 发起下一笔 → 过程模式在平台创建/复用 Issue 并登记 → 检查候选并自动创建内部 PR → 打开具体 PR 在平台正常审核合入 → 回来核验 Git 结果 → 过程模式核对 Issue 状态并保存本笔记录。只有明确手工模式才需要用模板创建 PR 并登记地址；版本模式不搬运 Issue。
+5. 在界面检查上游更新 → 发起下一笔 → 过程模式自动创建/复用并回读 Issue → 检查候选并自动创建内部 PR → 打开具体 PR 在平台正常审核合入 → 回来核验 Git 结果 → 过程模式按实际接受条件自动更新 / 回读 Issue 并保存本笔记录。只有明确手工模式才需要用模板创建 PR 并登记地址；版本模式不搬运 Issue。
 
 GitHub 发现根据 first-parent main 顺序、commit→PR 查询与实际 merge SHA确定范围，区分 squash/rebase 的实际 main 对象。读取关闭关联和完整 Issue timeline，只有能绑定本笔落地 commit 的关闭事件才视为关闭证据；文本提及仅作普通关联。无法唯一归属主干提交、PR 边界不一致或元数据查询失败时暂停。首版不提供评论、附件、账户、里程碑的全量镜像。
 
@@ -225,16 +279,20 @@ GitHub 发现根据 first-parent main 顺序、commit→PR 查询与实际 merge
 ```bash
 clowder-repo-sync discover private-config.json
 clowder-repo-sync start private-config.json
-clowder-repo-sync issue private-config.json <source-node-id> <internal-issue-id> <https-issue-url>
+# 已配置自动化时 prepare 自动搬运，也可先执行：
+clowder-repo-sync sync-issues private-config.json
+# 仅人工方式需要 issue <source-node-id> <internal-issue-id> <https-issue-url>
 clowder-repo-sync prepare private-config.json
 # 自动模式已取得 PR 地址；仅手工模式需要：
 # clowder-repo-sync pr private-config.json <https-pr-url>
 clowder-repo-sync recover private-config.json
-clowder-repo-sync receipts private-config.json observations.json
+# 自动方式 recover 已完成状态更新；失败只恢复原 Issue 操作：
+clowder-repo-sync sync-issues private-config.json
+# 仅人工方式使用 receipts private-config.json observations.json
 clowder-repo-sync status private-config.json
 ```
 
-观察文件为 `[{"sourceId":"来源稳定身份","internalId":"内部编号","state":"open或closed"}]`。它记录人工回读，不向平台发关单请求；映射不一致、应关未关或提前关闭时暂停。当前交付应写记录成功即 COMPLETE，普通关联或等待后续交付的 Issue 可以保持 open。
+仅人工方式的观察文件为 `[{"sourceId":"来源稳定身份","internalId":"内部编号","state":"open或closed"}]`。它记录人工回读，不向平台发关单请求；映射不一致、应关未关或提前关闭时暂停。当前交付应写记录成功即 COMPLETE，普通关联或等待后续交付的 Issue 可以保持 open。
 
 恢复始终先查 active delivery。候选推送意图先落盘，超时回读同名 ref：相同则复用，不同则暂停。创建候选分支使用空 expected-ref 条件，竞争写入会拒绝；不会覆盖现有分支。合入后核验 tree、原始目标/上一内部版本/冻结候选的可达性，以及实际接受 merge 的 base/head；核验通过才补写双游标。代码接受后元数据失败，仅补记录，不再推送或合入。工具未请求平台合入，因此“平台合入请求超时”需在平台自行查询；Git 工具负责随后对账。
 

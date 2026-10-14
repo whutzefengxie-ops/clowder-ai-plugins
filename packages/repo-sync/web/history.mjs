@@ -125,7 +125,7 @@ export function createHistory(snapshot, changed) {
 export function recordList(view, active) {
   const { page, selected, filters } = view;
   const row = (item) =>
-    `<button type="button" data-record="${esc(item.id)}" aria-current="${selected === item.id ? 'true' : 'false'}"><b>${esc(title(item))}</b><span class="${item.error ? 'bad' : item.status === 'COMPLETE' ? 'good' : ''}">${item.error ? '× 异常 · ' : ''}${esc(labels[item.status] ?? item.status)}</span><small>${when(item.finishedAt ?? item.startedAt)}</small></button>`;
+    `<button type="button" data-record="${esc(item.id)}" aria-current="${selected === item.id ? 'true' : 'false'}"><b>${esc(title(item))}</b><span class="${item.error ? 'bad' : item.status === 'COMPLETE' ? 'good' : ''}">${item.error ? '× 异常 · ' : ''}${esc(labels[item.status] ?? item.status)}</span>${item.syncTarget ? `<small>本轮终点 ${esc(item.syncTarget.value)}</small>` : ''}<small>${when(item.finishedAt ?? item.startedAt)}</small></button>`;
   return `<aside class="record-list" aria-label="同步记录"><h2>同步记录</h2><button type="button" data-record="current" aria-current="${selected === 'current'}"><b>当前同步</b><small>${active ? `${esc(title(active))} · ${esc(labels[active.status])}` : '选择更新 / 查看最新接收状态'}</small></button><form data-record-filter><label>搜索记录<input name="q" maxlength="200" value="${esc(filters.q)}" placeholder="tag、PR、commit 或同步标识"></label><label>状态<select name="status">${[
     ['all', '全部'],
     ['complete', '已完成'],

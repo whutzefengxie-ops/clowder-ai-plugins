@@ -14,6 +14,7 @@ const longActions = new Set([
   'create-pr',
   'start',
   'issue',
+  'sync-issues',
   'receipts',
   'resolve',
   'cancel-version',
@@ -157,7 +158,9 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
         checkOutcome(operation);
         value = { result: operation.result };
       } else {
-        const configure = ['configure', 'configure-repositories', 'configure-pr'].includes(input.action);
+        const configure = ['configure', 'configure-repositories', 'configure-pr', 'configure-issues'].includes(
+          input.action,
+        );
         value = await request(
           '/api/action',
           configure

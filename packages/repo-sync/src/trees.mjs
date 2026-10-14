@@ -29,7 +29,7 @@ export async function assertProjection(directory, upstream, internal, policy, co
     fail(
       code,
       code === 'BASELINE_MISMATCH'
-        ? 'U0 与 I0 文件不一致。请核对上次同步版本，或通过内部修复 PR 恢复一致；连续同步不能忽略差异'
+        ? 'U0 与 I0 的核心范围不一致。请核对上次同步版本或通过内部修复 PR 恢复；仅明确声明的保留路径允许差异'
         : '内部同步范围存在未声明的修改，请在当前步骤处理差异后重新核验',
       {
         paths: changed.map((item) => item.path),

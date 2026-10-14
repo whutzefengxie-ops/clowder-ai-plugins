@@ -1,6 +1,7 @@
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
 import { confirmGitPr, planGitPr } from './git-pr.mjs';
+import { associateIssues, ensureIssues } from './issue-lifecycle.mjs';
 import { event } from './store.mjs';
 import { sourceStillValid } from './version.mjs';
 
@@ -8,17 +9,23 @@ async function resumePublished(receiver, state, delivery) {
   if (!['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status) || delivery.error) return false;
   if ((await receiver.git.remoteBranch(delivery.branch)) !== delivery.candidate)
     fail('CANDIDATE_CONFLICT', '已经推送的候选发生变化，暂停核对');
-  if (delivery.status === 'WAITING_APPROVAL' || !receiver.config.pullRequests) return true;
+  if (delivery.status === 'WAITING_APPROVAL' || !receiver.config.pullRequests) {
+    await associateIssues(receiver, state, delivery);
+    return true;
+  }
   if (receiver.config.pullRequests.mode === 'command') {
     await receiver.finishPr(state, delivery);
     return true;
   }
   if (!delivery.gitPr) return false;
   await confirmGitPr(receiver, state, delivery);
+  await associateIssues(receiver, state, delivery);
   return true;
 }
 export async function prepareDelivery(receiver, state) {
   const delivery = receiver.requireActive(state);
+  if (receiver.config.issues && delivery.status === 'ISSUES_REQUIRED' && !delivery.candidate)
+    await ensureIssues(receiver, state, delivery);
   receiver.requirePreparation(state, delivery);
   if (await resumePublished(receiver, state, delivery)) return;
   const heads = await receiver.git.fetch();

@@ -7,7 +7,6 @@ export function requireVersion(receiver) {
   if (receiver.config.mode !== 'version') fail('WRONG_MODE', '此操作仅用于按版本更新模式');
 }
 export async function tags(receiver) {
-  requireVersion(receiver);
   return receiver.store.locked(() => listTags(receiver.git));
 }
 export async function selectTag(receiver, name) {
@@ -52,6 +51,7 @@ export async function selectTag(receiver, name) {
 }
 export async function sourceStillValid(receiver, delivery, heads) {
   if (receiver.config.mode === 'version') await verifyTag(receiver.git, delivery.frozenTag);
+  else if (delivery.syncTarget?.frozenTag) await verifyTag(receiver.git, delivery.syncTarget.frozenTag);
   if (!(await receiver.git.isAncestor(delivery.target, heads.upstream)))
     fail('SOURCE_REWRITTEN', '冻结目标已不在来源分支历史中');
 }

@@ -21,7 +21,7 @@ export function mapIssue(state, delivery, sourceId, internalId, url, options = {
   }
   state.issues[sourceId] = existing ?? { internalId: String(internalId), url: objectUrl(url), receipts: [] };
 }
-export async function recordReceipts(state, delivery, observations, receiver) {
+export async function recordReceipts(state, delivery, observations, receiver, confirmedBy = 'operator') {
   const updates = [];
   for (const issue of delivery.issues) {
     updates.push(await observeIssue(state, delivery, issue, observations, receiver));
@@ -33,11 +33,11 @@ export async function recordReceipts(state, delivery, observations, receiver) {
         target: delivery.target,
         state: observation.state,
         pending,
-        confirmedBy: 'operator',
+        confirmedBy,
         time: new Date().toISOString(),
       });
     mapping.state = observation.state;
-    delivery.issueResults[sourceId] = { state: observation.state, pending, recorded: true };
+    delivery.issueResults[sourceId] = { state: observation.state, pending, recorded: true, confirmedBy };
   }
 }
 async function observeIssue(state, delivery, issue, observations, receiver) {

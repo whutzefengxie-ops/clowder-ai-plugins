@@ -57,6 +57,7 @@ function matches(delivery, query) {
     query.q &&
     !JSON.stringify([
       delivery.source,
+      delivery.syncTarget,
       delivery.id,
       delivery.target,
       delivery.base,
@@ -77,6 +78,15 @@ function summary(delivery) {
   return {
     id,
     mode,
+    ...(delivery.syncTarget
+      ? {
+          syncTarget: {
+            kind: delivery.syncTarget.kind,
+            value: delivery.syncTarget.value,
+            commit: delivery.syncTarget.commit,
+          },
+        }
+      : {}),
     source: { title: source.title, tag: source.tag, number: source.number },
     status,
     startedAt,

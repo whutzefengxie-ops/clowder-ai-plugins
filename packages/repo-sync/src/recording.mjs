@@ -25,12 +25,14 @@ export function configSnapshot(config) {
   snapshot.checkProfile = config.checkProfile === 'git-integrity' ? 'git-integrity' : 'custom';
   snapshot.checkConfigId = digest(config.checks ?? []);
   snapshot.prConfigId = digest(config.pullRequests ?? null);
+  snapshot.issueTransport = config.issues?.mode ?? 'manual';
+  snapshot.issueConfigId = digest(config.issues ?? null);
   snapshot.fingerprint = fingerprint(snapshot);
   return snapshot;
 }
 function fingerprint(snapshot) {
   const entries = fields.map((key) => [key, snapshot[key]]);
-  for (const key of ['checkConfigId', 'prConfigId'])
+  for (const key of ['checkConfigId', 'prConfigId', 'issueTransport', 'issueConfigId'])
     if (snapshot[key] !== undefined) entries.push([key, snapshot[key]]);
   return digest(entries);
 }
@@ -42,7 +44,10 @@ export function validateSnapshot(snapshot) {
     !snapshot ||
     typeof snapshot !== 'object' ||
     Array.isArray(snapshot) ||
-    Object.keys(snapshot).some((key) => ![...fields, 'fingerprint', 'checkConfigId', 'prConfigId'].includes(key)) ||
+    Object.keys(snapshot).some(
+      (key) =>
+        ![...fields, 'fingerprint', 'checkConfigId', 'prConfigId', 'issueTransport', 'issueConfigId'].includes(key),
+    ) ||
     snapshot.fingerprint !== fingerprint(snapshot) ||
     !Number.isInteger(snapshot.checkCount) ||
     snapshot.checkCount < 0 ||
@@ -50,9 +55,10 @@ export function validateSnapshot(snapshot) {
     !['custom', 'git-integrity'].includes(snapshot.checkProfile)
   )
     fail('RECORD_INVALID', '历史配置摘要损坏或版本不支持，保留原记录，不能用当前配置替代');
-  for (const key of ['checkConfigId', 'prConfigId'])
+  for (const key of ['checkConfigId', 'prConfigId', 'issueConfigId'])
     if (snapshot[key] !== undefined && !/^[a-f0-9]{64}$/.test(snapshot[key]))
       fail('RECORD_INVALID', '历史检查 / PR 配置标识无效');
+  validateIssueSnapshot(snapshot);
   for (const key of ['sourceUrl', 'internalUrl', 'internalWebUrl'])
     if (snapshot[key] !== undefined) safeUrl(snapshot[key], true);
   for (const key of ['internalPaths', 'mergePaths'])
@@ -113,6 +119,7 @@ export function phaseLocation(action, key, parent) {
       heads: 0,
       adopt: 0,
       issue: 2,
+      'sync-issues': 2,
       prepare: 2,
       resolve: 2,
       'cancel-version': 2,
@@ -137,11 +144,19 @@ export function phaseLocation(action, key, parent) {
     return { stage: parent.stage, group: parent.group };
   if (['platform-pr', 'candidate-publish', 'candidate-ref', 'publish-intent'].includes(key))
     return { stage: 3, group: 'publish' };
+  if (key === 'issue-link') return { stage: 3, group: 'issues' };
+  if (key === 'issue-create') return { stage: 2, group: 'issues' };
+  if (key === 'issue-state') return { stage: 5, group: 'issues' };
   if (['merge-verify', 'acceptance-save', 'receipts-save', 'execution-record'].includes(key))
     return { stage: 5, group: 'result' };
-  if (['candidate-build', 'conflict-resolution', 'internal-preserve', 'file-merge'].includes(key))
+  if (['candidate-build', 'conflict-resolution', 'internal-preserve', 'file-merge', 'file-rules'].includes(key))
     return { stage: 2, group: 'content' };
   if (key === 'candidate-check') return { stage: 2, group: 'checks' };
   if (key === 'ledger-save') return { stage: parent?.stage ?? stage, group: 'record' };
   return { stage, group: 'objects' };
+}
+
+function validateIssueSnapshot(snapshot) {
+  if (snapshot.issueTransport !== undefined && !['manual', 'command', 'gitlab'].includes(snapshot.issueTransport))
+    fail('RECORD_INVALID', '历史 Issue 适配方式无效');
 }

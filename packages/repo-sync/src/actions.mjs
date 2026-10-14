@@ -2,21 +2,32 @@ import { baselineFile } from './baseline.mjs';
 import { fail } from './config.mjs';
 import { discover } from './github.mjs';
 
-export async function dispatch(receiver, input) {
+export async function dispatch(receiver, input, options = {}) {
   if (
     input.deliveryId &&
-    ['issue', 'prepare', 'pr', 'clear-pr', 'create-pr', 'resolve', 'recover', 'receipts', 'cancel-version'].includes(
-      input.action,
-    ) &&
+    [
+      'issue',
+      'sync-issues',
+      'prepare',
+      'pr',
+      'clear-pr',
+      'create-pr',
+      'resolve',
+      'recover',
+      'receipts',
+      'cancel-version',
+    ].includes(input.action) &&
     (await receiver.status())?.active?.id !== input.deliveryId
   )
     fail('DELIVERY_CHANGED', '活动交付已变化，请刷新后核对，不操作另一笔交付');
   const actions = {
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
-    discover: () => discover(receiver),
+    discover: () =>
+      discover(receiver, { kind: input.targetKind ?? 'latest', value: input.targetValue }, options.sourceProvider),
     start: () => receiver.start(input.expectedTarget),
     issue: () => receiver.linkIssue(input.sourceId, input.internalId, input.url, input),
+    'sync-issues': () => receiver.syncIssues(),
     prepare: () => receiver.prepare(),
     pr: () => receiver.linkPr(input.url, input),
     'clear-pr': () => receiver.linkPr(null, input),

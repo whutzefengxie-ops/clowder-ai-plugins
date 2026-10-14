@@ -1,4 +1,5 @@
 import { fail } from './config.mjs';
+import { assertIssueLedger } from './issue-ledger.mjs';
 import { validateRecording } from './recording.mjs';
 
 const sha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
@@ -16,6 +17,7 @@ export function assertLedger(state) {
   )
     fail('LEDGER_INVALID', '台账缺少接受版本、队列或映射等必要字段；暂停，不能重建空台账');
   if (state.activeId !== null && typeof state.activeId !== 'string') fail('LEDGER_INVALID', '活动交付身份无效');
+  assertIssueLedger(state);
   const statuses = [
     'ISSUES_REQUIRED',
     'CODE_PREPARE_REQUIRED',

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { validateIssueConfig } from './issue-adapter.mjs';
 import { versionPolicy } from './policy.mjs';
 import { validatePrConfig } from './pull-requests.mjs';
 
@@ -63,7 +64,7 @@ export function validateConfig(input) {
         config.internalUrl,
         config.sourceBranch,
         config.targetBranch,
-        ...(config.mode === 'version' ? [config.mode, config.internalPaths, config.mergePaths] : []),
+        ...bindingPolicy(config),
       ]),
     )
     .digest('hex');
@@ -79,6 +80,7 @@ export function validateConfig(input) {
   normalizeCheckProfile(config);
   validateTimeouts(config.timeouts);
   validatePrConfig(config);
+  validateIssueConfig(config);
   return config;
 }
 function validateTimeouts(values) {
@@ -105,8 +107,11 @@ function validateMode(config) {
   config.mode ??= 'continuous';
   if (!['continuous', 'version'].includes(config.mode)) fail('INVALID_MODE', '同步模式需要 continuous 或 version');
   if (config.mode === 'version') Object.assign(config, versionPolicy(config));
-  else if (config.internalPaths?.length || config.mergePaths?.length)
-    fail('INVALID_POLICY', '开发过程同步不能配置内部文件差异');
+  else {
+    if (config.mergePaths?.length)
+      fail('INVALID_POLICY', '开发过程同步仅允许显式保留路径，共同文件三方合并请使用版本模式');
+    Object.assign(config, versionPolicy({ internalPaths: config.internalPaths, mergePaths: [] }));
+  }
 }
 function checkStateLocation(config) {
   for (const repository of [config.sourceUrl, config.internalUrl].filter(isAbsolute)) {
@@ -114,4 +119,9 @@ function checkStateLocation(config) {
     if (!path || (!path.startsWith(`..${sep}`) && !isAbsolute(path)))
       fail('STATE_INSIDE_CORE', '台账目录不可放在核心仓之内');
   }
+}
+
+function bindingPolicy(config) {
+  if (config.mode === 'version') return [config.mode, config.internalPaths, config.mergePaths];
+  return config.internalPaths?.length ? ['continuous', config.internalPaths] : [];
 }

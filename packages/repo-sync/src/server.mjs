@@ -8,6 +8,7 @@ import { dispatch } from './actions.mjs';
 import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
 import { body, requestPath, requireToken, send } from './http.mjs';
+import { publicIssues } from './issue-adapter.mjs';
 import { publicPlatform } from './pr-settings.mjs';
 import { recordDetail, recordList } from './records.mjs';
 import { configure } from './settings.mjs';
@@ -40,6 +41,8 @@ const assets = new Map([
     'attempts.mjs',
     'actionbar.mjs',
     'journey.css',
+    'source-target.mjs',
+    'issue-settings.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -112,7 +115,7 @@ async function post(receiver, options, token, input, response) {
     receiver = await options.connection.current();
   } else if (input.action === 'configure') receiver = await configure(receiver, input);
   else result = await dispatch(receiver, input, options);
-  if (['configure', 'configure-repositories', 'configure-pr'].includes(input.action))
+  if (['configure', 'configure-repositories', 'configure-pr', 'configure-issues'].includes(input.action))
     await get(receiver, options, token, '/api/status', response);
   else
     send(response, 200, {
@@ -179,6 +182,7 @@ async function get(receiver, options, token, path, response, url = '') {
           checkProfile,
           commitClosureVerified,
           bindingId,
+          issueAutomation: publicIssues(receiver.config),
         }
       : null,
     connection: options.connection?.describe(),

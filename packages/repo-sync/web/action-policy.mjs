@@ -58,6 +58,8 @@ function deliveryPolicy(snapshot, delivery) {
   if (delivery.status === 'CANCELLED') return { stage: 2, text: '本笔已撤销。保留原记录，请返回当前同步选择新目标。' };
   const reference = referencePolicy(snapshot, delivery);
   if (reference) return reference;
+  const issueAction = issuePolicy(snapshot, delivery);
+  if (issueAction) return issueAction;
   if (delivery.status === 'PUSH_RESULT_UNKNOWN')
     return {
       stage: 3,
@@ -124,6 +126,13 @@ function referencePolicy(snapshot, delivery) {
 }
 
 function preparationPolicy(snapshot, delivery) {
+  if (snapshot.config?.issueAutomation?.automatic && delivery.status === 'ISSUES_REQUIRED')
+    return {
+      stage: 2,
+      text: '按顺序创建或复用内部 Issue、获取原始提交、保留声明路径，再检查与发布候选。',
+      action: 'prepare',
+      label: '自动搬运 Issue、检查并推送候选 →',
+    };
   if (delivery.status === 'ISSUES_REQUIRED' && !delivery.issues.every((issue) => snapshot.state.issues[issue.sourceId]))
     return {
       stage: 2,
@@ -155,4 +164,23 @@ function failurePolicy(task, delivery) {
 
 function ownsTask(task, delivery) {
   return !task?.deliveryId || task.deliveryId === delivery?.id || !delivery;
+}
+
+function issuePolicy(snapshot, delivery) {
+  if (snapshot.config?.issueAutomation?.automatic && delivery.error?.code?.startsWith('ISSUE_'))
+    return {
+      stage: delivery.acceptedInternal ? 5 : delivery.prUrl ? 3 : 2,
+      text: '原 Issue 操作未确认。核对当前步骤的配置 / 权限后，只查询并恢复原对象。不会重建 Issue 或重推代码。',
+      action: 'sync-issues',
+      label: '回读并恢复原 Issue 操作',
+    };
+  if (delivery.status === 'CODE_ACCEPTED_PENDING_METADATA')
+    if (snapshot.config?.issueAutomation?.automatic)
+      return {
+        stage: 5,
+        text: '代码已接受；自动核验原 PR 关联与 Issue 接收条件，完成状态更新并回读。',
+        action: 'sync-issues',
+        label: '核验 / 更新原 Issue 并完成同步',
+      };
+  return null;
 }

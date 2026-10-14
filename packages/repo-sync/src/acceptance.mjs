@@ -6,6 +6,7 @@ import { verifyTag } from './tags.mjs';
 export async function recoverDelivery(receiver, state, delivery) {
   const heads = await receiver.git.fetch();
   if (receiver.config.mode === 'version') await verifyTag(receiver.git, delivery.frozenTag);
+  else if (delivery.syncTarget?.frozenTag) await verifyTag(receiver.git, delivery.syncTarget.frozenTag);
   state.observedInternal = heads.internal;
   if (delivery.acceptedInternal) {
     if (heads.internal !== delivery.acceptedInternal)

@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
 import { captureGitPr } from './git-pr.mjs';
+import { preservedTree } from './preserved-tree.mjs';
 import { ancestor, command, git } from './process.mjs';
 import { remoteHeads } from './remote-heads.mjs';
+import { assertProjection } from './trees.mjs';
 
 export class GitReceiver {
   constructor(config) {
@@ -60,6 +62,15 @@ export class GitReceiver {
   async sameTree(a, b) {
     return (await this.tree(a)) === (await this.tree(b));
   }
+  async baseline(upstream, internal) {
+    return assertProjection(
+      this.directory,
+      upstream,
+      internal,
+      { internalPaths: this.config.internalPaths ?? [], mergePaths: [] },
+      'BASELINE_MISMATCH',
+    );
+  }
   async isAncestor(a, b) {
     return ancestor(this.directory, await this.sha(a), await this.sha(b));
   }
@@ -83,20 +94,20 @@ export class GitReceiver {
     return git(this.directory, args);
   }
   async candidate(accepted, target, id) {
-    if (!(await this.sameTree(accepted.upstream, accepted.internal)))
-      fail('CORE_DRIFT', '内部核心树已偏离登记的上游版本');
+    await this.baseline(accepted.upstream, accepted.internal);
     if (!(await this.isAncestor(accepted.upstream, target))) fail('SOURCE_REWRITTEN', '目标不包含已接受上游历史');
     await this.checkContent(target);
     let base = accepted.internal;
     if (!(await this.isAncestor(accepted.upstream, base))) {
       base = await this.mergeNode(
-        await this.tree(accepted.upstream),
+        await this.tree(accepted.internal),
         [base, accepted.upstream],
         `repo-sync baseline ${id}`,
       );
     }
-    // Source objects stay untouched; the receiving merge records the exact source tree.
-    const head = await this.mergeNode(await this.tree(target), [base, target], `repo-sync delivery ${id}`);
+    // Source objects stay untouched; the receiving merge applies declared internal preservation to the source tree.
+    const tree = await preservedTree(this, target, accepted.internal, id);
+    const head = await this.mergeNode(tree, [base, target], `repo-sync delivery ${id}`);
     if (!/^[a-f0-9]{24}$/.test(id)) fail('INVALID_DELIVERY_ID', '候选交付身份无效');
     await git(this.directory, ['update-ref', `refs/sync/deliveries/${id}`, head]);
     return head;
@@ -129,7 +140,9 @@ export class GitReceiver {
       fail('PUSH_RESULT_UNKNOWN', '推送结果待回读确认');
   }
   async verify(delivery, actual) {
-    if (!(await this.sameTree(delivery.target, actual))) fail('TREE_MISMATCH', '实际 main 文件树不等于冻结目标');
+    if (!(await this.sameTree(delivery.candidate, actual)))
+      fail('TREE_MISMATCH', '实际 main 文件树不等于已检查候选（含声明的保留规则）');
+    await this.baseline(delivery.target, actual);
     for (const sha of [delivery.target, delivery.base.internal, delivery.candidate]) {
       if (!(await this.isAncestor(sha, actual))) fail('HISTORY_REWRITTEN', '来源、上一内部版本或冻结候选未完整接受');
     }

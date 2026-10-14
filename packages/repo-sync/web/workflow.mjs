@@ -5,6 +5,7 @@ export { attempts, actionBar };
 
 import { nextAction } from './action-policy.mjs';
 import { diagnostics } from './diagnostics.mjs';
+import { autoIssuePanel } from './issue-settings.mjs';
 import { issueForms } from './issues.mjs';
 import { prPanel } from './pr.mjs';
 import { receiptFields } from './receipts.mjs';
@@ -34,7 +35,14 @@ function substeps(stage, d, record, snapshot) {
   const groups = {
     1: [['冻结目标、范围与 U0 / I0', true]],
     2: [
-      [d.mode === 'version' ? '核对文件规则与内部差异' : '登记内部 Issue 映射', d.mode === 'version' || mapped],
+      [
+        d.mode === 'version'
+          ? '核对文件规则与内部差异'
+          : issueTransport(record, snapshot) === 'manual'
+            ? '登记内部 Issue 映射'
+            : '创建 / 复用并回读内部 Issue',
+        d.mode === 'version' || mapped,
+      ],
       [d.mode === 'version' ? '保留内部文件、三方合并并构造候选' : '获取原始提交并构造候选', Boolean(d.candidate)],
       [
         (d.checks?.profile ??
@@ -59,6 +67,9 @@ function substeps(stage, d, record, snapshot) {
         ['PR_REQUIRED', 'WAITING_APPROVAL', 'CODE_ACCEPTED_PENDING_METADATA', 'COMPLETE'].includes(d.status),
       ],
       ['创建 / 登记内部 PR 引用', Boolean(d.prUrl)],
+      ...(d.issues.length && issueTransport(record, snapshot) !== 'manual'
+        ? [['关联并回读内部 Issue 与本笔 PR', d.issues.every((issue) => d.issueLinks?.[issue.sourceId])]]
+        : []),
     ],
     4: [['在平台审核并合入（Git 结果核验后确认）', Boolean(d.acceptedInternal)]],
     5: [
@@ -71,7 +82,7 @@ function substeps(stage, d, record, snapshot) {
   let found = false;
   return `<ul class="substeps">${groups[stage]
     .map(([name, done]) => {
-      const current = !done && !found && stage === stageOf(d);
+      const current = !done && !found && stage === (record?.current ? nextAction(snapshot, d).stage : stageOf(d));
       if (!done) found = true;
       const status = majorStatus(current && !!d.error, done, current);
       const mark = { failed: '×', done: '✓', current: '●', pending: '○' }[status];
@@ -84,8 +95,11 @@ function stageForm(stage, delivery, snapshot) {
   if (stage === 2 && delivery.status === 'CODE_PREPARE_REQUIRED')
     return `${conflictOptions(delivery)}<button type="button" data-action="cancel-version">撤销未发布交付，重新选择版本</button><p>历史保留，已发布候选不能直接撤销。</p>`;
   if (stage === 2 && delivery.status === 'ISSUES_REQUIRED')
-    return `<div id="issue-mappings">${issueForms(delivery, snapshot.state, esc)}</div>`;
+    return `<div id="issue-mappings">${snapshot.config?.issueAutomation?.automatic ? autoIssuePanel(delivery, snapshot.state, esc) : issueForms(delivery, snapshot.state, esc)}</div>`;
   if (stage === 3 && ['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status)) return prPanel(snapshot, esc);
+  if (stage === 5 && delivery.status === 'CODE_ACCEPTED_PENDING_METADATA')
+    if (snapshot.config?.issueAutomation?.automatic)
+      return '<div id="receipt-form"><h3>代码已接收，继续核对原 Issue</h3><p>程序核验原 PR 关联、检查全部 required commits 后关闭应关闭的 Issue，并回读平台状态。不会重新推送候选或创建 PR。</p><button type="button" class="primary" data-action="sync-issues">回读 / 更新原 Issue，保存接收结果</button></div>';
   if (stage === 5 && delivery.status === 'CODE_ACCEPTED_PENDING_METADATA')
     return `<div id="receipt-form"><form data-form="receipts"><h3>确认平台实际状态并保存接收记录</h3>${receiptFields(delivery, snapshot.state, esc, sha)}<button type="submit" class="primary">保存本笔接收记录，完成同步</button><p>此操作记录人工核对结果，不向内部平台发送关单请求。</p></form></div>`;
   return '';
@@ -135,4 +149,8 @@ function stageFailure(snapshot, delivery, historical) {
       };
   }
   return delivery.error ? { stage: nextAction(snapshot, delivery).stage, error: delivery.error } : null;
+}
+
+function issueTransport(record, snapshot) {
+  return record?.configurations.at(-1)?.snapshot.issueTransport ?? snapshot.config?.issueAutomation?.mode ?? 'manual';
 }

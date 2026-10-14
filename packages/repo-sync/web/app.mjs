@@ -4,6 +4,7 @@ import { captureDraft, configuration, repositoryInput, restoreDraft } from './co
 import { baselineContent, diagnostics, stageRule } from './diagnostics.mjs';
 import { hydrateFiles } from './files.mjs';
 import { createHistory } from './history.mjs';
+import { issueSettings } from './issue-settings.mjs';
 import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
 import { platformSettings } from './platform.mjs';
@@ -60,7 +61,7 @@ function render() {
     : '正式服务 · 等待仓库配置';
   content.innerHTML =
     view === 'configuration'
-      ? `${configuration(snapshot, esc, sha, button)}${platformSettings(snapshot, esc)}<div id="operation"></div><div id="error-slot"></div>`
+      ? `${configuration(snapshot, esc, sha, button)}${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}<div id="operation"></div><div id="error-slot"></div>`
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   content.querySelector('#error-slot')?.append(errorPanel);
   restoreConflict(snapshot, content);
@@ -217,7 +218,7 @@ document.addEventListener('submit', async (event) => {
   if (input.action === 'configure')
     for (const key of ['internalPaths', 'mergePaths'])
       input[key] =
-        fields.mode === 'version'
+        key === 'internalPaths' || fields.mode === 'version'
           ? fields[key]
               .split(/\r?\n/)
               .map((value) => value.trim())
@@ -235,12 +236,13 @@ document.addEventListener('submit', async (event) => {
       })),
     };
   const result = await action(input);
-  if (['configure', 'configure-repositories', 'configure-pr'].includes(input.action) && result) {
+  if (['configure', 'configure-repositories', 'configure-pr', 'configure-issues'].includes(input.action) && result) {
     const confirmation = document.createElement('p');
     confirmation.setAttribute('role', 'status');
     confirmation.textContent = {
       configure: '同步方式与文件规则已保存，请登记已有基线。',
       'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
+      'configure-issues': 'Issue 自动化设置已保存。回到本笔同步继续创建或回读原对象。',
       'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
     }[input.action];
     content.prepend(confirmation);
@@ -250,7 +252,7 @@ document.addEventListener('input', saveDraft);
 document.addEventListener('change', (event) => {
   if (event.target.matches('[name="mode"]')) {
     const form = event.target.closest('form');
-    const policy = form.querySelector('[data-policy]');
+    const policy = form.querySelector('[data-merge-policy]');
     const closure = form.querySelector('[data-closure]');
     if (policy) policy.hidden = event.target.value !== 'version';
     if (closure) closure.hidden = event.target.value === 'version';

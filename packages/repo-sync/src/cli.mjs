@@ -9,7 +9,7 @@ const [operation, configPath, ...args] = process.argv.slice(2);
 try {
   if (!configPath)
     throw new Error(
-      '用法：clowder-repo-sync <setup|serve|status|adopt|discover|tags|select-tag|start|issue|prepare|resolve|cancel-version|pr|clear-pr|create-pr|recover|receipts|unlock> <私有配置.json> [参数]',
+      '用法：clowder-repo-sync <setup|serve|status|adopt|discover|tags|select-tag|start|issue|sync-issues|prepare|resolve|cancel-version|pr|clear-pr|create-pr|recover|receipts|unlock> <私有配置.json> [参数]',
     );
   const connection = ['setup', 'serve'].includes(operation) ? await createConnection(configPath) : null;
   const receiver = connection
@@ -30,9 +30,10 @@ try {
   const actions = {
     status: () => receiver.status(),
     adopt: () => receiver.adopt(args[0], args[1]),
-    discover: () => discover(receiver),
+    discover: () => discover(receiver, { kind: args[0] ?? 'latest', value: args[1] }),
     start: () => receiver.start(),
     issue: () => receiver.linkIssue(args[0], args[1], args[2]),
+    'sync-issues': () => receiver.syncIssues(),
     prepare: () => receiver.prepare(),
     pr: () => receiver.linkPr(args[0], { previousUrl: args[1] }),
     'clear-pr': () => receiver.linkPr(null, { previousUrl: args[0] }),

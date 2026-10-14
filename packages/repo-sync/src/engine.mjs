@@ -2,13 +2,16 @@ import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { readConflict, resolveConflict } from './conflicts.mjs';
+import { continuousPreview } from './continuous-preview.mjs';
 import { execution, phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
 import { confirmGitPr } from './git-pr.mjs';
+import { associateIssues, settleIssues, syncIssues } from './issue-lifecycle.mjs';
 import { assertLedger } from './ledger.mjs';
 import { mapIssue, recordReceipts, templates } from './metadata.mjs';
 import { checkPlan } from './plan.mjs';
 import { prepareDelivery } from './preparation.mjs';
+import { preservedInternalHead } from './preserved-tree.mjs';
 import { git } from './process.mjs';
 import { createPr, linkPr, prUrl } from './pull-requests.mjs';
 import { recordDelivery } from './recording.mjs';
@@ -77,7 +80,7 @@ export class Receiver {
             this.git.directory,
             upstream,
             internal,
-            { internalPaths: [], mergePaths: [] },
+            { internalPaths: this.config.internalPaths ?? [], mergePaths: [] },
             'BASELINE_MISMATCH',
           );
         if (!(await this.git.mainBoundary(upstream, heads.upstream)))
@@ -108,15 +111,15 @@ export class Receiver {
       await this.replaceQueue(state, plans, await this.git.fetch());
     });
   }
-  async replaceQueue(state, plans, heads) {
+  async replaceQueue(state, plans, heads, ceiling = heads.upstream) {
     if (this.active(state)) fail('RECOVERY_FIRST', '存在未完成交付，先恢复，不重新扫描');
-    if (heads.internal !== state.accepted.internal) fail('CORE_DRIFT', '内部 main 与接受台账不一致');
+    await preservedInternalHead(this, state, heads.internal);
     let base = state.accepted.upstream;
     for (const plan of plans) {
       await checkPlan(this.git, plan, base, heads.upstream);
       base = plan.target;
     }
-    if (base !== heads.upstream) fail('SOURCE_UNPROVEN', '交付清单没有完整覆盖冻结上游范围');
+    if (base !== ceiling) fail('SOURCE_UNPROVEN', '交付清单没有完整覆盖冻结上游范围');
     state.queue = structuredClone(plans);
     state.latest = heads.upstream;
     state.scannedAt = new Date().toISOString();
@@ -130,7 +133,7 @@ export class Receiver {
       if (expectedTarget && plan.target !== expectedTarget)
         fail('QUEUE_CHANGED', '待同步目标已变化，未发起交付；请刷新确认 tag / PR 和 commit 后再开始');
       const heads = await this.git.fetch();
-      if (heads.internal !== state.accepted.internal) fail('CORE_DRIFT', '内部 main 与冻结基线不同');
+      await preservedInternalHead(this, state, heads.internal);
       await sourceStillValid(this, plan, heads);
       const id = createHash('sha256')
         .update(
@@ -148,6 +151,7 @@ export class Receiver {
         issueResults: {},
       };
       recordDelivery(delivery, this.config, 'start');
+      if (this.config.mode === 'continuous') delivery.preview = await continuousPreview(this, delivery);
       delivery.commits = (
         await git(this.git.directory, ['rev-list', '--reverse', `${delivery.base.upstream}..${delivery.target}`])
       ).split('\n');
@@ -163,6 +167,8 @@ export class Receiver {
     });
   }
   async linkIssue(sourceId, internalId, url, options) {
+    if (this.config.issues)
+      fail('ISSUE_MANAGED_AUTOMATICALLY', '已启用 Issue 自动化，请执行原对象回读，不用人工编号覆盖来源映射');
     return this.change(async (state) => {
       const delivery = this.requireActive(state);
       await phase(
@@ -183,6 +189,9 @@ export class Receiver {
   prepare() {
     return this.change((state) => prepareDelivery(this, state));
   }
+  syncIssues() {
+    return this.change((state) => syncIssues(this, state));
+  }
   requirePreparation(state, delivery) {
     if (delivery.acceptedInternal) fail('METADATA_ONLY', '代码已接受，仅补元数据');
     if (!delivery.issues.every((issue) => state.issues[issue.sourceId]))
@@ -193,7 +202,15 @@ export class Receiver {
   }
   linkPr(url, options) {
     return this.change((state) =>
-      phase('platform-pr', '核验候选并登记或纠正 PR 引用', () => linkPr(this, state, url, options), false),
+      phase(
+        'platform-pr',
+        '核验候选并登记或纠正 PR 引用',
+        async () => {
+          await linkPr(this, state, url, options);
+          await associateIssues(this, state, this.requireActive(state));
+        },
+        false,
+      ),
     );
   }
   createPr() {
@@ -206,10 +223,11 @@ export class Receiver {
   deliveryTemplates(state, delivery) {
     return this.config.mode === 'version' ? versionTemplate(delivery) : templates(delivery, state.issues);
   }
-  finishPr(state, delivery) {
-    return this.config.pullRequests?.mode === 'git'
+  async finishPr(state, delivery) {
+    await (this.config.pullRequests?.mode === 'git'
       ? confirmGitPr(this, state, delivery)
-      : createPr(this, state, delivery, this.deliveryTemplates(state, delivery));
+      : createPr(this, state, delivery, this.deliveryTemplates(state, delivery)));
+    await associateIssues(this, state, delivery);
   }
   async recover() {
     return this.change(async (state) => {
@@ -217,9 +235,12 @@ export class Receiver {
       await recoverDelivery(this, state, delivery);
       if (delivery.status === 'PR_REQUIRED' && this.config.pullRequests?.mode === 'git' && delivery.gitPr)
         await confirmGitPr(this, state, delivery);
+      await associateIssues(this, state, delivery);
+      await settleIssues(this, state, delivery);
     });
   }
   async receipts(observations) {
+    if (this.config.issues) return this.syncIssues();
     return this.change(async (state) => {
       const delivery = this.requireActive(state);
       if (delivery.status !== 'CODE_ACCEPTED_PENDING_METADATA')

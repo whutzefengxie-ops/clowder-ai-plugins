@@ -2,12 +2,14 @@ import { dirname, join } from 'node:path';
 import { dispatch } from './actions.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
+import { checkIssueSettings, issueConfiguration, issueInputKeys } from './issue-settings.mjs';
 import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
 import { recordDelivery } from './recording.mjs';
 import { configuredReceiver } from './settings.mjs';
 
 const allowed = new Set([
+  ...issueInputKeys,
   'action',
   'mode',
   'sourceUrl',
@@ -53,6 +55,7 @@ export async function createConnection(file) {
       internalUrl: input.internalUrl,
       internalWebUrl: input.internalWebUrl || undefined,
       pullRequests: prConfiguration(receiver?.config, input.prMode),
+      issues: issueConfiguration(receiver?.config, input),
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
       mode: input.mode,
@@ -81,7 +84,9 @@ export async function createConnection(file) {
       internalWebUrl: input.internalWebUrl,
       pullRequests: prConfiguration(receiver.config, input.prMode),
     });
-    const active = (await receiver.status())?.active;
+    const existing = await receiver.status();
+    checkIssueSettings(existing, receiver.config, next);
+    const active = existing?.active;
     checkFrozenPr(active, receiver.config, next);
     await writePrivate(path, next);
     loaded = false;
@@ -111,6 +116,7 @@ export async function createConnection(file) {
       configurationLock(path, async () => {
         if (input.action === 'configure-repositories') return save(input);
         if (input.action === 'configure-pr') return savePlatform(input);
+        if (input.action === 'configure-issues') return saveIssues(input);
         const bound = await current();
         if (!bound) fail('CONFIGURATION_REQUIRED', '请先保存真实仓库配置，再登记已有基线');
         verifyExecutionInput(input, bound, revision);
@@ -118,6 +124,28 @@ export async function createConnection(file) {
         return dispatch(bound, input, options);
       }),
   };
+  async function saveIssues(input) {
+    await current();
+    if (
+      !receiver ||
+      input.expectedRevision !== revision ||
+      Object.keys(input).some((key) => !['action', 'expectedRevision', ...issueInputKeys].includes(key))
+    )
+      fail('CONFIGURATION_CHANGED', 'Issue 设置参数无效或配置已变化，请刷新；网页不能提交命令或凭据');
+    const next = validateConfig({ ...receiver.config, issues: issueConfiguration(receiver.config, input) });
+    const state = await receiver.status();
+    checkIssueSettings(state, receiver.config, next);
+    await writePrivate(path, next);
+    loaded = false;
+    const configured = await current();
+    if (state?.active)
+      await configured.store.locked(async () => {
+        const saved = await configured.read();
+        recordDelivery(configured.requireActive(saved), configured.config, 'configuration', saved.issues);
+        await configured.store.save(saved);
+      });
+    return configured;
+  }
 }
 function verifyExecutionInput(input, bound, revision) {
   if (input.expectedBinding && input.expectedBinding !== bound.config.bindingId)
