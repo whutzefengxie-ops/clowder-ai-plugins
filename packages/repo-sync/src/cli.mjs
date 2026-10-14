@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
-import { createConnection } from './connections.mjs';
 import { discover } from './github.mjs';
+import { createProjectWorkspace } from './projects.mjs';
 import { createReceiverServer, listen } from './server.mjs';
 import { configuredReceiver } from './settings.mjs';
 
@@ -11,13 +11,11 @@ try {
     throw new Error(
       '用法：clowder-repo-sync <setup|serve|status|adopt|discover|tags|select-tag|start|issue|sync-issues|prepare|resolve|cancel-version|pr|clear-pr|create-pr|recover|receipts|unlock> <私有配置.json> [参数]',
     );
-  const connection = ['setup', 'serve'].includes(operation) ? await createConnection(configPath) : null;
-  const receiver = connection
-    ? await connection.current()
-    : await configuredReceiver(JSON.parse(await readFile(configPath, 'utf8')));
+  const projects = ['setup', 'serve'].includes(operation) ? await createProjectWorkspace(configPath) : null;
+  const receiver = projects ? null : await configuredReceiver(JSON.parse(await readFile(configPath, 'utf8')));
   const serve = async () => {
     const port = Number(args[0] ?? 5187);
-    const server = await listen(createReceiverServer(receiver, { connection }), port);
+    const server = await listen(createReceiverServer(receiver, { projects }), port);
     for (const signal of ['SIGINT', 'SIGTERM'])
       process.once(signal, () => {
         void server.shutdown().catch(() => {

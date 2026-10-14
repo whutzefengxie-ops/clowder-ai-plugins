@@ -23,7 +23,7 @@ const allowed = new Set([
   'internalWebUrl',
   'prMode',
 ]);
-export async function createConnection(file) {
+export async function createConnection(file, options = {}) {
   const path = await privateLocation(file);
   let revision = null;
   let receiver = null;
@@ -66,7 +66,7 @@ export async function createConnection(file) {
       checks: receiver?.config.checks ?? [{ command: 'git', args: ['fsck', '--no-reflogs'] }],
       checkProfile: receiver?.config.checkProfile ?? 'git-integrity',
     });
-    next.stateDir = join(dirname(path), 'bindings', next.bindingId.slice(0, 24));
+    next.stateDir = stateDirectory(path, next.bindingId, options);
     githubRepository(next.sourceUrl);
     const candidate = await configuredReceiver(next);
     if (await candidate.status()) fail('ALREADY_ADOPTED', '此绑定已有台账，请使用原配置继续，不能覆盖');
@@ -132,7 +132,10 @@ export async function createConnection(file) {
       Object.keys(input).some((key) => !['action', 'expectedRevision', ...issueInputKeys].includes(key))
     )
       fail('CONFIGURATION_CHANGED', 'Issue 设置参数无效或配置已变化，请刷新；网页不能提交命令或凭据');
-    const next = validateConfig({ ...receiver.config, issues: issueConfiguration(receiver.config, input) });
+    const next = validateConfig({
+      ...receiver.config,
+      issues: issueConfiguration(receiver.config, input),
+    });
     const state = await receiver.status();
     checkIssueSettings(state, receiver.config, next);
     await writePrivate(path, next);
@@ -152,4 +155,10 @@ function verifyExecutionInput(input, bound, revision) {
     fail('CONFIGURATION_CHANGED', '仓库绑定已变化，任务尚未开始 Git 操作；请刷新核对');
   if (input.expectedRevision !== undefined && input.expectedRevision !== revision)
     fail('CONFIGURATION_CHANGED', '私有配置已变化，任务尚未开始 Git 操作；请刷新核对');
+}
+
+function stateDirectory(path, bindingId, options) {
+  return options.stateDirectory
+    ? options.stateDirectory(bindingId)
+    : join(dirname(path), 'bindings', bindingId.slice(0, 24));
 }

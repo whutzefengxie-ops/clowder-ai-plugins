@@ -7,7 +7,8 @@ import { publicTask, readTask, saveTask, taskInput, taskPlan } from './task-stor
 
 const running = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
 export class Tasks {
-  constructor(resolveReceiver, perform) {
+  constructor(resolveReceiver, perform, projectId) {
+    this.projectId = projectId;
     this.resolveReceiver = resolveReceiver;
     this.perform = perform;
     this.writes = Promise.resolve();
@@ -33,6 +34,8 @@ export class Tasks {
         };
       }
     }
+    if (value?.projectId && this.projectId && value.projectId !== this.projectId)
+      fail('TASK_PROJECT_CHANGED', '任务属于另一项目，未执行或覆盖原任务');
     const owned = value === this.value;
     if (owned && this.executing && !running.has(value.status))
       value = {
@@ -107,6 +110,7 @@ export class Tasks {
     };
     this.value = {
       schema: 2,
+      ...(this.projectId ? { projectId: this.projectId } : {}),
       id: input.requestId,
       inputHash: hash,
       ownerPid: process.pid,
@@ -118,13 +122,19 @@ export class Tasks {
       startedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       cancellable: allowCancel,
-      steps: taskPlan(input.action).map((step) => ({ ...step, ...phaseLocation(input.action, step.key) })),
+      steps: taskPlan(input.action).map((step) => ({
+        ...step,
+        ...phaseLocation(input.action, step.key),
+      })),
     };
     try {
       await saveTask(this.config, this.value, true);
     } catch {
       this.value.status = 'FAILED';
-      this.value.error = { code: 'TASK_STORE_FAILED', message: '任务登记失败，业务未执行；请修复私有目录后只补存记录' };
+      this.value.error = {
+        code: 'TASK_STORE_FAILED',
+        message: '任务登记失败，业务未执行；请修复私有目录后只补存记录',
+      };
       this.value.finishedAt = new Date().toISOString();
       this.terminal = structuredClone(this.value);
       await saveTask(this.config, this.terminal).catch(() => {});
@@ -163,7 +173,11 @@ export class Tasks {
     const parent = this.step;
     let step = this.value.steps.find((step) => step.key === event.id && step.status === 'PENDING');
     if (!step) {
-      step = { id: `${event.id}-${this.value.steps.length}`, key: event.id, label: event.label };
+      step = {
+        id: `${event.id}-${this.value.steps.length}`,
+        key: event.id,
+        label: event.label,
+      };
       this.value.steps.push(step);
     }
     step.status = 'RUNNING';

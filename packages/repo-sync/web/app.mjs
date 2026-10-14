@@ -8,6 +8,8 @@ import { issueSettings } from './issue-settings.mjs';
 import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
 import { platformSettings } from './platform.mjs';
+import { pageProjectId, projectUrl } from './project-scope.mjs';
+import { createProjectNavigation } from './projects.mjs';
 import { button, esc, sha, stageOf } from './ui.mjs';
 import { conflictEditor } from './version.mjs';
 import { workbench } from './workbench.mjs';
@@ -19,6 +21,7 @@ let snapshot;
 let view = new URL(location.href).searchParams.get('view') === 'configuration' ? 'configuration' : 'workbench';
 let mobileDetail = !!new URL(location.href).searchParams.get('record');
 let availableTags = [];
+const projectNavigation = createProjectNavigation(() => snapshot, saveDraft);
 const records = createHistory(() => snapshot, render);
 const operations = createOperations({
   snapshot: () => snapshot,
@@ -28,9 +31,10 @@ const operations = createOperations({
   onTask,
 });
 function draftKey() {
-  return `repo-sync-draft:${snapshot?.config?.bindingId ?? 'setup'}:${view}:${records.get().selected}`;
+  return `repo-sync-draft:${pageProjectId === 'default' ? '' : `${pageProjectId}:`}${snapshot?.config?.bindingId ?? 'setup'}:${view}:${records.get().selected}`;
 }
 function saveDraft() {
+  if (!snapshot || !content.childElementCount) return;
   try {
     sessionStorage.setItem(draftKey(), JSON.stringify(captureDraft()));
   } catch {}
@@ -113,11 +117,14 @@ function updateAttempts(nodes, record, task, historical) {
 }
 async function refresh() {
   saveDraft();
-  const response = await fetch('/api/status?compact=1', { signal: AbortSignal.timeout(8000) });
+  const response = await fetch(projectUrl('/api/status?compact=1'), {
+    signal: AbortSignal.timeout(8000),
+  });
   const result = await response.json();
   if (!response.ok) throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
   if (!snapshot && result.state?.active) mobileDetail = true;
   snapshot = result;
+  projectNavigation.update(result.workspace);
   if (!snapshot.state && snapshot.operation) view = 'configuration';
   await records.load(true);
   render();
@@ -126,7 +133,7 @@ async function refresh() {
 const action = (input) => operations.action(input);
 document.addEventListener('click', async (event) => {
   const element = event.target.closest('button, [data-reveal]');
-  if (!element) return;
+  if (!snapshot || !element) return;
   await navigate(element);
   if (element.dataset.rulePath) stageRule(element);
   if (element.hasAttribute('data-baseline-read')) {
@@ -139,22 +146,17 @@ document.addEventListener('click', async (event) => {
     if (result) document.getElementById('baseline-file-content').innerHTML = baselineContent(result.result, esc);
   }
   if (element.dataset.conflictPath) {
-    const result = await action({ action: 'conflict', path: element.dataset.conflictPath });
+    const result = await action({
+      action: 'conflict',
+      path: element.dataset.conflictPath,
+    });
     if (result) {
       saveConflict(snapshot, result.result);
       document.getElementById('conflict-editor').innerHTML = conflictEditor(result.result, esc);
       saveDraft();
     }
   }
-  if (element.dataset.view) {
-    saveDraft();
-    view = element.dataset.view;
-    const url = new URL(location.href);
-    if (view === 'configuration') url.searchParams.set('view', view);
-    else url.searchParams.delete('view');
-    history.replaceState(null, '', url);
-    render();
-  }
+  if (element.dataset.view) changeView(element.dataset.view);
   if (element.dataset.action) {
     mobileDetail = true;
     const result = await action({
@@ -165,6 +167,15 @@ document.addEventListener('click', async (event) => {
     showActionResult(element.dataset.action, result);
   }
 });
+function changeView(next) {
+  saveDraft();
+  view = next;
+  const url = new URL(location.href);
+  if (view === 'configuration') url.searchParams.set('view', view);
+  else url.searchParams.delete('view');
+  history.replaceState(null, '', url);
+  render();
+}
 async function navigate(element) {
   if (element.dataset.reveal) {
     const target = document.getElementById(element.dataset.reveal);
@@ -272,10 +283,13 @@ document.addEventListener(
   },
   true,
 );
-refresh().catch((error) => {
-  errorPanel.textContent = error.message;
-  errorPanel.hidden = false;
-});
+projectNavigation
+  .load()
+  .then(refresh)
+  .catch((error) => {
+    errorPanel.textContent = error.message;
+    errorPanel.hidden = false;
+  });
 
 function showActivity(task) {
   const activity = document.getElementById('current-activity');

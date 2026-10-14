@@ -1,5 +1,6 @@
 import { captureDraft, restoreDraft } from './connections.mjs';
 import { renderTask } from './operation-view.mjs';
+import { pageProjectId, projectUrl } from './project-scope.mjs';
 
 const longActions = new Set([
   'heads',
@@ -32,7 +33,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
     for (const element of document.querySelectorAll(
       'button[data-action], [data-rule-path], [data-baseline-read], [data-conflict-path], form button, input, textarea, select',
     ))
-      if (!element.closest('.record-list')) element.disabled = busy;
+      if (!element.closest('.record-list, [data-project-navigation]')) element.disabled = busy;
   }
   function show(task) {
     current = task;
@@ -40,9 +41,13 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
     else document.getElementById('operation').innerHTML = renderTask(task);
   }
   async function request(url, input) {
-    const response = await fetch(url, {
+    if (input && snapshot()?.workspace) input = { ...input, projectId: pageProjectId };
+    const response = await fetch(projectUrl(url), {
       method: input ? 'POST' : 'GET',
-      headers: { 'Content-Type': 'application/json', 'X-Repo-Sync-Token': snapshot().token },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Repo-Sync-Token': snapshot().token,
+      },
       ...(input ? { body: JSON.stringify(input) } : {}),
       signal: AbortSignal.timeout(8000),
     });

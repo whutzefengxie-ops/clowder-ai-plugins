@@ -11,8 +11,8 @@ import { body, requestPath, requireToken, send } from './http.mjs';
 import { publicIssues } from './issue-adapter.mjs';
 import { publicPlatform } from './pr-settings.mjs';
 import { recordDetail, recordList } from './records.mjs';
+import { checkProjectInput, projectRequest, serverScopes } from './server-projects.mjs';
 import { configure } from './settings.mjs';
-import { Tasks } from './tasks.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '../web');
 const assets = new Map([
@@ -43,17 +43,16 @@ const assets = new Map([
     'journey.css',
     'source-target.mjs',
     'issue-settings.mjs',
+    'projects.mjs',
+    'projects.css',
+    'project-scope.mjs',
+    'project-view.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
   const token = randomBytes(32).toString('hex');
-  const current = async () => (options.connection ? options.connection.current() : receiver);
-  const tasks = new Tasks(current, async (input) =>
-    options.connection ? options.connection.run(input, options) : dispatch(receiver, input, options),
-  );
   options = {
     ...options,
-    tasks,
     runtime: {
       productVersion: packageInfo.version,
       apiVersion: 2,
@@ -61,6 +60,7 @@ export function createReceiverServer(receiver, options = {}) {
       startedAt: new Date().toISOString(),
     },
   };
+  const scopes = serverScopes(receiver, options);
   const server = createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -70,42 +70,64 @@ export function createReceiverServer(receiver, options = {}) {
     );
     try {
       const path = requestPath(request, server.address()?.port);
-      if (path.startsWith('/api/')) receiver = await current();
-      if (await recordRequest(request, response, receiver, tasks, token, path)) return;
+      if (!path.startsWith('/api/'))
+        return request.method === 'GET'
+          ? get(receiver, options, token, path, response, request.url)
+          : send(response, 404, { code: 'NOT_FOUND' });
+      if (await projectRequest(request, response, options, token, path)) return;
+      const context = await scopes.scope(request.url);
+      const { tasks } = context;
+      if (await recordRequest(request, response, context.receiver, tasks, token, path)) return;
       if (path.startsWith('/api/tasks')) {
         requireToken(request, token);
-        return await taskRequest(request, response, path, tasks);
+        return await taskRequest(request, response, path, tasks, context.options.projectId);
       }
-      if (request.method === 'GET') return await get(receiver, options, token, path, response, request.url);
-      if (request.method !== 'POST' || path !== '/api/action') return send(response, 404, { code: 'NOT_FOUND' });
-      requireToken(request, token);
-      if (tasks.busy()) fail('OPERATION_RUNNING', '已有任务执行中，请等待或取消原任务；不能修改绑定或重复操作');
-      receiver = await post(receiver, options, token, await body(request), response);
+      if (request.method === 'GET')
+        return await get(context.receiver, context.options, token, path, response, request.url);
+      await executionRequest(request, response, path, context, scopes, token);
     } catch (error) {
       return sendError(response, error);
     }
   });
   server.shutdown = async () => {
-    await tasks.close();
+    await scopes.close();
     if (server.listening) await new Promise((done) => server.close(done));
   };
   return server;
 }
-async function taskRequest(request, response, path, tasks) {
-  if (request.method === 'POST' && path === '/api/tasks')
-    return send(response, 202, { operation: await tasks.start(await body(request)) });
+async function executionRequest(request, response, path, context, scopes, token) {
+  if (request.method !== 'POST' || path !== '/api/action') return send(response, 404, { code: 'NOT_FOUND' });
+  requireToken(request, token);
+  const input = await body(request);
+  checkProjectInput(input, context.options.projectId);
+  if (context.tasks.busy()) fail('OPERATION_RUNNING', '此项目已有任务执行中，请处理原任务；可切换或新增其他项目');
+  scopes.update(await post(context.receiver, context.options, token, input, response));
+}
+async function taskRequest(request, response, path, tasks, projectId) {
+  if (request.method === 'POST' && path === '/api/tasks') {
+    const input = await body(request);
+    checkProjectInput(input, projectId);
+    return send(response, 202, { operation: await tasks.start(input) });
+  }
   const match = /^\/api\/tasks\/([a-f0-9]{32})(\/cancel|\/persist)?$/.exec(path);
   if (!match) return send(response, 404, { code: 'NOT_FOUND' });
-  if (request.method === 'POST' && match[2])
+  if (request.method === 'POST' && match[2]) {
+    checkProjectInput(await body(request), projectId);
     return send(response, 202, {
       operation: await (match[2] === '/persist' ? tasks.retryPersistence(match[1]) : tasks.cancel(match[1])),
     });
+  }
   if (request.method !== 'GET' || match[2]) return send(response, 404, { code: 'NOT_FOUND' });
   const operation = await tasks.latest(match[1]);
   return send(
     response,
     operation ? 200 : 404,
-    operation ? { operation } : { code: 'TASK_NOT_FOUND', message: '尚未找到这笔任务，请继续查询原请求' },
+    operation
+      ? { operation }
+      : {
+          code: 'TASK_NOT_FOUND',
+          message: '尚未找到这笔任务，请继续查询原请求',
+        },
   );
 }
 async function post(receiver, options, token, input, response) {
@@ -186,6 +208,7 @@ async function get(receiver, options, token, path, response, url = '') {
         }
       : null,
     connection: options.connection?.describe(),
+    ...(await workspaceSnapshot(options)),
     platform: publicPlatform(receiver),
     service: 'production',
     runtime: options.runtime,
@@ -209,6 +232,7 @@ async function recordRequest(request, response, receiver, tasks, token, path) {
       return true;
     }
     const params = new URL(request.url, 'http://localhost').searchParams;
+    params.delete('project');
     send(
       response,
       200,
@@ -219,4 +243,8 @@ async function recordRequest(request, response, receiver, tasks, token, path) {
     return true;
   }
   return false;
+}
+
+async function workspaceSnapshot(options) {
+  return options.workspace ? { workspace: await options.workspace() } : {};
 }

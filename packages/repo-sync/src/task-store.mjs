@@ -27,6 +27,7 @@ export const taskActions = new Set([
 const keys = new Set([
   'action',
   'requestId',
+  'projectId',
   'upstream',
   'internal',
   'tag',
@@ -50,6 +51,8 @@ export function taskInput(input) {
   if (!taskActions.has(input?.action)) fail('UNKNOWN_ACTION', '此操作不支持后台执行');
   if (!/^[a-f0-9]{32}$/.test(input.requestId ?? '') || Object.keys(input).some((key) => !keys.has(key)))
     fail('INVALID_TASK_INPUT', '任务需要有效请求标识和受限操作参数');
+  if (input.projectId !== undefined && input.projectId !== 'default' && !/^[a-f0-9]{24}$/.test(input.projectId))
+    fail('INVALID_TASK_INPUT', '任务项目身份无效，不能操作其他项目');
   return createHash('sha256')
     .update(
       JSON.stringify(
@@ -82,7 +85,12 @@ export function taskPlan(action) {
     resolve: [['conflict-resolution', '保存当前交付的冲突处理']],
     'cancel-version': [['version-cancel', '撤销当前未发布版本交付']],
   };
-  return (plans[action] ?? fetch).map(([key, label]) => ({ id: key, key, label, status: 'PENDING' }));
+  return (plans[action] ?? fetch).map(([key, label]) => ({
+    id: key,
+    key,
+    label,
+    status: 'PENDING',
+  }));
 }
 export async function readTask(config, id) {
   if (!config?.stateDir) return null;
@@ -142,6 +150,7 @@ export function publicTask(value, owned, canRetryPersistence = false) {
     id,
     schema: value.schema,
     deliveryId: value.deliveryId,
+    ...(value.projectId ? { projectId: value.projectId } : {}),
     configSnapshot: value.configSnapshot,
     action,
     status,
@@ -164,13 +173,20 @@ export function publicTask(value, owned, canRetryPersistence = false) {
     result,
     error,
     ...(value.persistence
-      ? { persistence: { ...value.persistence, canRetry: Boolean(owned && canRetryPersistence) } }
+      ? {
+          persistence: {
+            ...value.persistence,
+            canRetry: Boolean(owned && canRetryPersistence),
+          },
+        }
       : {}),
     cancellable: Boolean(owned && cancellable && status === 'RUNNING'),
   };
 }
 
 function validateTaskVersion(value) {
+  if (value.projectId !== undefined && value.projectId !== 'default' && !/^[a-f0-9]{24}$/.test(value.projectId))
+    fail('TASK_UNREADABLE', '任务项目身份损坏，保留原记录');
   if (value.schema !== undefined && value.schema !== 2) fail('TASK_UNREADABLE', '任务记录版本不支持，不能当旧格式重建');
   if (value.schema === 2) {
     if (value.deliveryId !== null && !/^[a-f0-9]{24}$/.test(value.deliveryId ?? ''))

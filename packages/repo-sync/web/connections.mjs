@@ -22,7 +22,7 @@ export function configuration(snapshot, esc, sha, button) {
   if (!connection)
     return `${modeSettings(config, state, esc)}<section class="card"><h2>3 · 仓库连接与基线</h2>${summary(config, esc)}<p>地址与检查命令来自本地私有配置，凭据使用本机 Git / gh 登录。</p>${baseline(config, state, esc, sha, button)}</section>`;
   const steps = `<ol class="flow setup"><li><b>${config ? '✓' : '●'} 1 · 连接真实仓库</b><small>地址、分支、方式与文件规则</small></li><li><b>${state ? '✓' : config ? '●' : '○'} 2 · 核验已有基线</b><small>读取两侧版本，登记 U0 ↔ I0</small></li><li><b>${state ? '✓' : '○'} 3 · 开始同步</b><small>读取更新，准备候选分支与内部 PR</small></li></ol>`;
-  return `${steps}<section class="card"><h2>1 · 连接真实仓库</h2>${config ? `${summary(config, esc)}${connection.editable ? `<details><summary>修改尚未启用的仓库配置</summary>${connectionForm(config, connection, esc)}</details>` : '<p>此配置已固定，或由操作者手工管理。另一组仓库请使用新的私有配置文件。</p>'}` : connectionForm(config, connection, esc)}</section>${config ? `<section class="card"><h2>2 · 核验已有基线</h2><p>先确保本机 git 已安装且有两侧仓库读取权限、内部候选分支写权限。按开发过程同步还需要 gh 已登录，以读取 GitHub 的 Issue / PR。</p>${baseline(config, state, esc, sha, button)}</section>` : ''}<section class="card"><h3>配置保存在本机</h3><p>配置文件：<code>${esc(connection.configurationFile)}</code>${connection.stateDir ? `<br>台账目录：<code>${esc(connection.stateDir)}</code>` : ''}</p><p>重启时使用同一个配置文件即可续接；配置不会上传到 GitHub。PR 按选定方式自动创建或人工登记，审核合入在内部平台完成。</p>${config ? `<p>当前检查：${config.checkProfile === 'git-integrity' ? 'Git 基础完整性；尚未配置项目构建与插件兼容检查' : '私有配置中的项目检查'}。</p>` : ''}</section>`;
+  return `${steps}<section class="card"><h2>1 · 连接真实仓库</h2>${config ? `${summary(config, esc)}${connection.editable ? `<details><summary>修改尚未启用的仓库配置</summary>${connectionForm(config, connection, esc)}</details>` : '<p>此配置已固定，或由操作者手工管理。另一组仓库请点击上方“新增项目”，原配置与台账会保留。</p>'}` : connectionForm(config, connection, esc)}</section>${config ? `<section class="card"><h2>2 · 核验已有基线</h2><p>先确保本机 git 已安装且有两侧仓库读取权限、内部候选分支写权限。按开发过程同步还需要 gh 已登录，以读取 GitHub 的 Issue / PR。</p>${baseline(config, state, esc, sha, button)}</section>` : ''}<section class="card"><h3>配置保存在本机</h3><p>配置文件：<code>${esc(connection.configurationFile)}</code>${connection.stateDir ? `<br>台账目录：<code>${esc(connection.stateDir)}</code>` : ''}</p><p>重启时使用同一个配置文件即可续接；配置不会上传到 GitHub。PR 按选定方式自动创建或人工登记，审核合入在内部平台完成。</p>${config ? `<p>当前检查：${config.checkProfile === 'git-integrity' ? 'Git 基础完整性；尚未配置项目构建与插件兼容检查' : '私有配置中的项目检查'}。</p>` : ''}</section>`;
 }
 export function repositoryInput(fields) {
   const input = {
@@ -54,7 +54,11 @@ export function captureDraft() {
     deliveryId: form.elements.namedItem('deliveryId')?.value ?? '',
     values: [...form.elements]
       .filter((element) => element.name && !['expectedRevision', 'previousUrl', 'deliveryId'].includes(element.name))
-      .map((element) => ({ name: element.name, value: element.value, checked: element.checked })),
+      .map((element) => ({
+        name: element.name,
+        value: element.value,
+        checked: element.checked,
+      })),
   }));
 }
 export function restoreDraft(drafts) {

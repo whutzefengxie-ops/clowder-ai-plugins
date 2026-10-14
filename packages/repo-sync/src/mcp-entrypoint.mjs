@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createConnection } from './connections.mjs';
 import { createRepoSyncMcpServer } from './mcp-server.mjs';
+import { createProjectWorkspace } from './projects.mjs';
 
 try {
   const file = process.env.REPO_SYNC_CONFIG_FILE;
-  const connection = await createConnection(file);
-  const server = createRepoSyncMcpServer(await connection.current(), { connection });
+  const projects = await createProjectWorkspace(file);
+  const server = createRepoSyncMcpServer(null, { projects });
   for (const signal of ['SIGINT', 'SIGTERM'])
     process.once(signal, () => {
       void server.close();

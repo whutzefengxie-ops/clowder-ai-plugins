@@ -1,3 +1,4 @@
+import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { esc, labels, title, when } from './ui.mjs';
 
 export function createHistory(snapshot, changed) {
@@ -10,10 +11,10 @@ export function createHistory(snapshot, changed) {
   let binding;
   const cache = new Map();
   function storageKey() {
-    return `repo-sync-navigation:${snapshot().config?.bindingId ?? 'setup'}`;
+    return `repo-sync-navigation:${pageProjectId === 'default' ? '' : `${pageProjectId}:`}${snapshot().config?.bindingId ?? 'setup'}`;
   }
   async function request(path) {
-    const response = await fetch(path, {
+    const response = await fetch(projectUrl(path), {
       headers: { 'X-Repo-Sync-Token': snapshot().token },
       signal: AbortSignal.timeout(8000),
     });

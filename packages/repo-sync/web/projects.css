@@ -1,0 +1,37 @@
+.project-bar {
+  padding: 20px 24px;
+  margin-bottom: 28px;
+}
+.project-controls {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.project-controls label {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.project-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.project-bar p {
+  margin-bottom: 0;
+}
+.project-bar form {
+  padding-top: 18px;
+}
+.project-bar button,
+.project-bar select {
+  min-height: 44px;
+}
+@media (max-width: 768px) {
+  .project-bar {
+    padding: 16px;
+  }
+  .project-controls label {
+    flex-basis: 100%;
+  }
+}
