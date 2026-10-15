@@ -132,32 +132,35 @@ function operationSlot(stage, operation, delivery, historical) {
 
 function planned(stage, delivery, snapshot) {
   const version = (delivery?.mode ?? snapshot.config?.mode) === 'version';
-  const issues = !version && (!delivery || delivery.issues?.length);
-  return (
-    {
-      1: [
-        ['target-check', '解析目标并核对历史与来源范围'],
-        ...(!version ? [['github-deliveries', '读取真实 PR、主干提交与 Issue 来源']] : []),
-      ],
-      2: [
-        ...(issues ? [['issue-create', '创建 / 复用并回读内部 Issue']] : []),
-        ['candidate-build', '准备提交映射、保留内部范围并构造候选'],
-        ['candidate-check', '执行配置的候选检查'],
-      ],
-      3: [
-        ['publish-intent', '保存原发布意图'],
-        ['candidate-publish', '推送原候选分支'],
-        ['candidate-ref', '回读候选 ref'],
-        ['platform-pr', '创建 / 回读原内部 PR'],
-        ...(issues ? [['issue-link', '关联并回读内部 Issue 与 PR']] : []),
-      ],
-      4: [['platform-review', '在内部平台审核并合入']],
-      5: [
-        ['merge-verify', '核验实际合入的核心文件与历史'],
-        ...(issues ? [['issue-state', '核对接收条件、更新应关闭的 Issue 并回读']] : []),
-        ['acceptance-save', '保存本笔接收结果'],
-        ['execution-record', '保存原执行记录'],
-      ],
-    }[stage] ?? []
-  );
+  // 使用更稳定的判断逻辑：如果有 delivery，基于它的实际数据；否则基于配置预测
+  const issues = !version && (delivery ? delivery.issues?.length > 0 : true);
+
+  // 返回该阶段的所有计划步骤，保持稳定不变
+  const allSteps = {
+    1: [
+      ['target-check', '解析目标并核对历史与来源范围'],
+      ...(!version ? [['github-deliveries', '读取真实 PR、主干提交与 Issue 来源']] : []),
+    ],
+    2: [
+      ...(issues ? [['issue-create', '创建 / 复用并回读内部 Issue']] : []),
+      ['candidate-build', '准备提交映射、保留内部范围并构造候选'],
+      ['candidate-check', '执行配置的候选检查'],
+    ],
+    3: [
+      ['publish-intent', '保存原发布意图'],
+      ['candidate-publish', '推送原候选分支'],
+      ['candidate-ref', '回读候选 ref'],
+      ['platform-pr', '创建 / 回读原内部 PR'],
+      ...(issues ? [['issue-link', '关联并回读内部 Issue 与 PR']] : []),
+    ],
+    4: [['platform-review', '在内部平台审核并合入']],
+    5: [
+      ['merge-verify', '核验实际合入的核心文件与历史'],
+      ...(issues ? [['issue-state', '核对接收条件、更新应关闭的 Issue 并回读']] : []),
+      ['acceptance-save', '保存本笔接收结果'],
+      ['execution-record', '保存原执行记录'],
+    ],
+  };
+
+  return allSteps[stage] ?? [];
 }

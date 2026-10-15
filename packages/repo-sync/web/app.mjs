@@ -96,6 +96,7 @@ function render({ keepScroll = false } = {}) {
   restoreView({ keepScroll });
 }
 let liveStage;
+let lastAutomationStatus;
 function onTask(task) {
   if (!snapshot) return;
   snapshot.operation = task;
@@ -339,10 +340,29 @@ setInterval(() => {
     refresh({ background: true }).catch(() => {});
 }, 5000);
 function focusLiveStage(task, policy) {
-  if (task?.status !== 'RUNNING') return;
-  if (liveStage !== policy.stage) {
-    liveStage = policy.stage;
-    content.querySelector(`[data-stage="${policy.stage}"]`)?.setAttribute('open', '');
+  const run = snapshot.state?.automation;
+  const currentStatus = run?.status;
+
+  // 当自动化状态从 RUNNING 变为 PAUSED/FAILED/COMPLETE 时，重置 liveStage
+  if (lastAutomationStatus === 'RUNNING' && currentStatus !== 'RUNNING' && currentStatus !== 'WAITING_REVIEW') {
+    liveStage = null;
   }
-  content.querySelector(`[data-stage="${policy.stage || stageOf(snapshot.state.active)}"]`)?.setAttribute('open', '');
+  lastAutomationStatus = currentStatus;
+
+  // 只在任务实际运行时才自动展开阶段
+  if (task?.status !== 'RUNNING') return;
+
+  // 只在阶段真正变化时才更新展开状态
+  const targetStage = policy?.stage || stageOf(snapshot.state.active);
+  if (liveStage !== targetStage) {
+    liveStage = targetStage;
+    // 先关闭所有阶段
+    content.querySelectorAll('[data-stage][open]').forEach(el => {
+      if (Number(el.dataset.stage) !== targetStage) {
+        el.removeAttribute('open');
+      }
+    });
+    // 只打开当前活跃的阶段
+    content.querySelector(`[data-stage="${targetStage}"]`)?.setAttribute('open', '');
+  }
 }

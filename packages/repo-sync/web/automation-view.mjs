@@ -28,13 +28,29 @@ export function automaticPolicy(snapshot, delivery) {
   if (!run || run.status === 'COMPLETE') return null;
   const reference = referenceRemedy(delivery);
   if (reference) return reference;
-  if (['FAILED', 'PAUSED'].includes(run.status))
+
+  // 暂停和失败状态：保持在当前完成的阶段，不要跳回第 2 步
+  if (['FAILED', 'PAUSED'].includes(run.status)) {
+    // 确定实际完成到哪个阶段
+    let completedStage = 1;
+    if (delivery?.acceptedInternal) {
+      completedStage = 5; // PR 已合入，在第 5 步
+    } else if (delivery?.prUrl) {
+      completedStage = 4; // PR 已创建，等待合入（第 4 步）
+    } else if (delivery?.candidate) {
+      completedStage = 3; // 候选已创建，在第 3 步
+    } else if (delivery) {
+      completedStage = 2; // 交付已开始，在第 2 步
+    }
+
     return {
-      stage: delivery?.acceptedInternal ? 5 : delivery?.candidate ? 3 : 2,
+      stage: completedStage,
       text: '修正当前错误后恢复原轮次，保留已创建的 Issue、候选和 PR。',
       action: 'resume-sync',
       label: '恢复原同步 →',
     };
+  }
+
   if (run.status === 'WAITING_REVIEW')
     return {
       stage: 4,
@@ -45,18 +61,26 @@ export function automaticPolicy(snapshot, delivery) {
       href: delivery?.prUrl,
       label: '打开内部 PR ↗',
     };
+
+  // RUNNING 状态：根据实际进展确定阶段
   return {
-    stage: delivery?.acceptedInternal ? 5 : delivery?.candidate ? 3 : 2,
+    stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
     text: '系统正在自动执行，当前子步骤会在流程内显示。',
   };
 }
 
 export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, null)) {
   const task = snapshot.operation;
+  const run = snapshot.state?.automation;
+
+  // 确定当前阶段：优先使用 policy.stage，其次是任务中最后的 RUNNING/FAILED 步骤
   const current =
     task?.persistence?.status === 'FAILED'
       ? 5
-      : task?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage || policy?.stage || 1;
+      : policy?.stage ||
+        task?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage ||
+        1;
+
   const version = snapshot.config.mode === 'version';
   const names = [
     '读取目标与真实来源集合',
@@ -65,17 +89,43 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
     '人工审核合入',
     version ? '自动核验与保存版本' : '自动核验、关单与保存映射',
   ];
-  return `<ol class="journey-flow">${names
-    .map((name, index) => {
-      const stage = index + 1;
-      const failed =
-        stage === current &&
-        (['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status) ||
-          task?.persistence?.status === 'FAILED');
-      const steps = task?.steps?.filter((step) => step.stage === stage) ?? [];
-      const done = steps.length > 0 && steps.every((step) => step.status === 'DONE');
-      const status = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
-      return `<li><details data-stage="${stage}" data-stage-state="${status}" ${stage === current ? 'open' : ''}><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
+
+  // 计算每个阶段的完成状态
+  const stageStatus = names.map((_, index) => {
+    const stage = index + 1;
+    const steps = task?.steps?.filter((step) => step.stage === stage) ?? [];
+    const failed =
+      stage === current &&
+      (['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status) ||
+        task?.persistence?.status === 'FAILED');
+    const done = steps.length > 0 && steps.every((step) => step.status === 'DONE');
+
+    // 明确的状态判断逻辑
+    let status;
+    if (failed) {
+      status = 'failed';
+    } else if (done) {
+      status = 'done';
+    } else if (stage === current) {
+      status = 'current';
+    } else if (stage < current) {
+      // 前面的阶段应该是完成状态，除非没有步骤记录
+      status = steps.length > 0 ? 'done' : 'skipped';
+    } else {
+      status = 'pending';
+    }
+
+    return { stage, name: names[index], status, failed, done, steps };
+  });
+
+  return `<ol class="journey-flow">${stageStatus
+    .map(({ stage, name, status, failed, done }) => {
+      const mark = failed ? '×' : done ? '✓' : stage === current ? '●' : '○';
+      const tone = failed ? 'bad' : done ? 'good' : '';
+      // 只有当前阶段或失败的阶段默认展开
+      const shouldOpen = (stage === current && run?.status === 'RUNNING') || failed;
+
+      return `<li><details data-stage="${stage}" data-stage-state="${status}" ${shouldOpen ? 'open' : ''}><summary><span class="stage-mark ${tone}">${mark}</span><b>${stage} · ${name}</b></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
     })
     .join('')}</ol>${policy ? actionBar(policy, false) : ''}`;
 }
