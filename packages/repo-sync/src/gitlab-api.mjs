@@ -43,9 +43,9 @@ export function gitlabApi(config, settings = config.issues, family = 'ISSUE') {
       let page = '1';
       for (let count = 0; count < 100; count++) {
         const response = await request(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
-        if (!Array.isArray(response.value)) fail('ISSUE_RESPONSE_INVALID', '内部 Issue 列表格式无效');
-        result.push(...response.value);
-        if (!nextPage(response, page)) return result;
+        const items = listItems(path, response.value);
+        result.push(...items);
+        if (!nextPage(response, page, items.length)) return result;
         page = response.next;
       }
       fail('ISSUE_RESPONSE_LIMIT', 'Issue 查询范围超过分页上限，未静默截断，请收窄范围');
@@ -53,14 +53,21 @@ export function gitlabApi(config, settings = config.issues, family = 'ISSUE') {
   };
 }
 
-function nextPage(response, page) {
+function listItems(path, value) {
+  const items = !Array.isArray(value) && /^issues(?:\?|$)/.test(path) ? value?.issues : value;
+  if (!Array.isArray(items) || items.some((item) => !item || typeof item !== 'object' || Array.isArray(item)))
+    fail('ISSUE_RESPONSE_INVALID', '内部平台列表格式无效；Issue 支持数组或 issues 封套，PR 需要数组');
+  return items;
+}
+
+function nextPage(response, page, length) {
   if (!response.next) {
-    if (response.next === null && response.value.length === 100)
+    if (response.next === null && length === 100)
       fail('ISSUE_RESPONSE_INVALID', '完整页缺少分页回执，无法证明查询完整，未静默截断');
     return false;
   }
-  if (!/^\d+$/.test(response.next) || Number(response.next) <= Number(page))
-    fail('ISSUE_RESPONSE_INVALID', '内部 Issue API 分页未前进，停止而非截断');
+  if (!/^\d+$/.test(response.next) || Number(response.next) !== Number(page) + 1)
+    fail('ISSUE_RESPONSE_INVALID', '内部 Issue API 分页未连续前进，停止而非截断');
   return true;
 }
 

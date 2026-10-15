@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 
 const mrUrl = 'https://internal.example/team/core/-/merge_requests/2';
-function mergeRoute(state, method, payload, url = mrUrl) {
-  if (method === 'PUT') state.description = payload.description;
+function mergeRoute(state, method, payload, url = mrUrl, ignoreLinks = false) {
+  if (method === 'PUT' && !ignoreLinks) state.description = payload.description;
   return {
     description: state.description,
     web_url: url,
@@ -27,7 +27,7 @@ function issueRoute(state, path, method, payload) {
 }
 export async function gitlabPlatform(options = {}) {
   const currentMrUrl = options.legacy ? mrUrl.replace('/-/', '/') : mrUrl;
-  const state = { description: '', writes: 0, mismatch: false, denied: false, duplicate: false };
+  const state = { description: '', writes: 0, mismatch: false, denied: false, duplicate: false, requests: [] };
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('X-Next-Page', '');
@@ -39,14 +39,22 @@ export async function gitlabPlatform(options = {}) {
     for await (const c of req) input += c;
     const payload = input ? JSON.parse(input) : {},
       path = new URL(req.url, 'http://localhost').pathname;
+    state.requests.push({ path, method: req.method });
     if (req.method !== 'GET') state.writes++;
-    if (path.endsWith('/related_merge_requests'))
+    if (path.endsWith('/related_merge_requests')) {
+      if (options.relatedUnsupported) {
+        res.statusCode = 405;
+        return res.end();
+      }
       return res.end(
         JSON.stringify(state.description.includes('[repo-sync-link:key:2]') ? [{ web_url: currentMrUrl }] : []),
       );
-    const result = path.endsWith('/merge_requests/2')
-      ? mergeRoute(state, req.method, payload, currentMrUrl)
+    }
+    let result = path.endsWith('/merge_requests/2')
+      ? mergeRoute(state, req.method, payload, currentMrUrl, options.ignoreLinks)
       : issueRoute(state, path, req.method, payload);
+    if (options.envelope && path.endsWith('/issues') && req.method === 'GET')
+      result = { opened: result.length, closed: 0, all: result.length, issues: result };
     res.end(JSON.stringify(result));
   });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
@@ -71,6 +79,12 @@ export async function gitlabPlatform(options = {}) {
     config,
     request,
     writes: () => state.writes,
+    requests: state.requests,
+    mrDescription: () => state.description,
+    description: (value) => {
+      state.description = value;
+    },
+    issue: (value) => Object.assign(state.issue, value),
     mismatch: () => {
       state.mismatch = true;
     },

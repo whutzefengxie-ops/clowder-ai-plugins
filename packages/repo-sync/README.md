@@ -320,7 +320,11 @@ GitLab 兼容 API 可直接配置，无需另写适配器：网页链接可生�
 }
 ```
 
-API 权限需支持读写项目 Issue、读取 MR 与更新其关联说明。程序完整查询稳定来源标记，创建后再次查询回读；关联时验证本笔 MR 的 head、源分支、目标分支及原生 related_merge_requests 回读。追加普通关联，不靠来源编号猜测关闭对象。依据：[Issue API](https://docs.gitlab.com/api/issues/)、[MR API](https://docs.gitlab.com/api/merge_requests/)。
+API 权限需支持读写项目 Issue、读取 MR 与更新其关联说明。Issue 列表兼容 GitLab 裸数组和 CodeHub 的 `{opened,closed,all,issues:[…]}` 封套，按 `x-next-page` 读取全部页；MR 列表仍需裸数组。满页缺少分页回执、跳页、重复来源对象或异常格式会暂停，不把不完整结果当作“尚未创建”。
+
+关联时先回读来源标记正确的内部 Issue，核对具体 MR 的地址、head、源分支、目标分支及状态，再在 MR 描述追加普通 `Related to #内部编号` 行和稳定关联标记，写后重新读取两行和 MR 身份。已有内容不覆盖，缺行可补齐，重试不重复追加。此处证明的是远端描述关联，不依赖 CodeHub 不支持的 `related_merge_requests` 端点，也不声称平台原生关联列表已验证；关单仍须合入核验和所有必要提交接受后显式更新并回读。依据：[Issue API](https://docs.gitlab.com/api/issues/)、[MR API](https://docs.gitlab.com/api/merge_requests/)。
+
+遇到旧版 `ISSUE_RESPONSE_INVALID` 或关联 HTTP 405，请更新本 PR 分支并重启插件，重新提供本人 Token，再点击 **恢复原同步**。已有基线、创建意图、Issue / PR 和映射沿用；不要清空台账、重新接管或手动重复创建对象。创建、关联或关单已生效但响应丢失时，恢复会先回读原对象；未能证明原创建结果时仍暂停，不再次创建。
 
 其他平台在本机私有 JSON 使用固定命令适配器，可在内部调用该平台真实 Git 扩展、CLI 或 API。网页不能提交 executable / args：
 
