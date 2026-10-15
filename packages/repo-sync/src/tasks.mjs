@@ -102,6 +102,8 @@ export class Tasks {
       deliveryId: input.deliveryId,
       associate: (id) => {
         this.value.deliveryId = id;
+        this.value.deliveryIds ??= [];
+        if (id && !this.value.deliveryIds.includes(id)) this.value.deliveryIds.push(id);
         this.persist();
       },
       allowCancel,
@@ -181,6 +183,7 @@ export class Tasks {
       this.value.steps.push(step);
     }
     step.status = 'RUNNING';
+    if (this.value.deliveryId) step.deliveryId = this.value.deliveryId;
     Object.assign(step, phaseLocation(this.value.action, event.id, parent));
     if (parent) step.parentId = parent.id;
     step.startedAt = new Date().toISOString();

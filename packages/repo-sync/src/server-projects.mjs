@@ -2,21 +2,29 @@ import { dispatch } from './actions.mjs';
 import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
 import { body, requireToken, send } from './http.mjs';
+import { SyncService } from './sync-service.mjs';
 import { Tasks } from './tasks.mjs';
 
 export function serverScopes(receiver, options) {
   const executors = new Map();
+  const services = new Map();
+  let stopping = false;
+  function ensureService(id, resolver) {
+    if (!stopping && !services.has(id)) services.set(id, new SyncService(resolver, options.syncInterval ?? 10000));
+  }
   const legacyCurrent = async () => (options.connection ? options.connection.current() : receiver);
   const legacy = new Tasks(legacyCurrent, (input) =>
     options.connection ? options.connection.run(input, options) : dispatch(receiver, input, options),
   );
   async function scope(url) {
-    if (!options.projects)
+    if (!options.projects) {
+      ensureService('default', () => scope('/api/status'));
       return {
         receiver: await legacyCurrent(),
-        options: { ...options, tasks: legacy },
+        options: { ...options, observation: () => services.get('default')?.status(), tasks: legacy },
         tasks: legacy,
       };
+    }
     const params = new URL(url, 'http://localhost').searchParams;
     if (params.getAll('project').length > 1) fail('PROJECT_NOT_FOUND', '请求只能指定一个项目');
     const id = params.get('project') ?? 'default',
@@ -30,12 +38,14 @@ export function serverScopes(receiver, options) {
           id,
         ),
       );
+    ensureService(id, () => scope(`/api/status?project=${id}`));
     const tasks = executors.get(id);
     return {
       receiver: await connection.current(),
       tasks,
       options: {
         ...options,
+        observation: () => services.get(id)?.status(),
         connection,
         tasks,
         projectId: id,
@@ -73,12 +83,25 @@ export function serverScopes(receiver, options) {
       project.error = safeError(error);
     }
   }
+  const bootstrap = options.projects
+    ? options.projects
+        .list()
+        .then((listed) =>
+          Promise.all(listed.projects.filter((p) => !p.error).map((p) => scope(`/api/status?project=${p.id}`))),
+        )
+    : scope('/api/status');
+  bootstrap.catch(() => {});
   return {
     scope,
     update: (next) => {
       if (!options.projects && !options.connection) receiver = next;
     },
-    close: () => Promise.all([legacy.close(), ...[...executors.values()].map((tasks) => tasks.close())]),
+    close: async () => {
+      stopping = true;
+      await bootstrap.catch(() => {});
+      await Promise.all([...services.values()].map((service) => service.close()));
+      await Promise.all([legacy.close(), ...[...executors.values()].map((tasks) => tasks.close())]);
+    },
   };
 }
 export function checkProjectInput(input, id) {

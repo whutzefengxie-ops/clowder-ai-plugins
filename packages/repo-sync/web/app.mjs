@@ -1,11 +1,12 @@
 import { nextAction } from './action-policy.mjs';
 import { captureDraft, configuration, repositoryInput, restoreDraft } from './connections.mjs';
 import { baselineContent, diagnostics } from './diagnostics.mjs';
+import { restoreExpansion } from './expansion.mjs';
 import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
 import { createGithubAuthentication } from './github-auth.mjs';
 import { createHistory } from './history.mjs';
-import { createIssueAuthentication } from './issue-auth.mjs';
+import { createIssueAuthentication, updateIssueFields } from './issue-auth.mjs';
 import { issueSettings } from './issue-settings.mjs';
 import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
@@ -54,16 +55,6 @@ function savedDraft() {
 function expandedKey() {
   return `${draftKey()}:expanded`;
 }
-function restoreExpansion() {
-  try {
-    const expanded = JSON.parse(sessionStorage.getItem(expandedKey()));
-    if (expanded)
-      for (const element of content.querySelectorAll('[data-stage]'))
-        element.open = expanded.includes(element.dataset.stage);
-  } catch {}
-  const currentStage = content.querySelector(`[data-stage="${nextAction(snapshot, snapshot.state?.active).stage}"]`);
-  if (records.get().selected === 'current') currentStage?.setAttribute('open', '');
-}
 function render() {
   document.getElementById('mode').textContent = serviceLabel(snapshot);
   content.innerHTML =
@@ -72,16 +63,18 @@ function render() {
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   content.querySelector('#error-slot')?.append(errorPanel);
   restoreDraft(savedDraft());
-  restoreExpansion();
+  restoreExpansion(content, snapshot, records.get().selected, expandedKey());
   if (view === 'configuration') {
     const baseline = content.querySelector('form[data-form="adopt"]')?.closest('.card');
     const panel = diagnostics(snapshot.operation?.error, snapshot, esc);
     if (panel) (baseline ?? content).insertAdjacentHTML(baseline ? 'beforeend' : 'afterbegin', panel);
   }
+  for (const form of content.querySelectorAll('form[data-form]')) updateIssueFields(form);
   hydrateFileRules();
   onTask(snapshot.operation);
   operations.lock();
 }
+let liveStage;
 function onTask(task) {
   if (!snapshot) return;
   snapshot.operation = task;
@@ -98,10 +91,7 @@ function onTask(task) {
       footer.outerHTML = actionBar(policy, false);
       content.querySelector('.next-action').dataset.policy = JSON.stringify(policy);
     }
-    if (task?.status === 'RUNNING')
-      content
-        .querySelector(`[data-stage="${policy.stage || stageOf(snapshot.state.active)}"]`)
-        ?.setAttribute('open', '');
+    focusLiveStage(task, policy);
   } else {
     const panel = content.querySelector('#operation');
     if (panel) panel.innerHTML = renderTask(task);
@@ -158,8 +148,15 @@ document.addEventListener('click', async (event) => {
     mobileDetail = true;
     const result = await action({
       action: element.dataset.action,
-      deliveryId: snapshot.state?.active?.id,
-      ...(element.dataset.action === 'start' ? { expectedTarget: snapshot.state?.queue[0]?.target } : {}),
+      ...(['synchronize', 'resume-sync', 'pause-sync'].includes(element.dataset.action)
+        ? {}
+        : { deliveryId: snapshot.state?.active?.id }),
+      ...(['resume-sync', 'pause-sync'].includes(element.dataset.action)
+        ? { runId: snapshot.state.automation.id }
+        : {}),
+      ...(['start', 'synchronize'].includes(element.dataset.action)
+        ? { expectedTarget: snapshot.state?.queue[0]?.target }
+        : {}),
     });
     showActionResult(element.dataset.action, result);
   }
@@ -224,13 +221,20 @@ document.addEventListener('submit', async (event) => {
   if (form.hasAttribute('data-github-auth')) return githubAuthentication.submit(form);
   if (form.hasAttribute('data-secret-form')) return issueAuthentication.submit(form);
   const issueToken = issueAuthentication.take(form);
+  const githubToken = githubAuthentication.take(form);
   const fields = Object.fromEntries(new FormData(form));
   delete fields.issueToken;
+  delete fields.githubToken;
   if (form.hasAttribute('data-record-filter')) return records.filter(fields);
   let input =
     form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
   normalizeRuleInput(input, fields);
-  if (input.action === 'discover') input.includeDirectCommits = fields.includeDirectCommits === 'on';
+  if (input.action === 'synchronize') mobileDetail = true;
+  if (input.action === 'configure-identity') {
+    input.receivingIdentity = { name: fields.commitName.trim(), email: fields.commitEmail.trim() };
+    delete input.commitName;
+    delete input.commitEmail;
+  }
   if (input.action === 'issue') input.sourceId = form.dataset.source;
   if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
   if (input.action === 'receipts')
@@ -245,6 +249,7 @@ document.addEventListener('submit', async (event) => {
     };
   const result = await action(input, form);
   if (!(await issueAuthentication.complete(result, issueToken))) return;
+  if (!(await githubAuthentication.complete(result, githubToken))) return;
   showConfigurationConfirmation(input.action, result);
 });
 function normalizeRuleInput(input, fields) {
@@ -320,4 +325,22 @@ function showActivity(task) {
       task && ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status)
         ? `当前同步：${task.status} · 可点击“当前同步”返回查看`
         : '';
+}
+
+setInterval(() => {
+  if (
+    ['RUNNING', 'WAITING_REVIEW'].includes(snapshot?.state?.automation?.status) ||
+    (['synchronize', 'resume-sync'].includes(snapshot?.operation?.action) && snapshot.operation.status === 'RUNNING')
+  )
+    refresh().catch(() => {});
+}, 5000);
+
+function focusLiveStage(task, policy) {
+  if (task?.status !== 'RUNNING') return;
+  if (liveStage !== policy.stage) {
+    liveStage = policy.stage;
+    for (const stage of content.querySelectorAll('[data-stage]'))
+      stage.open = Number(stage.dataset.stage) === policy.stage;
+  }
+  content.querySelector(`[data-stage="${policy.stage || stageOf(snapshot.state.active)}"]`)?.setAttribute('open', '');
 }

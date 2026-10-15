@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Receiver } from '../src/engine.mjs';
 import { discover, groupLandings } from '../src/github.mjs';
 import { closureEvidence, collectIssues } from '../src/github-issues.mjs';
 import { repositories } from './fixtures.mjs';
 
-test('unassociated main commits require explicit consent; consent cannot authorize ambiguous or missing metadata', () => {
-  assert.throws(() => groupLandings(['a'], { a: [] }, 'main'), { code: 'DIRECT_COMMITS_CONFIRMATION_REQUIRED' });
+test('unassociated main commits are automatic; ambiguous or missing metadata still stops', () => {
+  assert.equal(groupLandings(['a'], { a: [] }, 'main')[0].kind, 'commit');
   assert.equal(groupLandings(['a'], { a: [] }, 'main', true)[0].kind, 'commit');
   const pr = { node_id: 'pr', merged_at: '2026-10-15', merge_commit_sha: 'a', base: { ref: 'main' } };
   assert.throws(() => groupLandings(['a'], { a: [pr, { ...pr, node_id: 'other' }] }, 'main', true), {
@@ -102,12 +101,7 @@ test('mixed PR and direct-commit deliveries preserve every source object and com
           : pr,
     collectIssues: async () => [],
   };
-  const before = await readFile(receiver.store.path, 'utf8');
-  await assert.rejects(() => discover(receiver, { kind: 'latest' }, provider), {
-    code: 'DIRECT_COMMITS_CONFIRMATION_REQUIRED',
-  });
-  assert.equal(await readFile(receiver.store.path, 'utf8'), before);
-  await discover(receiver, { kind: 'latest', includeDirectCommits: true }, provider);
+  await discover(receiver, { kind: 'latest' }, provider);
   let state = await receiver.status();
   assert.deepEqual(
     state.queue.map((plan) => plan.target),
@@ -115,7 +109,7 @@ test('mixed PR and direct-commit deliveries preserve every source object and com
   );
   assert.equal(state.queue[1].source.kind, 'commit');
   assert.equal(state.queue[1].source.number, undefined);
-  assert.equal(state.syncTarget.includeDirectCommits, true);
+
   for (const [index, target] of [f.u1, f.u2].entries()) {
     await receiver.start();
     await receiver.prepare();

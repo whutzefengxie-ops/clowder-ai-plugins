@@ -8,12 +8,17 @@ export function attempts(stage, record, operation, historical) {
     if (index >= 0) tasks[index] = operation;
     else tasks.push(operation);
   }
-  const selected = tasks.filter((task) => task.steps.some((step) => step.stage === stage));
+  const selected = tasks
+    .map((task) => ({
+      ...task,
+      steps: task.steps.filter((step) => !step.deliveryId || step.deliveryId === record?.delivery.id),
+    }))
+    .filter((task) => task.steps.some((step) => step.stage === stage));
   return (
     selected
       .map(
         (task) =>
-          `<details data-attempt="${esc(task.id)}" ${['RUNNING', 'FAILED', 'INTERRUPTED'].includes(task.status) ? 'open' : ''}><summary>${esc(task.action)} · ${esc(task.status)} · ${when(task.startedAt)}</summary><small>任务 ${esc(task.id)} · 结束 ${when(task.finishedAt)}</small><ol class="attempt-steps">${task.steps
+          `<details data-attempt="${esc(task.id)}" ${['RUNNING', 'FAILED', 'INTERRUPTED'].includes(task.status) ? 'open' : ''}><summary>${esc(task.action)}${task.deliveryIds?.length > 1 ? ' · 共享轮次任务整体状态' : ''} · ${esc(task.status)} · ${when(task.startedAt)}</summary><small>任务 ${esc(task.id)} · 结束 ${when(task.finishedAt)}</small><ol class="attempt-steps">${task.steps
             .filter((step) => step.stage === stage)
             .map(
               (step) =>

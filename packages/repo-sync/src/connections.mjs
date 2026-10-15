@@ -24,6 +24,8 @@ const allowed = new Set([
   'expectedRevision',
   'internalWebUrl',
   'prMode',
+  'commitStrategy',
+  'receivingIdentity',
 ]);
 export async function createConnection(file, options = {}) {
   const path = await privateLocation(file);
@@ -96,6 +98,7 @@ export async function createConnection(file, options = {}) {
     ['configure-pr', savePlatform],
     ['configure-issues', saveIssues],
     ['configure-closure', saveClosure],
+    ['configure-identity', saveIdentity],
   ]);
   return {
     current,
@@ -168,6 +171,30 @@ export async function createConnection(file, options = {}) {
       });
     return configured;
   }
+  async function saveIdentity(input) {
+    await current();
+    if (
+      !receiver ||
+      input.expectedRevision !== revision ||
+      Object.keys(input).some(
+        (key) => !['action', 'expectedRevision', 'commitStrategy', 'receivingIdentity'].includes(key),
+      )
+    )
+      fail('CONFIGURATION_CHANGED', '提交身份配置已变化，请刷新后重新核对。');
+    const state = await receiver.status();
+    if (state?.active || ['RUNNING', 'WAITING_REVIEW'].includes(state?.automation?.status))
+      fail('COMMIT_POLICY_FROZEN', '当前交付的提交身份已冻结，请先恢复并完成原同步。');
+    const previous = receiver.config;
+    await writePrivate(
+      path,
+      validateConfig({ ...previous, commitStrategy: input.commitStrategy, receivingIdentity: input.receivingIdentity }),
+    );
+    loaded = false;
+    const configured = await current();
+    retainGithubToken(previous, configured.config);
+    retainIssueToken(previous, configured.config);
+    return configured;
+  }
   async function saveClosure(input) {
     await current();
     if (
@@ -218,6 +245,8 @@ function repositoryConfiguration(previous = {}, input, path) {
       input.mode === 'version'
         ? undefined
         : issueConfiguration({ ...previous, internalWebUrl: input.internalWebUrl }, input),
+    commitStrategy: input.commitStrategy ?? previous.commitStrategy,
+    receivingIdentity: input.receivingIdentity ?? previous.receivingIdentity,
     sourceBranch: input.sourceBranch,
     targetBranch: input.targetBranch,
     mode: input.mode,

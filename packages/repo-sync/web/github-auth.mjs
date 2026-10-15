@@ -63,5 +63,27 @@ export function createGithubAuthentication(snapshot, refresh) {
       feedback(error.message);
     }
   });
-  return { submit };
+  function take(form) {
+    const field = form.elements.namedItem('githubToken');
+    const value = field?.value ?? '';
+    if (field) field.value = '';
+    return value;
+  }
+  async function complete(result, token) {
+    if (!result) return false;
+    if (!token) return true;
+    if (result.config?.bindingId !== snapshot().config.bindingId) {
+      feedback('保存后的仓库绑定已变化，未向其他仓库提供 Token。请刷新后在原项目重新输入。');
+      return false;
+    }
+    try {
+      await request('/api/github-auth', { token });
+      await refresh();
+      return true;
+    } catch (error) {
+      feedback(`仓库配置已保存，但 GitHub Token 未确认；请重新提供。${error.message}`);
+      return false;
+    }
+  }
+  return { submit, take, complete };
 }

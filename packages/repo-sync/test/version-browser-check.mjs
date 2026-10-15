@@ -126,6 +126,9 @@ try {
       console.log(
         `PASS：${conflicting ? '内部追加定制、整文件保留、移动端' : '模式选择、严格核心规则与 tag 更新'} → 单 PR → 真实 Git 合入 → 版本记录；无 Issue 步骤。`,
       );
+    } catch (error) {
+      console.log(JSON.stringify({ errors, body: (await page.locator('body').innerText()).slice(0, 4000) }));
+      throw error;
     } finally {
       await page.close();
       await new Promise((done) => server.close(done));

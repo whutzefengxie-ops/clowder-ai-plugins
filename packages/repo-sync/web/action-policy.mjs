@@ -1,8 +1,9 @@
+import { automaticPolicy } from './automation-view.mjs';
 import { stageOf } from './ui.mjs';
 
 export function nextAction(snapshot, delivery, historical = false) {
   if (historical) return { stage: 0, text: '此记录只读，可展开各阶段查看当时信息。' };
-  return taskPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
+  return taskPolicy(snapshot, delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
 }
 function taskPolicy(snapshot, delivery) {
   const task = snapshot.operation;

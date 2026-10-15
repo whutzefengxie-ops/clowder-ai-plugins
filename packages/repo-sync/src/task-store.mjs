@@ -7,6 +7,9 @@ import { writePrivate } from './private-config.mjs';
 import { validateSnapshot } from './recording.mjs';
 
 export const taskActions = new Set([
+  'synchronize',
+  'resume-sync',
+  'pause-sync',
   'heads',
   'adopt',
   'discover',
@@ -25,6 +28,7 @@ export const taskActions = new Set([
   'cancel-version',
 ]);
 const keys = new Set([
+  'runId',
   'action',
   'requestId',
   'projectId',
@@ -171,19 +175,23 @@ export function publicTask(value, owned, canRetryPersistence = false) {
     startedAt,
     updatedAt,
     finishedAt,
-    steps: steps.map(({ id, key, stage, group, parentId, label, status, startedAt, finishedAt, progress, error }) => ({
-      id,
-      key,
-      stage,
-      group,
-      parentId,
-      label,
-      status,
-      startedAt,
-      finishedAt,
-      progress,
-      error,
-    })),
+    deliveryIds: value.deliveryIds,
+    steps: steps.map(
+      ({ id, key, stage, group, parentId, deliveryId, label, status, startedAt, finishedAt, progress, error }) => ({
+        deliveryId,
+        id,
+        key,
+        stage,
+        group,
+        parentId,
+        label,
+        status,
+        startedAt,
+        finishedAt,
+        progress,
+        error,
+      }),
+    ),
     result,
     error,
     ...(value.persistence
@@ -199,6 +207,7 @@ export function publicTask(value, owned, canRetryPersistence = false) {
 }
 
 function validateTaskVersion(value) {
+  validateDeliveryIds(value);
   if (value.projectId !== undefined && value.projectId !== 'default' && !/^[a-f0-9]{24}$/.test(value.projectId))
     fail('TASK_UNREADABLE', '任务项目身份损坏，保留原记录');
   if (value.schema !== undefined && value.schema !== 2) fail('TASK_UNREADABLE', '任务记录版本不支持，不能当旧格式重建');
@@ -217,4 +226,12 @@ function validateTaskVersion(value) {
     )
       fail('TASK_UNREADABLE', '任务步骤归属无效');
   }
+}
+
+function validateDeliveryIds(value) {
+  if (
+    value.deliveryIds !== undefined &&
+    (!Array.isArray(value.deliveryIds) || value.deliveryIds.some((id) => !/^[a-f0-9]{24}$/.test(id)))
+  )
+    fail('TASK_UNREADABLE', '任务多笔交付关联无效。');
 }

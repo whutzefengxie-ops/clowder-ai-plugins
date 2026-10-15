@@ -129,7 +129,10 @@ function stageError(stage, failedStage, failure, historical, snapshot) {
   return `<p class="bad" role="alert">× ${esc(failure.error.code)}：${esc(failure.error.message)}</p>${historical ? '' : diagnostics(failure.error, snapshot, esc)}`;
 }
 function editableStage(stage, delivery, snapshot, historical) {
-  return historical ? '' : stageForm(stage, delivery, snapshot);
+  if (historical) return '';
+  if (snapshot.state?.automation && snapshot.state.automation.status !== 'COMPLETE')
+    return stage === 3 ? prPanel(snapshot, esc) : '';
+  return stageForm(stage, delivery, snapshot);
 }
 function errorSlot(stage, historical, policy) {
   return !historical && stage === policy.stage ? '<div id="error-slot"></div>' : '';

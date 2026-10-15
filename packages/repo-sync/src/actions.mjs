@@ -1,3 +1,4 @@
+import { synchronize } from './automation.mjs';
 import { baselineFile } from './baseline.mjs';
 import { fail } from './config.mjs';
 import { discover } from './github.mjs';
@@ -20,6 +21,9 @@ export async function dispatch(receiver, input, options = {}) {
   )
     fail('DELIVERY_CHANGED', '活动交付已变化，请刷新后核对，不操作另一笔交付');
   const actions = {
+    synchronize: () => synchronize(receiver, input, options),
+    'resume-sync': () => synchronize(receiver, input, options),
+    'pause-sync': () => synchronize(receiver, input, options),
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () =>

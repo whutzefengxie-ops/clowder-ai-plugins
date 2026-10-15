@@ -93,7 +93,16 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
     if (['internalWebUrl', 'issuePageUrl', 'issueApiUrl', 'issueProjectId'].includes(event.target.name))
       updateIssueInference(event.target.closest('form'));
   });
-  return { take, set, submit, provide, complete: (result, token) => (result && token ? provide(token) : true) };
+  async function complete(result, token) {
+    if (!result) return false;
+    if (!token) return true;
+    if (result.config?.bindingId !== snapshot().config.bindingId) {
+      feedback('保存后的仓库绑定已变化，未向其他仓库提供 Token。请在原项目重新输入。');
+      return false;
+    }
+    return provide(token);
+  }
+  return { take, set, submit, provide, complete };
 }
 export function updateIssueFields(form) {
   if (!form) return;
@@ -104,6 +113,10 @@ export function updateIssueFields(form) {
   const mode = form.elements.namedItem('issueMode')?.value,
     auth = form.elements.namedItem('issueAuthMode')?.value,
     version = form.elements.namedItem('mode')?.value === 'version';
+  const sourceAuth = form.querySelector('[data-source-auth]');
+  if (sourceAuth) sourceAuth.hidden = version;
+  const closure = form.querySelector('[data-closure]');
+  if (closure) closure.hidden = version;
   const selection = form.querySelector('[data-issue-selection]');
   if (selection) selection.hidden = version;
   const api = form.querySelector('[data-issue-api]');

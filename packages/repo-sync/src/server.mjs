@@ -62,6 +62,9 @@ const assets = new Map([
     'file-rules.css',
     'setup-navigation.mjs',
     'github-auth.mjs',
+    'commit-settings.mjs',
+    'automation-view.mjs',
+    'expansion.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -157,6 +160,7 @@ async function post(receiver, options, token, input, response) {
       'configure-pr',
       'configure-issues',
       'configure-closure',
+      'configure-identity',
     ].includes(input.action)
   )
     await get(receiver, options, token, '/api/status', response);
@@ -213,6 +217,8 @@ async function get(receiver, options, token, path, response, url = '') {
         : state,
     config: receiver
       ? {
+          commitStrategy: receiver.config.commitStrategy,
+          receivingIdentity: receiver.config.receivingIdentity,
           sourceUrl,
           internalUrl,
           internalWebUrl,
@@ -235,6 +241,7 @@ async function get(receiver, options, token, path, response, url = '') {
     platform: publicPlatform(receiver),
     service: 'production',
     runtime: options.runtime,
+    observation: options.observation?.(),
     operation: await options.tasks.latest(),
   });
 }

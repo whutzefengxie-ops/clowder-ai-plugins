@@ -65,12 +65,16 @@ try {
       await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).getAttribute('href'),
       'https://codehub.example/core/pull/999',
     );
+    if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
+      await page.locator('[data-stage="3"] > summary').click();
     await page.getByText('链接填错了？纠正或撤销引用').click();
     await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
     await page.locator('[data-pr-confirm]').check();
     await page.getByRole('button', { name: '保存纠正后的 PR 链接' }).click();
     await page.locator('a.button[href="https://codehub.example/core/pull/501"]').waitFor({ timeout: 20000 });
     assert.equal((await receiver.status()).active.prUrl, 'https://codehub.example/core/pull/501');
+    if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
+      await page.locator('[data-stage="3"] > summary').click();
     await page.getByText('链接填错了？纠正或撤销引用').click();
     await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();
     await page.getByRole('button', { name: '撤销错误引用，返回 PR 创建步骤' }).click();

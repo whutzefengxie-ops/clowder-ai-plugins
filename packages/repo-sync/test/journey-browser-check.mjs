@@ -11,7 +11,7 @@ import { gitPrFixture } from './git-pr-fixtures.mjs';
 const f = await gitPrFixture();
 const receiver = new Receiver(f.config);
 await receiver.adopt(f.u0, f.i0);
-const server = createReceiverServer(receiver);
+const server = createReceiverServer(receiver, { syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
@@ -27,13 +27,11 @@ try {
   await page.locator('[name="tag"]').selectOption('v2.0.0');
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
   await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
-  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
   assert.equal(await page.locator('[data-stage]').count(), 5);
   assert.equal(await page.locator('main > #operation').count(), 0, 'execution belongs inside a stage');
   const active = (await receiver.status()).active;
   await f.merge(active);
-  await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).click();
   await page.getByRole('heading', { name: '当前已接收版本', exact: true }).waitFor({ timeout: 30000 });
   const accepted = (await receiver.status()).accepted;
   const completedTasks = (await receiver.status()).deliveries[0].taskIds.slice();
@@ -44,7 +42,7 @@ try {
   assert.ok((await page.locator('.record-detail').innerText()).includes(accepted.internal));
   assert.ok((await page.locator('.record-detail').innerText()).includes(f.u0));
   await page.getByRole('button', { name: '展开全部阶段' }).click();
-  assert.ok((await page.locator('[data-attempt]').count()) >= 3);
+  assert.ok((await page.locator('[data-attempt]').count()) >= 2);
   await page.getByText('当时配置与来源', { exact: true }).click();
   assert.ok((await page.locator('.record-detail').innerText()).includes('releases'));
   await page.reload();
@@ -83,7 +81,6 @@ try {
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).click();
   await page.locator('[name="tag"]').selectOption('v3.0.0');
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
-  await page.getByRole('button', { name: '开始更新至 v3.0.0 →' }).click();
   assert.deepEqual(
     (await receiver.status()).deliveries[0].taskIds,
     completedTasks,
@@ -98,7 +95,7 @@ try {
     }
     return originalChecks(head);
   };
-  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '开始更新至 v3.0.0 →' }).click();
   await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
   const failedCandidate = (await receiver.status()).active.candidate;
   await page.locator(`[data-record="${active.id}"]`).click();
@@ -119,7 +116,7 @@ try {
     await gate;
     return checks(head);
   };
-  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
+  await page.getByRole('button', { name: '恢复原同步 →' }).click();
   await page.waitForFunction(() => document.querySelector('[data-operation-state="RUNNING"]'));
   await page.locator(`[data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();

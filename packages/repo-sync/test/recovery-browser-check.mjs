@@ -70,6 +70,8 @@ try {
   await page.getByRole('button', { name: '登记 PR，进入审核' }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 20000 });
   assert.equal((await receiver.status()).active.prUrl, url);
+  if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
+    await page.locator('[data-stage="3"] > summary').click();
   await page.getByText('链接填错了？纠正或撤销引用').click();
   denied = true;
   await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();
@@ -86,6 +88,8 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(evidence, 'ledger-save-failed-mobile.png'), fullPage: true });
   denied = false;
+  if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
+    await page.locator('[data-stage="3"] > summary').click();
   const correction = page.getByText('链接填错了？纠正或撤销引用');
   if (!(await correction.evaluate((element) => element.closest('details').open))) await correction.click();
   await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();

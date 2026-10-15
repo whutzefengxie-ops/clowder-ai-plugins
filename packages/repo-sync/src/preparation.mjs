@@ -1,3 +1,4 @@
+import { buildCandidate, commitPolicy } from './commit-policy.mjs';
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
 import { confirmGitPr, planGitPr } from './git-pr.mjs';
@@ -26,15 +27,21 @@ export async function prepareDelivery(receiver, state) {
   const delivery = receiver.requireActive(state);
   if (receiver.config.issues && delivery.status === 'ISSUES_REQUIRED' && !delivery.candidate)
     await ensureIssues(receiver, state, delivery);
+  if (delivery.commitPolicy && JSON.stringify(delivery.commitPolicy) !== JSON.stringify(commitPolicy(receiver.config)))
+    fail('COMMIT_POLICY_CHANGED', '请恢复本笔交付冻结的提交身份配置后继续。');
   receiver.requirePreparation(state, delivery);
   if (await resumePublished(receiver, state, delivery)) return;
   const heads = await receiver.git.fetch();
   state.observedInternal = heads.internal;
   if (heads.internal !== delivery.base.internal) fail('RECOVERY_FIRST', 'main 已前进，先核对原交付合入结果');
   await sourceStillValid(receiver, delivery, heads);
-  delivery.candidate ??= await phase('candidate-build', '构造同步候选', () =>
-    receiver.git.candidate(delivery.base, delivery.target, delivery.id),
-  );
+  if (!delivery.candidate) {
+    const result = await phase('candidate-build', '构造同步候选与内外 SHA 映射', () =>
+      buildCandidate(receiver, state, delivery),
+    );
+    delivery.candidate = result.head;
+    if (result.mappings) delivery.commitMappings = result.mappings;
+  }
   await receiver.store.save(state);
   delivery.checks = await phase(
     'candidate-check',

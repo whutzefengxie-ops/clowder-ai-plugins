@@ -17,9 +17,11 @@ const fields = [
   'prTransport',
   'commitClosureVerified',
 ];
+const optionalFields = ['commitStrategy', 'receivingIdentity'];
 export function configSnapshot(config) {
   const snapshot = {};
-  for (const key of fields) if (config[key] !== undefined) snapshot[key] = structuredClone(config[key]);
+  for (const key of [...fields, ...optionalFields])
+    if (config[key] !== undefined) snapshot[key] = structuredClone(config[key]);
   snapshot.checkCount = config.checks?.length ?? 0;
   snapshot.prTransport = config.pullRequests?.mode ?? 'manual';
   snapshot.checkProfile = config.checkProfile === 'git-integrity' ? 'git-integrity' : 'custom';
@@ -32,7 +34,7 @@ export function configSnapshot(config) {
 }
 function fingerprint(snapshot) {
   const entries = fields.map((key) => [key, snapshot[key]]);
-  for (const key of ['checkConfigId', 'prConfigId', 'issueTransport', 'issueConfigId'])
+  for (const key of [...optionalFields, 'checkConfigId', 'prConfigId', 'issueTransport', 'issueConfigId'])
     if (snapshot[key] !== undefined) entries.push([key, snapshot[key]]);
   return digest(entries);
 }
@@ -46,7 +48,15 @@ export function validateSnapshot(snapshot) {
     Array.isArray(snapshot) ||
     Object.keys(snapshot).some(
       (key) =>
-        ![...fields, 'fingerprint', 'checkConfigId', 'prConfigId', 'issueTransport', 'issueConfigId'].includes(key),
+        ![
+          ...fields,
+          ...optionalFields,
+          'fingerprint',
+          'checkConfigId',
+          'prConfigId',
+          'issueTransport',
+          'issueConfigId',
+        ].includes(key),
     ) ||
     snapshot.fingerprint !== fingerprint(snapshot) ||
     !Number.isInteger(snapshot.checkCount) ||
@@ -128,6 +138,8 @@ export function phaseLocation(action, key, parent) {
       'create-pr': 3,
       recover: 5,
       receipts: 5,
+      synchronize: 1,
+      'resume-sync': 2,
     }[action] ?? 0;
   if (
     parent &&

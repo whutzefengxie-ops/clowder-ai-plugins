@@ -32,7 +32,7 @@ await writeFile(
   }),
 );
 const projects = await createProjectWorkspace(file),
-  server = createReceiverServer(null, { projects });
+  server = createReceiverServer(null, { projects, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`,
   browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME }),
@@ -84,7 +84,7 @@ try {
   await form.getByLabel('API 项目 ID / 路径').fill('innersource%2Fteam_G%2Fcore');
   await form.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
   assert.equal(await form.locator('[name="issueTokenEnv"]').isVisible(), false);
-  assert.equal(await form.locator('[name="commitClosureVerified"]').count(), 0);
+  assert.equal(await form.locator('[name="commitClosureVerified"]').count(), 1);
   const source = await form.locator('[data-repository="source"]').boundingBox(),
     internal = await form.locator('[data-repository="internal"]').boundingBox();
   assert.ok(internal.x > source.x);
@@ -149,14 +149,18 @@ try {
   await receiver.setQueue(f.plans);
   await page.reload();
   await page.getByRole('button', { name: '同步上游 PR #1 →', exact: true }).click();
-  await page.getByRole('link', { name: '确认提交消息关单规则 →', exact: true }).waitFor();
-  await page.getByText('如何确认？查看一次性的测试步骤', { exact: true }).click();
+  await page
+    .locator('#error')
+    .getByText(/PLATFORM_CLOSURE_UNVERIFIED/)
+    .waitFor();
   assert.equal(platform.state.creates.prs, 0);
+  await page.getByRole('button', { name: '仓库设置', exact: true }).click();
+  await page.getByText('如何确认？查看一次性的测试步骤', { exact: true }).click();
   await page.getByLabel('已确认：内部平台不会根据搬入的提交消息自动关闭 Issue').check();
   await page.getByRole('button', { name: '保存关单规则确认，继续本笔同步', exact: true }).click();
+  await page.getByRole('button', { name: '同步工作台', exact: true }).click();
+  await page.getByRole('button', { name: '同步上游 PR #1 →', exact: true }).click();
   for (const number of [1, 2]) {
-    if (number === 2) await page.getByRole('button', { name: '同步上游 PR #2 →', exact: true }).click();
-    await page.getByRole('button', { name: '自动搬运 Issue、检查并推送候选 →', exact: true }).click();
     await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
     const delivery = (await receiver.status()).active;
     assert.equal(delivery.prUrl, `${platform.web}/merge_requests/${number}`);
@@ -164,8 +168,8 @@ try {
     assert.equal(platform.state.creates.prs, number);
     await f.merge(delivery);
     platform.state.mrs[number - 1].state = 'merged';
-    await page.getByRole('button', { name: '已在平台合入，核验 Git 结果', exact: true }).click();
-    await page.getByRole('heading', { name: '当前已接收版本', exact: true }).waitFor({ timeout: 30000 });
+    for (let retry = 0; retry < 150 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE'; retry++)
+      await new Promise((done) => setTimeout(done, 200));
     assert.equal(platform.state.issues[0].state, number === 1 ? 'opened' : 'closed');
   }
   await page.getByRole('button', { name: '仓库设置', exact: true }).click();

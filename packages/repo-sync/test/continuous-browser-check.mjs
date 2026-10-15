@@ -30,6 +30,8 @@ const receiver = new Receiver({
   ...f.config,
   sourceUrl: 'https://github.com/demo/core.git',
   issues: platform.config,
+  commitStrategy: 'rewrite',
+  receivingIdentity: { name: 'Internal Sync', email: 'sync@example.invalid' },
   pullRequests: { mode: 'git' },
 });
 receiver.git.config = { ...receiver.config, sourceUrl: f.source };
@@ -55,7 +57,7 @@ const sourceProvider = {
     { ...f.plans[(pr?.number ?? 2) - 1].issues[0], relation: pr?.number === 1 ? 'related' : 'closes' },
   ],
 };
-const server = createReceiverServer(receiver, { sourceProvider });
+const server = createReceiverServer(receiver, { sourceProvider, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
@@ -67,43 +69,37 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByLabel('目标类型').selectOption('tag');
   await page.getByLabel('目标 tag 名称 / 完整 commit SHA').fill('v2.0.0');
-  await page.getByRole('button', { name: '读取到目标版本的 PR 清单 →' }).click();
-  await page
-    .getByText(/DIRECT_COMMITS_CONFIRMATION_REQUIRED/)
-    .first()
-    .waitFor({ timeout: 30000 });
-  assert.equal((await receiver.status()).accepted.upstream, f.u0);
-  assert.equal((await receiver.status()).queue.length, 0);
-  await page.getByLabel('包含无 PR 的主干提交').check();
-  await page.getByRole('button', { name: '读取到目标版本的 PR 清单 →' }).click();
-  await page.getByRole('button', { name: '同步上游 PR #1 →' }).waitFor({ timeout: 30000 });
-  assert.equal((await receiver.status()).queue.length, 2);
+  await page.getByRole('button', { name: 'PR 同步 · 自动执行到待审核 →' }).click();
   for (let number = 1; number <= 2; number++) {
-    await page
-      .getByRole('button', { name: number === 1 ? '同步上游 PR #1 →' : `同步主干提交 ${f.u2.slice(0, 12)} →` })
-      .click();
-    await page.getByRole('button', { name: '自动搬运 Issue、检查并推送候选 →' }).click();
     await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
     const active = (await receiver.status()).active;
     if (number === 2) assert.equal(active.source.kind, 'commit');
     assert.equal(active.prUrl, `https://codehub.example/core/pull/${number}`);
     assert.equal(await page.locator('[data-stage]').count(), 5);
+    assert.equal(await page.locator('[data-stage-state="done"][open]').count(), 0);
+    assert.equal(await page.locator('[data-stage="4"][open]').count(), 1);
+    if (number === 1) await page.screenshot({ path: join(evidence, 'automatic-waiting-review.png'), fullPage: true });
     await page.getByRole('button', { name: '展开全部阶段' }).click();
     assert.ok((await page.locator('[data-stage="2"]').innerText()).includes('创建 / 复用并回读内部 Issue'));
     assert.ok((await page.locator('[data-stage="3"]').innerText()).includes('关联并回读内部 Issue 与本笔 PR'));
     assert.equal(await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]), '内部默认中文版');
     if (number === 2) await platform.edit({ loseUpdate: true });
     await f.merge(active);
-    await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).click();
+
     if (number === 2) {
-      await page.getByRole('button', { name: '回读并恢复原 Issue 操作' }).waitFor({ timeout: 30000 });
+      await page.getByRole('button', { name: '恢复原同步 →' }).waitFor({ timeout: 30000 });
       assert.equal((await receiver.status()).active.status, 'CODE_ACCEPTED_PENDING_METADATA');
       assert.equal(await page.locator('[data-stage="5"][data-stage-state="failed"]').count(), 1);
       await page.screenshot({ path: join(evidence, 'continuous-recovery.png'), fullPage: true });
       await platform.edit({ loseUpdate: false });
-      await page.getByRole('button', { name: '回读并恢复原 Issue 操作' }).click();
+      await page.getByRole('button', { name: '恢复原同步 →' }).click();
     }
-    await page.getByRole('heading', { name: '当前已接收版本', exact: true }).waitFor({ timeout: 30000 });
+    await page.waitForFunction(
+      (index) => document.querySelectorAll('.record-list [data-record]').length >= index,
+      number,
+    );
+    for (let retry = 0; retry < 100 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE'; retry++)
+      await new Promise((done) => setTimeout(done, 200));
     assert.equal((await receiver.status()).deliveries.at(-1).status, 'COMPLETE');
     await page.locator(`[data-record="${active.id}"]`).click();
     await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
@@ -115,6 +111,8 @@ try {
   }
   const state = await receiver.status();
   assert.equal(state.accepted.upstream, f.u2);
+  assert.equal(state.automation.status, 'COMPLETE');
+  assert.ok(state.deliveries.every((d) => d.commitMappings.every((m) => m.source !== m.internal)));
   assert.equal((await platform.read()).creates, 1);
   assert.equal((await platform.read()).updates, 1, 'lost update receipt must not repeat close');
   assert.equal(JSON.parse(await readFile(counter, 'utf8')), 2);

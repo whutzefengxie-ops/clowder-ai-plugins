@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
 import { adoptionBaseline } from './adoption-baseline.mjs';
+import { commitPolicy } from './commit-policy.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { continuousPreview } from './continuous-preview.mjs';
 import { execution, phase, safeError } from './execution.mjs';
@@ -116,6 +117,7 @@ export class Receiver {
       if (!plan) fail('NO_DELIVERY', '没有待接收交付，先发现更新');
       if (expectedTarget && plan.target !== expectedTarget)
         fail('QUEUE_CHANGED', '待同步目标已变化，未发起交付；请刷新确认 tag / PR 和 commit 后再开始');
+      execution()?.associate?.(null); // The next delivery preflight belongs to the run, not the previous PR.
       const heads = await this.git.fetch();
       await preservedInternalHead(this, state, heads.internal);
       await sourceStillValid(this, plan, heads);
@@ -132,12 +134,18 @@ export class Receiver {
         base: { ...state.accepted },
         status: this.config.mode === 'version' ? 'CODE_PREPARE_REQUIRED' : 'ISSUES_REQUIRED',
         candidate: null,
+        commitPolicy: commitPolicy(this.config),
         issueResults: {},
       };
       recordDelivery(delivery, this.config, 'start');
       if (this.config.mode === 'continuous') delivery.preview = await continuousPreview(this, delivery);
       delivery.commits = (
-        await git(this.git.directory, ['rev-list', '--reverse', `${delivery.base.upstream}..${delivery.target}`])
+        await git(this.git.directory, [
+          'rev-list',
+          '--reverse',
+          '--topo-order',
+          `${delivery.base.upstream}..${delivery.target}`,
+        ])
       ).split('\n');
       state.deliveries.push(delivery);
       state.activeId = id;

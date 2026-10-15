@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { mappedCommit } from './commit-policy.mjs';
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
 import { invokeIssue, verifyIssue } from './issue-adapter.mjs';
@@ -153,7 +154,7 @@ async function settleClosing(receiver, state, delivery, issue, request, result) 
   if (issue.relation === 'closes') {
     let pending = false;
     for (const target of issue.requiredTargets ?? [delivery.target])
-      if (!(await receiver.git.isAncestor(target, delivery.acceptedInternal))) pending = true;
+      if (!(await receiver.git.isAncestor(mappedCommit(state, target), delivery.acceptedInternal))) pending = true;
     const desiredState = pending ? 'open' : 'closed';
     if (result.state !== desiredState) {
       delivery.issueUpdateIntents ??= {};

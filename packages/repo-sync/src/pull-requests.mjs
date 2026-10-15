@@ -72,6 +72,10 @@ export async function linkPr(receiver, state, url, options = {}) {
   else delete delivery.prUrl;
   delivery.prReference = { verifiedBy: 'operator', time: new Date().toISOString(), withdrawn: !next };
   delivery.status = next ? 'WAITING_APPROVAL' : 'PR_REQUIRED';
+  if (!next && state.automation && state.automation.status !== 'COMPLETE') {
+    state.automation.status = 'PAUSED';
+    state.automation.updatedAt = new Date().toISOString();
+  }
   delete delivery.error;
   event(
     state,

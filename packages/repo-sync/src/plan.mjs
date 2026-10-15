@@ -8,8 +8,6 @@ export async function checkPlan(receiver, plan, base, head) {
   )
     fail('NONCONTIGUOUS_PLAN', '交付目标不在连续上游接受路径中');
   objectUrl(plan.source.url);
-  if (plan.source.kind === 'commit' && plan.syncTarget?.includeDirectCommits !== true)
-    fail('DIRECT_COMMITS_CONFIRMATION_REQUIRED', '独立主干提交没有本轮明确接收记录，不能发起交付。');
   if (typeof plan.source.id !== 'string' || !plan.source.id) fail('SOURCE_UNPROVEN', '上游来源稳定身份不完整');
   if (
     plan.source.kind === 'commit' &&

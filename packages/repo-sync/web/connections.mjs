@@ -1,3 +1,5 @@
+import { closureSettings } from './closure-settings.mjs';
+import { commitFields, identitySettings } from './commit-settings.mjs';
 import { fileRuleFields } from './file-rule-fields.mjs';
 import { githubAuthForm } from './github-auth.mjs';
 import { updateIssueFields } from './issue-auth.mjs';
@@ -11,7 +13,7 @@ export function firstUse() {
 }
 function connectionForm(config, connection, esc) {
   const version = !config || config.mode === 'version';
-  return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection.revision ?? '')}">${repositoryFields(config, esc)}${prCreationFields(config)}<label for="repository-mode">同步模式</label><select id="repository-mode" name="mode"><option value="version" ${version ? 'selected' : ''}>按 tag 更新 · 保留内部差异 · 一个同步 PR</option><option value="continuous" ${version ? '' : 'selected'}>同步开发过程 · 搬运 Issue / PR · 核心文件完全一致</option></select><div data-policy>${fileRuleFields(config?.internalPaths)}</div>${issueFields({ ...config, mode: version ? 'version' : 'continuous' }, esc)}${prCreationSummary(config)}<p>默认只执行 <b>Git 基础完整性检查</b>（git fsck）。项目构建、单元测试和插件兼容检查需要在本地私有 JSON 的 checks 中补充。网页不接受执行命令。</p><button class="primary" type="submit">保存仓库配置，继续核验基线 →</button></form>`;
+  return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection.revision ?? '')}">${repositoryFields(config, esc)}${prCreationFields(config)}<label for="repository-mode">同步模式</label><select id="repository-mode" name="mode"><option value="version" ${version ? 'selected' : ''}>按 tag 更新 · 保留内部差异 · 一个同步 PR</option><option value="continuous" ${version ? '' : 'selected'}>同步开发过程 · 搬运 Issue / PR · 核心文件完全一致</option></select><div data-policy>${fileRuleFields(config?.internalPaths)}</div>${issueFields({ ...config, mode: version ? 'version' : 'continuous', issueAutomation: config?.issueAutomation ?? (!config ? { mode: 'gitlab' } : undefined) }, esc)}${commitFields(config, esc)}<section data-closure ${version ? 'hidden' : ''}><label><input type="checkbox" name="commitClosureVerified" ${config?.commitClosureVerified ? 'checked' : ''}>已确认内部平台不会通过搬入的提交消息自动关闭同号 Issue</label><p>原消息 Closes #123 指向的是外部编号。为防误关内部同号 Issue，请管理员禁用接收仓库的提交消息自动关单，或在独立测试仓验证后确认。此工具会在合入核验后按映射自动关单。</p></section>${prCreationSummary(config)}<p>默认只执行 <b>Git 基础完整性检查</b>（git fsck）。项目构建、单元测试和插件兼容检查需要在本地私有 JSON 的 checks 中补充。网页不接受执行命令。</p><button class="primary" type="submit">保存仓库配置，继续核验基线 →</button></form>`;
 }
 function summary(config, esc) {
   return `<div class="split"><div><small>外部来源</small>${esc(config.sourceUrl)}<p>交付分支：${esc(config.sourceBranch)}</p></div><div><small>内部接收</small>${esc(config.internalUrl)}<p>合入分支：${esc(config.targetBranch)}</p></div></div><p>同步方式：${config.mode === 'version' ? '按 tag 更新，只创建一个内部同步 PR' : '按 main 的 PR 落地顺序接收开发过程'}</p>${`<p>内部保留：${esc((config.internalPaths ?? []).join('、') || '无')}</p>`}`;
@@ -29,7 +31,7 @@ export function configuration(snapshot, esc, sha, button) {
   if (!connection)
     return `<details class="card" data-setup-repositories><summary>查看或修改已保存的仓库信息</summary>${summary(config, esc)}${modeSettings(config, state, esc)}</details>${current}${githubAuthForm(snapshot)}`;
   const steps = `<ol class="flow setup"><li><b>${config ? '✓' : '●'} 1 · 连接真实仓库</b><small>地址、分支、方式与文件规则</small></li><li><b>${state ? '✓' : config ? '●' : '○'} 2 · 核验已有基线</b><small>读取两侧版本，登记 U0 ↔ I0</small></li><li><b>${state ? '✓' : '○'} 3 · 开始同步</b><small>读取更新，准备候选分支与内部 PR</small></li></ol>`;
-  return `${steps}${savedRepositories(snapshot, esc, activity)}${current}${githubAuthForm(snapshot)}${storageDetails(snapshot, esc)}`;
+  return `${steps}${savedRepositories(snapshot, esc, activity)}${current}${closureSettings(snapshot, esc)}${identitySettings(snapshot, esc)}${githubAuthForm(snapshot)}${storageDetails(snapshot, esc)}`;
 }
 function baselineStep({ config, state }, esc, sha, button, activity) {
   if (!config) return '';
@@ -49,9 +51,7 @@ export function repositoryInput(fields) {
     ...fields,
     expectedRevision: fields.expectedRevision || null,
     internalWebUrl: fields.internalWebUrl?.trim() ?? '',
-    ...(fields.commitClosureVerified === undefined
-      ? {}
-      : { commitClosureVerified: fields.commitClosureVerified === 'on' }),
+    ...(fields.mode === undefined ? {} : { commitClosureVerified: fields.commitClosureVerified === 'on' }),
   };
   for (const key of ['internalPaths', 'mergePaths'])
     input[key] =
@@ -62,6 +62,13 @@ export function repositoryInput(fields) {
             .filter(Boolean)
         : [];
   for (const key of ['sourceUrl', 'internalUrl', 'sourceBranch', 'targetBranch']) input[key] = input[key].trim();
+  delete input.githubToken;
+  delete input.issueToken;
+  if (fields.commitStrategy) input.commitStrategy = fields.commitStrategy;
+  if (fields.commitName !== undefined)
+    input.receivingIdentity = { name: fields.commitName.trim(), email: fields.commitEmail.trim() };
+  delete input.commitName;
+  delete input.commitEmail;
   return input;
 }
 export function captureDraft() {

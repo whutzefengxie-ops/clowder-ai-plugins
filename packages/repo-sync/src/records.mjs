@@ -110,9 +110,12 @@ export async function recordDetail(receiver, id, params, tasks) {
     .slice(query.taskOffset, query.taskOffset + 50);
   const loaded = await Promise.all(selected.map((taskId) => tasks.latest(taskId)));
   for (const task of loaded)
-    if (task?.deliveryId && task.deliveryId !== id)
+    if (task?.deliveryId && task.deliveryId !== id && !task.deliveryIds?.includes(id))
       fail('TASK_BINDING_CHANGED', '历史任务属于另一笔同步，不能混入当前记录');
-  const records = loaded.filter(Boolean).reverse();
+  const records = loaded
+    .filter(Boolean)
+    .reverse()
+    .map((task) => ({ ...task, steps: task.steps.filter((step) => !step.deliveryId || step.deliveryId === id) }));
   const configurations = [...(delivery.configurations ?? [])];
   for (const task of records)
     if (

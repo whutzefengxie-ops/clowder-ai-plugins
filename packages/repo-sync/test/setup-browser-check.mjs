@@ -52,7 +52,7 @@ try {
   );
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByLabel('同步模式', { exact: true }).selectOption('continuous');
-  assert.equal(await page.locator('[name="commitClosureVerified"]').count(), 0);
+  assert.equal(await page.locator('[name="commitClosureVerified"]').count(), 1);
   assert.ok(await page.getByLabel('Issue 创建与关单方式').isVisible());
   await page.getByLabel('同步模式', { exact: true }).selectOption('version');
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), '');

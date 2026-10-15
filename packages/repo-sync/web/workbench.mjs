@@ -1,3 +1,4 @@
+import { automationBanner, preDeliveryFlow } from './automation-view.mjs';
 import { firstUse } from './connections.mjs';
 import { githubAuthForm } from './github-auth.mjs';
 import { recordList } from './history.mjs';
@@ -33,7 +34,7 @@ export function workbench(snapshot, records, tags, mobileDetail) {
       : historical
         ? '<p role="status">正在读取所选记录…</p>'
         : target(snapshot, tags);
-  return `${summary}<p id="current-activity" role="status"></p><div class="journey-layout ${mobileDetail ? 'mobile-detail' : 'mobile-list'}">${recordList(records, state.active)}<section class="record-detail" aria-label="本笔同步详情"><button type="button" class="mobile-back" data-record-back>返回同步记录</button>${detail}</section></div>`;
+  return `${summary}${automationBanner(snapshot)}<p id="current-activity" role="status"></p><div class="journey-layout ${mobileDetail ? 'mobile-detail' : 'mobile-list'}">${recordList(records, state.active)}<section class="record-detail" aria-label="本笔同步详情"><button type="button" class="mobile-back" data-record-back>返回同步记录</button>${detail}</section></div>`;
 }
 function target(snapshot, tags) {
   const { state, config } = snapshot;
@@ -41,6 +42,7 @@ function target(snapshot, tags) {
   const pending =
     task &&
     (['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status) || task.persistence?.status === 'FAILED');
+  if (snapshot.state.automation && snapshot.state.automation.status !== 'COMPLETE') return preDeliveryFlow(snapshot);
   if (pending)
     return '<section class="card"><h2>原操作需要处理</h2><div id="operation"></div><div id="error-slot"></div></section>';
   const accepted =
@@ -51,7 +53,7 @@ function target(snapshot, tags) {
     return `${accepted}${tagSelector(tags, esc, sha)}<div id="operation"></div><div id="error-slot"></div>`;
   const next = state.queue[0];
   const heading = targetHeading(state, config, next);
-  return `${accepted}${config.mode === 'continuous' ? `${githubAuthForm(snapshot, { open: true })}${sourceTargetForm(state, tags, esc, sha)}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${button('start', config.mode === 'version' ? `开始更新至 ${next.source.tag} →` : next.source.kind === 'commit' ? `同步${title(next)} →` : `同步上游 PR #${next.source.number} →`)}` : button('discover', '检查上游更新')}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
+  return `${accepted}${config.mode === 'continuous' ? `${githubAuthForm(snapshot, { open: !snapshot.sourceAuthentication?.available })}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
 }
 
 function repositorySummary(config, state) {
@@ -65,4 +67,14 @@ function targetHeading(state, config, next) {
       ? `已选择 ${esc(next.source.tag)}`
       : `下一笔${next.source.kind === 'commit' ? '' : '上游 '}${esc(title(next))}`;
   return state.deliveryCount ? '本轮交付已完成' : '读取上游交付清单';
+}
+
+function startButton(config, next) {
+  const label =
+    config.mode === 'version'
+      ? `开始更新至 ${next.source.tag} →`
+      : next.source.kind === 'commit'
+        ? `同步${title(next)} →`
+        : `同步上游 PR #${next.source.number} →`;
+  return button(config.prTransport === 'manual' ? 'start' : 'synchronize', label);
 }

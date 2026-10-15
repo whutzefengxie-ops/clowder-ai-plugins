@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { commitPolicy } from './commit-policy.mjs';
 import { validateIssueConfig } from './issue-adapter.mjs';
 import { versionPolicy } from './policy.mjs';
 import { validatePrConfig } from './pull-requests.mjs';
@@ -39,6 +40,7 @@ export function objectUrl(value) {
 export function validateConfig(input) {
   const config = structuredClone(input);
   validateMode(config);
+  commitPolicy(config);
   config.sourceUrl = safeUrl(config.sourceUrl, config.allowLocal === true);
   config.internalUrl = safeUrl(config.internalUrl, config.allowLocal === true);
   for (const branch of [config.sourceBranch, config.targetBranch]) {

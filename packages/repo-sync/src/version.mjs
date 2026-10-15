@@ -58,6 +58,10 @@ export async function selectTag(receiver, name) {
         preview: { changes, internalChanges },
       },
     ];
+    if (state.automation?.status === 'RUNNING') {
+      state.automation.scanned = true;
+      state.automation.target = tag.commit;
+    }
     state.latest = tag.commit;
     state.scannedAt = new Date().toISOString();
     state.observedInternal = heads.internal;

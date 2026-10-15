@@ -1,3 +1,5 @@
+import { validateAutomation } from './automation.mjs';
+import { commitPolicy } from './commit-policy.mjs';
 import { fail } from './config.mjs';
 import { assertIssueLedger } from './issue-ledger.mjs';
 import { validateRecording } from './recording.mjs';
@@ -5,6 +7,7 @@ import { validateRecording } from './recording.mjs';
 const sha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const pair = (value) => value && sha(value.upstream) && sha(value.internal);
 export function assertLedger(state) {
+  validateAutomation(state.automation);
   if (
     !pair(state.accepted) ||
     !pair(state.initial) ||
@@ -50,6 +53,24 @@ function assertDelivery(delivery, identities, statuses) {
   )
     fail('LEDGER_INVALID', '交付身份、状态或冻结基线无效，暂停；不可跳过原交付或重建台账');
   validateRecording(delivery);
+  if (delivery.commitPolicy)
+    commitPolicy({ commitStrategy: delivery.commitPolicy.strategy, receivingIdentity: delivery.commitPolicy.identity });
+  if (
+    delivery.commitMappings !== undefined &&
+    (!Array.isArray(delivery.commitMappings) ||
+      delivery.commitMappings.some((item) => !sha(item.source) || !sha(item.internal)) ||
+      new Set(delivery.commitMappings.map((item) => item.source)).size !== delivery.commitMappings.length ||
+      delivery.commitMappings.length !== delivery.commits?.length ||
+      delivery.commits.some((source) => !delivery.commitMappings.some((item) => item.source === source)))
+  )
+    fail('COMMIT_MAPPING_INVALID', '内外 SHA 映射缺失或重复，保留原候选与台账；不能跳过核验。');
+  if (
+    delivery.candidate &&
+    delivery.commitPolicy?.strategy === 'rewrite' &&
+    delivery.mode !== 'version' &&
+    !delivery.commitMappings
+  )
+    fail('COMMIT_MAPPING_INVALID', '重写交付缺少内外 SHA 映射，不能继续发布或验收。');
   if (
     delivery.status === 'WAITING_APPROVAL' &&
     (!sha(delivery.candidate) ||

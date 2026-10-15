@@ -5,6 +5,9 @@ import { renderTask } from './operation-view.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 
 const longActions = new Set([
+  'synchronize',
+  'resume-sync',
+  'pause-sync',
   'heads',
   'adopt',
   'discover',
@@ -180,6 +183,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
           'configure-pr',
           'configure-issues',
           'configure-closure',
+          'configure-identity',
         ].includes(input.action);
         value = await request(
           '/api/action',

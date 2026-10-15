@@ -4,7 +4,7 @@ import { captureDraft, configuration } from '../web/connections.mjs';
 import { issueFields } from '../web/issue-settings.mjs';
 import { esc } from '../web/ui.mjs';
 
-test('connection groups source branch with source and target branch with target, without unrelated closure setup', () => {
+test('connection groups source branch with source and target branch with target, with upfront source authentication and commit identity', () => {
   const html = configuration({ config: null, state: null, connection: { revision: null } }, esc);
   const source = html.match(/<fieldset[^>]*data-repository="source"[^>]*>(.*?)<\/fieldset>/s)?.[1];
   const target = html.match(/<fieldset[^>]*data-repository="internal"[^>]*>(.*?)<\/fieldset>/s)?.[1];
@@ -14,7 +14,9 @@ test('connection groups source branch with source and target branch with target,
       target.includes('name="targetBranch"') &&
       target.includes('name="internalWebUrl"'),
   );
-  assert.equal(html.includes('name="commitClosureVerified"'), false);
+  assert.ok(html.includes('name="commitClosureVerified"'));
+  assert.ok(source.includes('name="githubToken"'));
+  assert.ok(html.includes('name="commitStrategy"'));
 });
 
 test('manual Issue configuration hides platform-specific fields; direct Token input is available for supported APIs', () => {

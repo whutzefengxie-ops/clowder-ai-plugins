@@ -1,3 +1,4 @@
+import { mappedCommit } from './commit-policy.mjs';
 import { fail, objectUrl } from './config.mjs';
 
 export function mapIssue(state, delivery, sourceId, internalId, url, options = {}) {
@@ -52,7 +53,7 @@ async function observeIssue(state, delivery, issue, observations, receiver) {
     fail('ISSUE_OBSERVATION_INVALID', '需要逐个确认正确映射的内部 Issue 状态');
   const pending = [];
   for (const target of issue.requiredTargets ?? [delivery.target]) {
-    if (!(await receiver.isAncestor(target, delivery.acceptedInternal))) pending.push(target);
+    if (!(await receiver.isAncestor(mappedCommit(state, target), delivery.acceptedInternal))) pending.push(target);
   }
   if (issue.relation === 'closes') checkClosing(observation.state, pending);
   return { sourceId: issue.sourceId, mapping, pending, observation };
@@ -70,7 +71,7 @@ export function templates(delivery, mappings = {}) {
     body: [
       `来源：${source.url}`,
       ...(source.kind === 'commit'
-        ? ['来源类型：主干提交（无关联上游 PR），已由用户明确选择接收；内部仍创建正常审核 PR。']
+        ? ['来源类型：主干提交（无关联上游 PR），由系统自动识别纳入；内部仍创建正常审核 PR。']
         : []),
       `交付标识：${delivery.id}`,
       `上游范围：${delivery.base.upstream} → ${delivery.target}`,
@@ -79,7 +80,10 @@ export function templates(delivery, mappings = {}) {
       '实际落地提交：',
       ...(delivery.commits ?? []),
       '',
-      '保留原始对象；在内部平台正常审核合入。',
+      delivery.commitPolicy?.strategy === 'rewrite'
+        ? '按冻结内部身份重写提交；以下映射用于追溯。'
+        : '保留原始对象；在内部平台正常审核合入。',
+      ...(delivery.commitMappings ?? []).map((item) => `${item.source} → ${item.internal}`),
       'Issue 对应：',
       ...delivery.issues.map(
         (issue) =>

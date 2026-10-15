@@ -21,7 +21,7 @@ const nativeProvider = { api, collectIssues };
 export async function discover(receiver, selection, provider = nativeProvider) {
   if (receiver.config.mode === 'version') fail('WRONG_MODE', '按版本更新从 Git 读取 tag，不扫描 Issue / PR');
   if (selection?.includeDirectCommits !== undefined && typeof selection.includeDirectCommits !== 'boolean')
-    fail('INVALID_TARGET', '包含无 PR 主干提交需要明确的布尔确认，不能使用其他值。');
+    fail('INVALID_TARGET', '旧版无 PR 参数格式无效；当前流程会自动识别提交来源。');
   return withGithub(receiver.config, () => receiver.store.locked(() => discoverLocked(receiver, selection, provider)));
 }
 async function discoverLocked(receiver, selection, provider) {
@@ -77,6 +77,10 @@ async function discoverLocked(receiver, selection, provider) {
     attachIssueRequirements(plans);
     await receiver.replaceQueue(state, plans, heads, target.commit);
     state.syncTarget = target;
+    if (state.automation?.status === 'RUNNING') {
+      state.automation.scanned = true;
+      state.automation.target = target.commit;
+    }
     await receiver.store.save(state);
     return state;
   });
