@@ -7,6 +7,7 @@ import { git } from '../src/process.mjs';
 import { createProjectWorkspace } from '../src/projects.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { repositories } from './fixtures.mjs';
+import { inspectAndActivate } from './setup-journey-helpers.mjs';
 
 const a = await repositories(),
   b = await repositories(),
@@ -79,21 +80,21 @@ try {
   await page.getByLabel('内部 Git 仓库地址', { exact: true }).fill('git@internal.example:team/other.git');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://internal.example/other');
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
-  await page.getByLabel('同步模式', { exact: true }).selectOption('version');
+  await page.locator('[name="mode"]').selectOption('version');
+  await page.locator('[data-policy] > summary').click();
   await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('README.md');
   await page.getByLabel('当前同步项目').selectOption('default');
-  await page.getByRole('heading', { name: '初始对应', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '配置已完成', exact: true }).waitFor();
   await page.getByLabel('当前同步项目').selectOption(id);
   await page.getByLabel('外部 GitHub 仓库地址').waitFor();
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), 'https://github.com/demo/other.git');
   assert.equal(await page.getByLabel('内部保留文件 / 目录（每行一项）').inputValue(), 'README.md');
-  await page.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
-  await page.getByRole('button', { name: '读取两侧当前版本' }).click();
+  await page.getByRole('button', { name: '保存并检查连接 →' }).click();
+  await page.getByRole('heading', { name: '2 · 核验已有同步起点' }).waitFor({ timeout: 30000 });
   await page.locator('#internal').fill(b.i0);
   await page.locator('#upstream').fill(b.u0);
-  await page.getByRole('button', { name: '核验并登记已有基线', exact: true }).click();
-  await page.getByRole('button', { name: '进入同步工作台 →' }).click();
+  await inspectAndActivate(page, b.u0, b.i0, await (await projects.connection(id)).current());
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).click();
   await page.locator('[name="tag"]').selectOption('v2.0.0');
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();

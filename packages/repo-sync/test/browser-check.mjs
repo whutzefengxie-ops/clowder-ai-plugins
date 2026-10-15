@@ -38,7 +38,7 @@ try {
   await page.goto(base);
   for (let index = 0; index < 2; index++) {
     await page.locator('[data-action="start"]').click();
-    await page.locator('[data-step-state="current"]').waitFor();
+    await page.locator('[data-stage="2"][data-stage-state="current"]').waitFor();
     if (!index) {
       await page.getByLabel('内部 Issue 编号').fill('318');
       await page.getByLabel('内部 Issue 具体链接').fill('https://codehub.example/core/issues/318');

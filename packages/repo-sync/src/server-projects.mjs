@@ -72,17 +72,22 @@ export function serverScopes(receiver, options) {
           ),
         );
       const executor = executors.get(project.id),
-        task = await executor.latest();
+        task = await executor.latest(),
+        receiver = await bound.current(),
+        state = await receiver?.status(),
+        observation = services.get(project.id)?.status();
       project.operationStatus = task?.status ?? null;
       project.busy = Boolean(
         executor.busy() ||
           ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task?.status) ||
           task?.persistence?.status === 'FAILED',
       );
+      Object.assign(project, localFacts(receiver, state, task, observation));
     } catch (error) {
       project.error = safeError(error);
     }
   }
+  options.projectWorkspace = projectWorkspace;
   const bootstrap = options.projects
     ? options.projects
         .list()
@@ -113,7 +118,7 @@ export function checkProjectInput(input, id) {
 export async function projectRequest(request, response, options, token, path) {
   if (path !== '/api/projects' || !options.projects) return false;
   if (request.method === 'GET') {
-    send(response, 200, { token, workspace: await options.projects.list() });
+    send(response, 200, { token, workspace: await options.projectWorkspace() });
     return true;
   }
   requireToken(request, token);
@@ -126,7 +131,37 @@ export async function projectRequest(request, response, options, token, path) {
   const project = await options.projects[input.action](input);
   send(response, input.action === 'create' ? 201 : 200, {
     project,
-    workspace: await options.projects.list(),
+    workspace: await options.projectWorkspace(),
   });
   return true;
+}
+
+function localFacts(receiver, state, task, observation) {
+  const accepted = state?.accepted,
+    last = state?.deliveries.findLast(
+      (delivery) => delivery.target === accepted?.upstream && delivery.acceptedInternal === accepted?.internal,
+    );
+  return {
+    syncStatus: localStatus(receiver, state, task, observation),
+    accepted: accepted
+      ? { upstream: accepted.upstream, internal: accepted.internal, ...(accepted.tag ? { tag: accepted.tag } : {}) }
+      : null,
+    lastAcceptedAt: last?.finishedAt ?? null,
+    lastScannedAt: state?.scannedAt ?? null,
+    lastObservedAt: observation?.lastCheckedAt ?? null,
+    observationError: observation?.error ? { code: observation.error.code } : null,
+  };
+}
+
+function localStatus(receiver, state, task, observation) {
+  if (!receiver) return 'UNCONFIGURED';
+  if (task?.persistence?.status === 'FAILED' || ['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status))
+    return 'FAILED';
+  if (['RUNNING', 'CANCELLING'].includes(task?.status)) return 'RUNNING';
+  if (!state) return 'BASELINE_REQUIRED';
+  if (observation?.error) return 'OBSERVATION_FAILED';
+  if (state.automation && state.automation.status !== 'COMPLETE') return state.automation.status;
+  if (state.active?.error) return 'FAILED';
+  if (state.active?.status === 'WAITING_APPROVAL') return 'WAITING_REVIEW';
+  return state.active ? 'ACTION_REQUIRED' : 'READY';
 }

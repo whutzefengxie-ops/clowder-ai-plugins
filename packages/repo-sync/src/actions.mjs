@@ -2,6 +2,7 @@ import { synchronize } from './automation.mjs';
 import { baselineFile } from './baseline.mjs';
 import { fail } from './config.mjs';
 import { discover } from './github.mjs';
+import { inspectBaseline, previewSync } from './journey-preview.mjs';
 
 export async function dispatch(receiver, input, options = {}) {
   if (
@@ -21,6 +22,8 @@ export async function dispatch(receiver, input, options = {}) {
   )
     fail('DELIVERY_CHANGED', '活动交付已变化，请刷新后核对，不操作另一笔交付');
   const actions = {
+    'inspect-baseline': () => inspectBaseline(receiver, input),
+    'preview-sync': () => previewSync(receiver, input, options),
     synchronize: () => synchronize(receiver, input, options),
     'resume-sync': () => synchronize(receiver, input, options),
     'pause-sync': () => synchronize(receiver, input, options),

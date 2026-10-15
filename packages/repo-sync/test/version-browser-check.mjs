@@ -7,6 +7,7 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { configuredReceiver } from '../src/settings.mjs';
+import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -31,11 +32,18 @@ try {
       f.i0 = await git(f.review, ['rev-parse', 'HEAD']);
     }
     const server = createReceiverServer(
-      new Receiver({ ...f.config, mode: 'continuous', internalPaths: [], mergePaths: [] }),
+      new Receiver({
+        ...f.config,
+        mode: 'continuous',
+        internalPaths: [],
+        mergePaths: [],
+      }),
     );
     await new Promise((done) => server.listen(0, '127.0.0.1', done));
     const base = `http://127.0.0.1:${server.address().port}`;
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+    const page = await browser.newPage({
+      viewport: { width: 1440, height: 1100 },
+    });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('request', (request) => {
@@ -46,18 +54,18 @@ try {
     try {
       await page.goto(base);
       await page.getByRole('button', { name: '配置同步基线 →' }).click();
-      await page.getByText('查看或修改已保存的仓库信息', { exact: true }).click();
-      await page.getByLabel('同步模式', { exact: true }).selectOption('version');
+      await page.getByText('✓ 1 · 仓库信息已保存', { exact: true }).click();
+      await page.locator('[name="mode"]').selectOption('version');
       await page.getByText('手动填写路径（高级）', { exact: true }).click();
       await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md\nREADME.md');
       assert.equal(await page.locator('[name="mergePaths"]').count(), 0);
       await page.getByRole('button', { name: '保存同步方式与规则' }).click();
       await page.getByText('同步方式与文件规则已保存，请登记已有基线。').waitFor();
-      await page.getByLabel('外部已同步版本 U0（完整 SHA）').fill(f.u0);
-      await page.getByLabel('内部当前版本 I0（完整 SHA）').fill(f.i0);
-      await page.getByRole('button', { name: '核验并登记已有基线' }).click();
-      await page.getByRole('heading', { name: '初始对应' }).waitFor({ timeout: 20000 });
-      await page.getByRole('button', { name: '同步工作台', exact: true }).click();
+      await page.getByLabel('上次已经接收的外部版本').fill(f.u0);
+      await page.getByLabel('内部当前接收位置').fill(f.i0);
+      await page.getByRole('button', { name: '核验起点并查看文件 →' }).click();
+      await page.getByRole('button', { name: '继续确认启用 →' }).waitFor({ timeout: 30000 });
+      await activateBaseline(page);
       await page.getByRole('button', { name: '读取可用 tag' }).click();
       const selector = page.locator('select[name="tag"]');
       await selector.waitFor();
@@ -69,14 +77,20 @@ try {
       }));
       assert.ok(size.height >= 48 && size.font >= 16, 'tag selector needs a readable 48px control');
       assert.ok(size.width >= Math.min(480, size.formWidth - 2), 'tag selector must use the available form width');
-      await page.screenshot({ path: join(evidence, 'tag-selector-desktop.png'), fullPage: true });
+      await page.screenshot({
+        path: join(evidence, 'tag-selector-desktop.png'),
+        fullPage: true,
+      });
       await page.setViewportSize({ width: 390, height: 844 });
       if (!(await selector.isVisible())) await page.locator('[data-record="current"]').click();
       const mobileSize = await selector.boundingBox();
       assert.ok(mobileSize.width >= 250 && mobileSize.height >= 48);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await selector.scrollIntoViewIfNeeded();
-      await page.screenshot({ path: join(evidence, 'tag-selector-mobile.png'), fullPage: true });
+      await page.screenshot({
+        path: join(evidence, 'tag-selector-mobile.png'),
+        fullPage: true,
+      });
       await page.setViewportSize({ width: 1440, height: 1100 });
       await page.getByLabel('目标 tag').selectOption('v2.0.0');
       await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
@@ -85,7 +99,10 @@ try {
       if (conflicting) {
         await page.setViewportSize({ width: 390, height: 844 });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        await page.screenshot({ path: join(evidence, 'version-preserved-mobile.png'), fullPage: true });
+        await page.screenshot({
+          path: join(evidence, 'version-preserved-mobile.png'),
+          fullPage: true,
+        });
         await page.setViewportSize({ width: 1440, height: 1100 });
       }
       await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
@@ -101,7 +118,12 @@ try {
       await f.merge(
         (
           await (
-            await configuredReceiver({ ...f.config, mode: undefined, internalPaths: undefined, mergePaths: undefined })
+            await configuredReceiver({
+              ...f.config,
+              mode: undefined,
+              internalPaths: undefined,
+              mergePaths: undefined,
+            })
           ).status()
         ).active,
       );
@@ -127,7 +149,12 @@ try {
         `PASS：${conflicting ? '内部追加定制、整文件保留、移动端' : '模式选择、严格核心规则与 tag 更新'} → 单 PR → 真实 Git 合入 → 版本记录；无 Issue 步骤。`,
       );
     } catch (error) {
-      console.log(JSON.stringify({ errors, body: (await page.locator('body').innerText()).slice(0, 4000) }));
+      console.log(
+        JSON.stringify({
+          errors,
+          body: (await page.locator('body').innerText()).slice(0, 4000),
+        }),
+      );
       throw error;
     } finally {
       await page.close();

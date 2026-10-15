@@ -94,7 +94,9 @@ export class Tasks {
     this.config = receiver.config;
     this.writes = Promise.resolve();
     this.controller = new AbortController();
-    const allowCancel = ['heads', 'adopt', 'tags', 'prepare'].includes(input.action);
+    const allowCancel = ['heads', 'adopt', 'tags', 'prepare', 'inspect-baseline', 'preview-sync'].includes(
+      input.action,
+    );
     this.context = {
       signal: this.controller.signal,
       taskId: input.requestId,
@@ -158,7 +160,7 @@ export class Tasks {
       this.startPhase(event);
     } else if (event.kind === 'progress' && this.step) {
       const { phase, percent, completed, total } = event;
-      this.step.progress = { phase, percent, completed, total };
+      this.step.progress = { phase, percent, completed, total, observedAt: new Date().toISOString() };
       if (!this.progressDue()) return;
     } else if (['done', 'failed'].includes(event.kind)) {
       const step = this.value.steps.findLast((item) => item.key === event.id && item.status === 'RUNNING');
@@ -198,7 +200,7 @@ export class Tasks {
   async execute(input) {
     try {
       const result = await runExecution(this.context, () => this.perform(input));
-      this.value.result = ['heads', 'tags'].includes(input.action) ? result : null;
+      this.value.result = ['heads', 'tags', 'inspect-baseline', 'preview-sync'].includes(input.action) ? result : null;
       this.value.status = 'SUCCEEDED';
     } catch (error) {
       const failure = this.context.stopUnconfirmed

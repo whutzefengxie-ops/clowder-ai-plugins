@@ -18,7 +18,12 @@ await initial.selectTag('v2.0.0');
 const connection = await createConnection(configFile);
 const server = createReceiverServer(null, { connection, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const browserServer = await chromium.launchServer({
+  host: '127.0.0.1',
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
+const browser = await chromium.connect(browserServer.wsEndpoint());
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
@@ -57,25 +62,30 @@ try {
   await page.screenshot({ path: join(evidence, 'same-request-resend.png'), fullPage: true });
   denyTerminal = true;
   await page.getByRole('button', { name: '重送原请求（保持同一标识）' }).click();
-  await page.getByRole('heading', { name: '只补存执行记录' }).waitFor({ timeout: 30000 });
+  const failedRecord = page.locator('[data-step-key="execution-record"][data-step-state="failed"]');
+  await failedRecord.waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor();
   assert.equal(startPosts, 2);
   const receiver = await connection.current();
   assert.equal((await receiver.status()).deliveries.length, 1);
-  await page.getByRole('heading', { name: '只补存执行记录' }).waitFor({ timeout: 30000 });
-  assert.equal(await page.locator('#operation [data-operation-state="RUNNING"]').count(), 0);
+  const failed = await (await fetch(new URL('/api/status', page.url()))).json();
+  assert.equal(failed.operation.status, 'SUCCEEDED');
+  assert.equal(failed.operation.persistence.status, 'FAILED');
+  assert.match(await page.locator('.next-action').innerText(), /只补存原记录，不能重跑业务/);
   assert.equal((await receiver.status()).active.status, 'WAITING_APPROVAL');
   assert.equal(JSON.parse(await fs.readFile(f.resultFile)).count, 1);
   assert.equal(await page.locator('[data-action="recover"]').count(), 0, 'pending record exposes only record repair');
   await page.reload();
-  await page.getByRole('heading', { name: '只补存执行记录' }).waitFor();
+  await failedRecord.waitFor();
+  await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1050 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    await page.locator('#operation').screenshot({ path: join(evidence, `record-repair-${width}.png`) });
+    await page.locator('[data-stage="5"]').screenshot({ path: join(evidence, `record-repair-${width}.png`) });
   }
   denyTerminal = false;
   await page.getByRole('button', { name: '只补存原任务记录' }).click();
-  await page.getByRole('heading', { name: '只补存执行记录' }).waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor({ state: 'hidden' });
   assert.equal(await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).isVisible(), true);
   assert.equal(JSON.parse(await fs.readFile(f.resultFile)).count, 1);
   if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
@@ -105,7 +115,15 @@ try {
   );
 } finally {
   fs.rename = rename;
-  await page.close();
-  await browser.close();
-  await server.shutdown();
+  try {
+    await page.close();
+    // A connected client disconnects separately; kill() owns only this fixture's Chromium process.
+    await browser.close();
+  } finally {
+    try {
+      await browserServer.kill();
+    } finally {
+      await server.shutdown();
+    }
+  }
 }

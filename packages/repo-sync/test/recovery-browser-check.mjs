@@ -79,11 +79,13 @@ try {
   await page.locator('#error').filter({ hasText: 'LEDGER_WRITE_FAILED' }).waitFor({ timeout: 20000 });
   assert.equal((await receiver.status()).active.prUrl, url);
   await page.reload();
-  await page
+  const failedLedger = page.locator('[data-step-key="ledger-save"][data-step-state="failed"]');
+  await failedLedger.filter({ hasText: '保存交付台账' }).waitFor();
+  await failedLedger.getByText('错误码与脱敏诊断摘要', { exact: true }).click();
+  await failedLedger
     .getByText(/LEDGER_WRITE_FAILED/)
     .first()
     .waitFor();
-  await page.locator('[data-operation-state="FAILED"]').filter({ hasText: '保存交付台账' }).waitFor();
   await page.setViewportSize({ width: 390, height: 1050 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(evidence, 'ledger-save-failed-mobile.png'), fullPage: true });

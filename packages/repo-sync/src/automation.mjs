@@ -83,6 +83,7 @@ function register(receiver, input, id) {
             id,
             status: 'RUNNING',
             startedAt: new Date().toISOString(),
+            startingDeliveryId: active?.id ?? null,
             selection: input.targetKind
               ? { kind: input.targetKind, value: input.targetValue }
               : { kind: saved.queue.length || active ? 'queue' : 'latest' },

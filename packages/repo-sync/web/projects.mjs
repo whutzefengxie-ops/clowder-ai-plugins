@@ -8,6 +8,9 @@ export function createProjectNavigation(snapshot, saveDraft) {
     editor = null,
     pendingCreate = null,
     sending = false,
+    filter = 'all',
+    overviewOpen = false,
+    navigation = null,
     error = '';
   async function load() {
     const response = await fetch('/api/projects', {
@@ -27,10 +30,30 @@ export function createProjectNavigation(snapshot, saveDraft) {
   }
   function render() {
     panel.hidden = false;
-    panel.innerHTML = projectView({ workspace, editor, pendingCreate, sending, error }, pageProjectId);
+    panel.innerHTML = projectView(
+      { workspace, editor, pendingCreate, sending, error, filter, overviewOpen, navigation },
+      pageProjectId,
+    );
   }
   function go(id, newlyCreated = false) {
-    saveDraft();
+    const saved = saveDraft();
+    const secret = [...document.querySelectorAll('input[type="password"]')].some((field) => field.value);
+    if (saved === false || secret) {
+      navigation = {
+        id,
+        newlyCreated,
+        message:
+          saved === false
+            ? '普通配置草稿保存失败，切换会丢失尚未保存的输入。请留在当前项目处理，或明确放弃后切换；已保存的配置和后台任务保留。'
+            : '当前项目有尚未提交的 Token。普通草稿已按项目保存，Token 不会保存；请先在当前项目提交认证，或放弃这次输入后切换。',
+      };
+      render();
+      panel.querySelector('[data-project-stay]')?.focus();
+      return;
+    }
+    visit(id, newlyCreated);
+  }
+  function visit(id, newlyCreated) {
     const url = new URL(location.href);
     url.searchParams.set('project', id);
     url.searchParams.delete('record');
@@ -77,6 +100,23 @@ export function createProjectNavigation(snapshot, saveDraft) {
     if (event.target.matches('[data-project-select]')) go(event.target.value);
   });
   panel.addEventListener('click', (event) => {
+    const project = event.target.closest('[data-project-enter]'),
+      filtering = event.target.closest('[data-project-filter]');
+    if (project) return go(project.dataset.projectEnter);
+    if (filtering) {
+      filter = filtering.dataset.projectFilter;
+      overviewOpen = true;
+      render();
+      panel.querySelector(`[data-project-filter="${filter}"]`)?.focus();
+      return;
+    }
+    if (event.target.closest('[data-project-stay]')) {
+      navigation = null;
+      render();
+      return;
+    }
+    if (event.target.closest('[data-project-leave]') && navigation)
+      return visit(navigation.id, navigation.newlyCreated);
     if (event.target.closest('[data-project-create]')) {
       editor = 'create';
       error = '';
@@ -93,6 +133,13 @@ export function createProjectNavigation(snapshot, saveDraft) {
     }
     if (event.target.closest('[data-project-retry]') && pendingCreate) void submit(pendingCreate);
   });
+  panel.addEventListener(
+    'toggle',
+    (event) => {
+      if (event.target.matches('[data-project-overview]')) overviewOpen = event.target.open;
+    },
+    true,
+  );
   panel.addEventListener('submit', (event) => {
     event.preventDefault();
     event.stopPropagation();

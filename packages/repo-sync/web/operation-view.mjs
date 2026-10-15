@@ -1,3 +1,5 @@
+import { errorGuide } from './error-guide.mjs';
+import { taskProgress } from './task-progress.mjs';
 const labels = {
   RUNNING: '正在执行',
   CANCELLING: '正在停止进程树',
@@ -7,13 +9,12 @@ const labels = {
   CANCELLED: '已取消',
   INTERRUPTED: '执行中断',
 };
-const names = {
-  'Receiving objects': '接收对象',
-  'Resolving deltas': '解析增量',
-  'Counting objects': '统计对象',
-  'Compressing objects': '压缩对象',
-};
 const actions = {
+  'inspect-baseline': '核验同步起点（尚未启用）',
+  'preview-sync': '只读预览同步范围',
+  synchronize: '自动同步',
+  'resume-sync': '恢复原轮次',
+  'pause-sync': '停止后续自动处理',
   heads: '两侧连接检查',
   adopt: '已有基线核验',
   prepare: '准备同步候选',
@@ -37,9 +38,7 @@ const esc = (value) =>
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   );
 function stepView(step) {
-  const progress = step.progress
-    ? `<small>${esc(names[step.progress.phase])} ${step.progress.percent}% · ${step.progress.completed}/${step.progress.total}</small>`
-    : '';
+  const progress = taskProgress(step, esc);
   const error = step.error ? `<small>× ${esc(step.error.code)}：${esc(step.error.message)}</small>` : '';
   return `<li data-operation-state="${esc(step.status)}" class="${step.status === 'FAILED' ? 'bad' : step.status === 'DONE' ? 'good' : ''}">${marks[step.status] ?? '○'} ${esc(step.label)}${progress}${error}</li>`;
 }
@@ -47,9 +46,12 @@ export function renderTask(task) {
   if (!task) return '';
   const end = task.finishedAt ? Date.parse(task.finishedAt) : Date.now();
   const elapsed = Math.max(0, Math.floor((end - Date.parse(task.startedAt)) / 1000));
-  const badge = `${esc(labels[task.status] ?? task.status)} · ${elapsed} 秒`;
+  const badge = `${esc(labels[task.status] ?? task.status)} · ${elapsed} 秒 · 状态最近成功读取 ${esc(task.observedAt ?? '未记录')}`;
   const steps = `<ol class="operation-steps">${task.steps.map(stepView).join('')}</ol>`;
-  const error = errorView(task);
+  const error =
+    task.status === 'FAILED'
+      ? errorGuide(task.error, { action: actions[task.action] ?? task.action })
+      : errorView(task);
   const cancel = task.cancellable
     ? `<button type="button" data-cancel-operation>${task.action === 'prepare' ? '取消候选准备' : '取消当前读取 / 下载'}</button>`
     : '';

@@ -19,6 +19,14 @@ export const issueInputKeys = [
   'issueAuthMode',
 ];
 export const apiInputKeys = issueInputKeys.filter((key) => key !== 'issueMode');
+export function repositoryWebFromIssue(page) {
+  if (!page) return undefined;
+  const value = objectUrl(page.trim());
+  const url = new URL(value);
+  const path = url.pathname.replace(/\/(?:-\/)?issues(?:\/\d+)?\/?$/, '');
+  if (!path || path === url.pathname) configurationErrors([['issuePageUrl', 'url']]);
+  return `${url.origin}${path}`;
+}
 export function apiConfiguration(config, input) {
   if (input.issueAuthMode !== undefined && !['session', 'environment'].includes(input.issueAuthMode))
     configurationErrors([['issueAuthMode', 'mode']]);

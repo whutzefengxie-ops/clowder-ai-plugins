@@ -7,6 +7,8 @@ import { writePrivate } from './private-config.mjs';
 import { validateSnapshot } from './recording.mjs';
 
 export const taskActions = new Set([
+  'inspect-baseline',
+  'preview-sync',
   'synchronize',
   'resume-sync',
   'pause-sync',
@@ -94,6 +96,7 @@ export function taskPlan(action) {
       ['github-deliveries', '读取并核对 PR / Issue / commit 对应'],
     ],
     adopt: [...fetch, ['baseline-check', '核验 U0 / I0 与历史'], ['baseline-save', '登记已有基线']],
+    'inspect-baseline': [...fetch, ['baseline-check', '核验历史起点与内部当前位置（尚未启用）']],
     tags: [['source-tags', '读取上游 tag']],
     'select-tag': [...fetch, ['target-check', '核验发布 tag 与已接收版本的关系']],
     pr: [['platform-pr', '核验候选并登记 PR 引用']],

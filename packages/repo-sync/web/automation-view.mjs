@@ -1,3 +1,5 @@
+import { actionBar } from './actionbar.mjs';
+import { attempts } from './attempts.mjs';
 import { esc, when } from './ui.mjs';
 
 export function automationBanner(snapshot) {
@@ -15,7 +17,11 @@ export function automationBanner(snapshot) {
     COMPLETE: '本轮自动同步完成',
   };
   const error = run.error ?? snapshot.observation?.error;
-  return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3><p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}${['FAILED', 'PAUSED'].includes(run.status) ? `${snapshot.state.active ? '' : '<button type="button" class="primary" data-action="resume-sync">修复后恢复原同步</button>'}<button type="button" data-view="configuration">检查仓库与认证配置</button>` : ''}${['RUNNING', 'WAITING_REVIEW'].includes(run.status) ? '<button type="button" data-action="pause-sync">暂停后续自动处理</button>' : ''}</section>`;
+  const progress = snapshot.journeyProgress;
+  const count = progress
+    ? `<p>${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</p>`
+    : '';
+  return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3><p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${count}${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}${['RUNNING', 'WAITING_REVIEW'].includes(run.status) ? '<button type="button" data-action="pause-sync">暂停后续自动处理</button>' : ''}</section>`;
 }
 export function automaticPolicy(snapshot, delivery) {
   const run = snapshot.state?.automation;
@@ -45,9 +51,12 @@ export function automaticPolicy(snapshot, delivery) {
   };
 }
 
-export function preDeliveryFlow(snapshot) {
+export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, null)) {
   const task = snapshot.operation;
-  const current = task?.steps.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage || 1;
+  const current =
+    task?.persistence?.status === 'FAILED'
+      ? 5
+      : task?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage || policy?.stage || 1;
   const version = snapshot.config.mode === 'version';
   const names = [
     '读取目标与真实来源集合',
@@ -56,7 +65,19 @@ export function preDeliveryFlow(snapshot) {
     '人工审核合入',
     version ? '自动核验与保存版本' : '自动核验、关单与保存映射',
   ];
-  return `<ol class="journey-flow">${names.map((name, index) => `<li><details data-stage="${index + 1}" ${index + 1 === current ? 'open' : ''}><summary><span class="stage-mark">${index + 1 === current ? (task?.status === 'FAILED' ? '×' : '●') : '○'}</span><b>${index + 1} · ${name}</b></summary><div class="stage-body">${index + 1 === current ? '<div id="operation"></div><div id="error-slot"></div>' : '<p>此阶段将在前置步骤完成后自动继续，审核合入由你在内部 PR 完成。</p>'}</div></details></li>`).join('')}</ol>`;
+  return `<ol class="journey-flow">${names
+    .map((name, index) => {
+      const stage = index + 1;
+      const failed =
+        stage === current &&
+        (['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status) ||
+          task?.persistence?.status === 'FAILED');
+      const steps = task?.steps?.filter((step) => step.stage === stage) ?? [];
+      const done = steps.length > 0 && steps.every((step) => step.status === 'DONE');
+      const status = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
+      return `<li><details data-stage="${stage}" data-stage-state="${status}" ${stage === current ? 'open' : ''}><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
+    })
+    .join('')}</ol>${policy ? actionBar(policy, false) : ''}`;
 }
 
 function referenceRemedy(delivery) {

@@ -7,6 +7,7 @@ import { createConnection } from '../src/connections.mjs';
 import { phase } from '../src/execution.mjs';
 import { command } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
 const f = await versionRepositories();
@@ -77,14 +78,14 @@ try {
       ]),
     );
   };
-  await page.getByLabel('外部已同步版本 U0（完整 SHA）').fill(f.u0);
-  await page.getByRole('button', { name: '核验并登记已有基线' }).click();
+  await page.getByLabel('上次已经接收的外部版本').fill(f.u0);
+  await page.getByRole('button', { name: '核验起点并查看文件 →' }).click();
   await page
     .locator('#operation')
     .getByText(/接收对象 40%/)
     .waitFor();
   assert.equal(await page.getByRole('button', { name: '同步工作台', exact: true }).isEnabled(), true);
-  assert.equal(await page.getByRole('button', { name: '核验并登记已有基线' }).isEnabled(), false);
+  assert.equal(await page.getByRole('button', { name: '核验起点并查看文件 →' }).isEnabled(), false);
   const original = (await (await fetch(`${base}/api/status`)).json()).operation.id;
   await page.locator('#operation').screenshot({ path: join(evidence, 'connection-download-progress.png') });
   await page.reload();
@@ -99,16 +100,17 @@ try {
   const cancelled = (await (await fetch(`${base}/api/status`)).json()).operation;
   assert.equal(cancelled.status, 'CANCELLED');
   assert.doesNotMatch(JSON.stringify(cancelled), /fixture-secret|private-host/);
-  assert.equal(await page.getByRole('button', { name: '核验并登记已有基线' }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: '核验起点并查看文件 →' }).isEnabled(), true);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.locator('#operation').screenshot({ path: join(evidence, 'connection-cancelled-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 1100 });
   receiver.git.fetch = fetchObjects;
-  await page.getByLabel('外部已同步版本 U0（完整 SHA）').fill(f.u0);
-  await page.getByLabel('内部当前版本 I0（完整 SHA）').fill(f.i0);
-  await page.getByRole('button', { name: '核验并登记已有基线' }).click();
-  await page.getByRole('heading', { name: '初始对应' }).waitFor({ timeout: 20000 });
+  await page.getByLabel('上次已经接收的外部版本').fill(f.u0);
+  await page.getByLabel('内部当前接收位置').fill(f.i0);
+  await page.getByRole('button', { name: '核验起点并查看文件 →' }).click();
+  await page.getByRole('button', { name: '继续确认启用 →' }).waitFor({ timeout: 30000 });
+  await activateBaseline(page, receiver);
   assert.equal((await receiver.status()).accepted.upstream, f.u0);
   assert.deepEqual(errors, []);
   console.log(

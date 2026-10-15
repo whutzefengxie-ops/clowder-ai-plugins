@@ -25,8 +25,7 @@ try {
   await page.locator('.record-list').waitFor({ timeout: 3000 });
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).click();
   await page.locator('[name="tag"]').selectOption('v2.0.0');
-  await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
-  await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
+  await page.getByRole('button', { name: '同步到所选版本 →' }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
   assert.equal(await page.locator('[data-stage]').count(), 5);
   assert.equal(await page.locator('main > #operation').count(), 0, 'execution belongs inside a stage');
@@ -80,7 +79,6 @@ try {
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).click();
   await page.locator('[name="tag"]').selectOption('v3.0.0');
-  await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
   assert.deepEqual(
     (await receiver.status()).deliveries[0].taskIds,
     completedTasks,
@@ -95,7 +93,7 @@ try {
     }
     return originalChecks(head);
   };
-  await page.getByRole('button', { name: '开始更新至 v3.0.0 →' }).click();
+  await page.getByRole('button', { name: '同步到所选版本 →' }).click();
   await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
   const failedCandidate = (await receiver.status()).active.candidate;
   await page.locator(`[data-record="${active.id}"]`).click();
@@ -133,7 +131,7 @@ try {
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
   assert.equal(
-    await page.locator('[data-stage="2"] [data-attempt]').count(),
+    await page.locator('[data-stage="2"] [data-step-key="candidate-check"] [data-attempt]').count(),
     2,
     'one failed check and one recovery remain visible without a removed resolution action',
   );

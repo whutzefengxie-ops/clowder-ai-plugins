@@ -10,14 +10,16 @@ export function authenticationForm(config) {
   return `<section id="issue-auth"><h4>平台认证与接口验证</h4><p>${available ? '认证已提供；仍需验证接口。' : '需要提供 Token，或恢复原环境变量。'}输入 Token 不代表平台接口已通过核验。</p><form data-secret-form="issue-token">${tokenField()}<button type="submit">提供 / 更换 Token（本次服务）</button><button type="button" data-issue-check>验证平台接口（只读）</button><button type="button" data-issue-clear>清除本次输入的 Token</button></form><p data-auth-feedback role="status"></p></section>`;
 }
 export function createIssueAuthentication(snapshot, refresh, errorPanel) {
-  async function request(path, value) {
+  async function request(path, value, scope = snapshot()) {
+    const revision = scope.connection.revision,
+      csrf = scope.token;
     const { pageProjectId, projectUrl } = await import('./project-scope.mjs');
     const response = await fetch(projectUrl(path), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Repo-Sync-Token': snapshot().token },
+      headers: { 'Content-Type': 'application/json', 'X-Repo-Sync-Token': csrf },
       body: JSON.stringify({
-        expectedRevision: snapshot().connection.revision,
-        ...(snapshot().workspace ? { projectId: pageProjectId } : {}),
+        expectedRevision: revision,
+        ...(scope.workspace ? { projectId: pageProjectId } : {}),
         ...value,
       }),
       signal: AbortSignal.timeout(35000),
@@ -32,8 +34,8 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
     if (field) field.value = '';
     return value;
   }
-  async function set(value) {
-    await request('/api/issue-auth', { token: value });
+  async function set(value, scope) {
+    await request('/api/issue-auth', { token: value }, scope);
     await refresh();
   }
   function feedback(message) {
@@ -58,9 +60,9 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
       feedback(error.message);
     }
   }
-  async function provide(value) {
+  async function provide(value, scope) {
     try {
-      await set(value);
+      await set(value, scope);
       return true;
     } catch (error) {
       feedback(`配置已经保存，但 Token 提供未确认；请在当前项目重新输入。${error.message}`);
@@ -86,7 +88,7 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
     }
   });
   document.addEventListener('change', (event) => {
-    if (['issueMode', 'issueAuthMode', 'prMode', 'mode'].includes(event.target.name))
+    if (['issueMode', 'issueAuthMode', 'prMode', 'mode', 'commitStrategy'].includes(event.target.name))
       updateIssueFields(event.target.closest('form'));
   });
   document.addEventListener('input', (event) => {
@@ -96,23 +98,32 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
   async function complete(result, token) {
     if (!result) return false;
     if (!token) return true;
-    if (result.config?.bindingId !== snapshot().config.bindingId) {
-      feedback('保存后的仓库绑定已变化，未向其他仓库提供 Token。请在原项目重新输入。');
+    const current = snapshot();
+    if (
+      result.config?.bindingId !== current.config.bindingId ||
+      !result.connection?.revision ||
+      result.connection.revision !== current.connection.revision
+    ) {
+      feedback('保存后的仓库或接口配置已变化，未向新范围提供 Token。请在当前配置重新输入。');
       return false;
     }
-    return provide(token);
+    return provide(token, current);
   }
   return { take, set, submit, provide, complete };
 }
 export function updateIssueFields(form) {
   if (!form) return;
+  for (const card of form.querySelectorAll('[data-mode-card]'))
+    card.setAttribute('aria-pressed', String(card.dataset.modeCard === form.elements.namedItem('mode')?.value));
+  const identity = form.querySelector('[data-identity-details]');
+  if (identity && form.elements.namedItem('commitStrategy')?.value === 'rewrite') identity.open = true;
   const pr = form.elements.namedItem('prMode'),
     summary = form.querySelector('[data-pr-summary]');
   if (pr && summary)
     summary.textContent = `保存后采用：${pr.selectedOptions[0].textContent}；审核合入仍在内部平台完成。`;
   const mode = form.elements.namedItem('issueMode')?.value,
     auth = form.elements.namedItem('issueAuthMode')?.value,
-    version = form.elements.namedItem('mode')?.value === 'version';
+    version = form.elements.namedItem('mode') ? form.elements.namedItem('mode').value !== 'continuous' : false;
   const sourceAuth = form.querySelector('[data-source-auth]');
   if (sourceAuth) sourceAuth.hidden = version;
   const closure = form.querySelector('[data-closure]');

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
 const f = await versionRepositories();
@@ -37,10 +38,13 @@ const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 try {
   await page.goto(base);
-  await page.getByRole('heading', { name: '开始连接你的两侧仓库' }).waitFor();
+  await page.getByRole('heading', { name: '开始同步你的项目' }).waitFor();
   await assert.rejects(access(file), { code: 'ENOENT' });
   assert.equal(await page.locator('.demo-links').count(), 0);
-  await page.screenshot({ path: join(evidence, 'real-first-use.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'real-first-use.png'),
+    fullPage: true,
+  });
   await page.getByRole('button', { name: '配置真实仓库 →' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -51,10 +55,10 @@ try {
     1,
   );
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.getByLabel('同步模式', { exact: true }).selectOption('continuous');
+  await page.locator('[name="mode"]').selectOption('continuous');
   assert.equal(await page.locator('[name="commitClosureVerified"]').count(), 1);
   assert.ok(await page.getByLabel('Issue 创建与关单方式').isVisible());
-  await page.getByLabel('同步模式', { exact: true }).selectOption('version');
+  await page.locator('[name="mode"]').selectOption('version');
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), '');
   assert.equal(await page.getByLabel('内部 Git 仓库地址').inputValue(), '');
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://user:secret@github.com/demo/core.git');
@@ -62,45 +66,55 @@ try {
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');
   await page.getByLabel('外部交付分支').fill('releases');
+  await page.locator('[data-policy] > summary').click();
   await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md\nREADME.md');
   assert.equal(await page.locator('[name="mergePaths"]').count(), 0);
-  await page.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
-  await page.getByRole('alert').filter({ hasText: 'INVALID_URL' }).waitFor();
+  await page.getByRole('button', { name: '保存并检查连接 →' }).click();
+  await page.locator('[data-field-error="sourceUrl"]').waitFor();
   assert.equal(await page.getByLabel('内部 Git 仓库地址').inputValue(), internal, 'error preserves draft');
   await page.getByLabel('外部 GitHub 仓库地址').fill(external);
-  await page.screenshot({ path: join(evidence, 'real-repository-settings.png'), fullPage: true });
-  await page.getByRole('button', { name: '保存仓库配置，继续核验基线 →' }).click();
-  await page.getByText('仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。').waitFor();
-  assert.equal(await page.getByLabel('外部已同步版本 U0（完整 SHA）').inputValue(), '');
-  await page.getByLabel('外部已同步版本 U0（完整 SHA）').fill(f.u0);
+  await page.screenshot({
+    path: join(evidence, 'real-repository-settings.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: '保存并检查连接 →' }).click();
+  await page.getByRole('heading', { name: '2 · 核验已有同步起点' }).waitFor({ timeout: 30000 });
+  assert.equal(await page.getByLabel('上次已经接收的外部版本').inputValue(), '');
+  await page.getByLabel('上次已经接收的外部版本').fill(f.u0);
   await page.getByRole('button', { name: '读取两侧当前版本' }).click();
   await page.locator('#observed-heads').filter({ hasText: '读取成功' }).waitFor({ timeout: 20000 });
-  assert.equal(await page.getByLabel('内部当前版本 I0（完整 SHA）').inputValue(), f.i0);
+  assert.equal(await page.getByLabel('内部当前接收位置').inputValue(), f.i0);
   assert.equal(
-    await page.getByLabel('外部已同步版本 U0（完整 SHA）').inputValue(),
+    await page.getByLabel('上次已经接收的外部版本').inputValue(),
     f.u0,
     'reading current heads preserves the chosen prior U0',
   );
-  await page.getByLabel('外部已同步版本 U0（完整 SHA）').fill(f.u0);
-  await page.getByRole('button', { name: '核验并登记已有基线' }).click();
-  await page.getByRole('heading', { name: '初始对应' }).waitFor({ timeout: 20000 });
+  await page.getByLabel('上次已经接收的外部版本').fill(f.u0);
+  await page.getByRole('button', { name: '核验起点并查看文件 →' }).click();
+  await page.getByRole('button', { name: '继续确认启用 →' }).waitFor({ timeout: 30000 });
+  await activateBaseline(page, await connection.current());
   assert.equal((await connection.current()).config.checkProfile, 'git-integrity');
   const status = await (await fetch(`${base}/api/status`)).json();
   const rejectEdit = await fetch(`${base}/api/action`, {
     method: 'POST',
     headers: { 'X-Repo-Sync-Token': status.token },
-    body: JSON.stringify({ action: 'configure-repositories', expectedRevision: status.connection.revision }),
+    body: JSON.stringify({
+      action: 'configure-repositories',
+      expectedRevision: status.connection.revision,
+    }),
   });
   assert.equal((await rejectEdit.json()).code, 'CONFIGURATION_READ_ONLY');
-  await page.getByRole('button', { name: '进入同步工作台 →' }).click();
   await page.getByRole('button', { name: '读取可用 tag' }).click();
   await page.getByLabel('目标 tag').selectOption('v2.0.0');
   await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
   await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
-  await page.getByText('Git 基础完整性检查', { exact: false }).waitFor();
+  await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).waitFor();
   await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
+  const prepared = (await (await connection.current()).status()).active;
+  assert.equal(prepared.checks.profile, 'git-integrity');
+  assert.equal(prepared.checks.passed, true, 'the configured integrity check must actually pass before the PR step');
   await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
   await page.locator('[data-pr-confirm]').check();
   await page.getByRole('button', { name: '登记 PR，进入审核' }).click();

@@ -5,6 +5,8 @@ import { renderTask } from './operation-view.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 
 const longActions = new Set([
+  'inspect-baseline',
+  'preview-sync',
   'synchronize',
   'resume-sync',
   'pause-sync',
@@ -57,6 +59,7 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
       signal: AbortSignal.timeout(8000),
     });
     const value = await response.json();
+    if (response.ok && value.operation) value.operation.observedAt = new Date().toISOString();
     if (!response.ok) {
       const error = new Error(`${value.code}：${value.message ?? '请求未完成'}`);
       error.code = value.code;

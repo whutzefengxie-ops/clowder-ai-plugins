@@ -13,6 +13,7 @@ import { body, requestPath, requireToken, send } from './http.mjs';
 import { publicIssues } from './issue-adapter.mjs';
 import { clearIssueTokens } from './issue-auth.mjs';
 import { issueAuthRequest } from './issue-auth-http.mjs';
+import { journeyProgress } from './journey-progress.mjs';
 import { publicApi, publicPlatform } from './pr-settings.mjs';
 import { recordDetail, recordList } from './records.mjs';
 import { checkProjectInput, projectRequest, serverScopes } from './server-projects.mjs';
@@ -65,6 +66,14 @@ const assets = new Map([
     'commit-settings.mjs',
     'automation-view.mjs',
     'expansion.mjs',
+    'setup-view.mjs',
+    'setup-flow.mjs',
+    'form-submission.mjs',
+    'view-state.mjs',
+    'preview-view.mjs',
+    'error-guide.mjs',
+    'operator-journey.css',
+    'task-progress.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -166,7 +175,9 @@ async function post(receiver, options, token, input, response) {
     await get(receiver, options, token, '/api/status', response);
   else
     send(response, 200, {
-      result: ['heads', 'tags', 'conflict', 'baseline-file'].includes(input.action) ? result : null,
+      result: ['heads', 'tags', 'baseline-file', 'inspect-baseline', 'preview-sync'].includes(input.action)
+        ? result
+        : null,
       state: await receiver.status(),
     });
   return receiver;
@@ -206,6 +217,7 @@ async function get(receiver, options, token, path, response, url = '') {
   return send(response, 200, {
     token,
     sourceAuthentication: githubAuthentication(receiver?.config),
+    journeyProgress: journeyProgress(state),
     state:
       state && compact
         ? {

@@ -3,14 +3,14 @@ feature_ids: []
 topics: [repo-sync, user-journey, onboarding, authentication, recovery, history]
 doc_kind: design-plan
 created: 2026-10-15
-status: approved-in-implementation
+status: implemented-local-verification
 review_gate: approved-scope-with-review-clarifications
 approved: 2026-10-15
 ---
 
 # 仓库同步插件：用户旅程优化方案（已批准范围，复审修订）
 
-原方案已获用户批准，正在 PR #77 原分支实施。本版吸收《repo-sync-ux-plan-review-feedback》的复审意见，补充定义、边界与验收方法；不扩大已批准范围。**文档结论不代表代码或真实内网验收已完成，实施结果另行记录。**
+原方案已获用户批准，已在 PR #77 原分支实施并完成本地工程验证。本版吸收《repo-sync-ux-plan-review-feedback》的复审意见，补充定义、边界与验收方法；不扩大已批准范围。**文档结论不代表代码或真实内网验收已完成，实施结果另行记录。**
 
 阅读顺序：使用者先看第 3 节的操作路线；产品与测试读第 2、5 节；工程实现读第 4 节。复审逐项回应见[复审处理记录](2026-10-15-repo-sync-ux-review-response.md)。
 
@@ -340,4 +340,4 @@ Token 过期/撤销、内部写权限不足、网络连接失败分别注入并�
 
 明确保留：双模式、单向接收、逐笔过程同步、人工平台合入、自动关单条件、核心严格一致、原任务恢复及内部数据隔离。暂不增加浏览器持久密钥、自动猜测历史基线、批量写入、三方合并、AI 配置、消息外发或独立图谱系统。
 
-**当前状态：原范围已批准实施，复审修订仅澄清约束与验证方式。完整开发、回归与真实入口更新仍须完成后单独报告；不能把本次文档修订当作功能验收结果。**
+**当前状态：已在同一 PR 完成本地实施、工程验证与正式试用入口更新。详见[实施与验证记录](2026-10-15-repo-sync-ux-implementation-verification.md)；真实内网验收与 5 人无提示可用性试验仍未完成，文档及替身测试不代替这些结果。**

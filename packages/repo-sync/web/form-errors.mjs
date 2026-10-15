@@ -63,7 +63,7 @@ function updateSummary(form) {
   }
   const token =
     form.querySelector('[name="issueAuthMode"]')?.value === 'session' && form.querySelector('input[type="password"]');
-  summary.textContent = `配置未保存，请修改标记的 ${count} 项后重试。${token ? 'Token 未提交，请在修正后重新输入。' : ''}`;
+  summary.textContent = `配置未保存，请修改标记的 ${count} 项后重试。${token ? 'Token 尚未提交；未提交值仅在当前页面保留，配置范围变化时需重新输入。' : ''}`;
 }
 export function clearConfigurationErrors(kind) {
   clearFormErrors([...document.querySelectorAll('form[data-form]')].find((form) => form.dataset.form === kind));

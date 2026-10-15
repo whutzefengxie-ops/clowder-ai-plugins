@@ -4,7 +4,7 @@ import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
 import { retainGithubToken } from './github-auth.mjs';
 import { retainIssueToken } from './issue-auth.mjs';
-import { checkIssueSettings, issueConfiguration, issueInputKeys } from './issue-settings.mjs';
+import { checkIssueSettings, issueConfiguration, issueInputKeys, repositoryWebFromIssue } from './issue-settings.mjs';
 import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
 import { recordDelivery } from './recording.mjs';
@@ -234,6 +234,7 @@ function stateDirectory(path, bindingId, options) {
 }
 
 function repositoryConfiguration(previous = {}, input, path) {
+  input = { ...input, internalWebUrl: input.internalWebUrl || repositoryWebFromIssue(input.issuePageUrl) };
   return validateConfig({
     ...(previous ?? {}),
     configurationSource: 'workbench',

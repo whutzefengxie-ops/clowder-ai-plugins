@@ -1,0 +1,119 @@
+import { repositoryInput } from './connections.mjs';
+import { showFormErrors } from './form-errors.mjs';
+export function initializeSubmissions(context) {
+  const { snapshot, action, issueAuthentication, githubAuthentication, records, setup, complete, activate } = context;
+  document.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    if (form.hasAttribute('data-github-auth')) return githubAuthentication.submit(form);
+    if (form.hasAttribute('data-secret-form')) return issueAuthentication.submit(form);
+    // Project forms are owned by project navigation, not the synchronization executor.
+    if (!form.dataset.form && !form.hasAttribute('data-record-filter')) return;
+    const fields = Object.fromEntries(new FormData(form));
+    const tokens = { issueToken: fields.issueToken ?? '', githubToken: fields.githubToken ?? '' };
+    delete fields.issueToken;
+    delete fields.githubToken;
+    if (form.hasAttribute('data-record-filter')) return records.filter(fields);
+    if (form.dataset.form === 'configure-repositories' && !ordinaryFields(form, fields)) return;
+    const binding = snapshot().config?.bindingId;
+    const revision = snapshot().connection?.revision;
+    let input =
+      form.dataset.form === 'configure-repositories'
+        ? repositoryInput(fields)
+        : { action: form.dataset.form, ...fields };
+    if (input.action === 'synchronize' && fields.tag) {
+      input.targetKind = 'tag';
+      input.targetValue = fields.tag;
+      delete input.tag;
+    }
+    if (input.action === 'configure')
+      for (const key of ['internalPaths', 'mergePaths'])
+        input[key] = (fields[key] ?? '')
+          .split(/\r?\n/)
+          .map((v) => v.trim())
+          .filter(Boolean);
+    if (input.action === 'configure-identity') {
+      input.receivingIdentity = { name: fields.commitName.trim(), email: fields.commitEmail.trim() };
+      delete input.commitName;
+      delete input.commitEmail;
+    }
+    if (input.action === 'issue') input.sourceId = form.dataset.source;
+    if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
+    if (input.action === 'receipts')
+      input = {
+        action: 'receipts',
+        deliveryId: snapshot().state.active.id,
+        observations: snapshot().state.active.issues.map((issue) => ({
+          sourceId: issue.sourceId,
+          internalId: snapshot().state.issues[issue.sourceId].internalId,
+          state: fields[issue.sourceId],
+        })),
+      };
+    if (input.action === 'configure-repositories') setup.beginSave();
+    // Only the local submission closure keeps these during the request. A render must not copy them into a replacement form.
+    for (const name of Object.keys(tokens)) {
+      const field = form.elements.namedItem(name);
+      if (field) field.value = '';
+    }
+    const result = await action(input, form);
+    if (!result) {
+      if (snapshot().config?.bindingId === binding && snapshot().connection?.revision === revision)
+        restoreSecrets(form.dataset.form, tokens);
+      return;
+    }
+    for (const name of Object.keys(tokens)) {
+      const field = form.elements.namedItem(name);
+      if (field) field.value = '';
+    }
+    const config = result.config ?? snapshot().config;
+    const issue = await issueAuthentication.complete(
+      result,
+      config?.prTransport === 'gitlab' || config?.issueAutomation?.mode === 'gitlab' ? tokens.issueToken : '',
+    );
+    const source = await githubAuthentication.complete(result, config?.mode === 'continuous' ? tokens.githubToken : '');
+    if (input.action === 'configure-repositories') {
+      if (issue && source) await setup.checkConnections();
+      else setup.partial();
+      return;
+    }
+    if (input.action === 'inspect-baseline') return setup.acceptReport(result);
+    if (input.action === 'adopt' && snapshot().state) return activate();
+    complete(input.action, result);
+  });
+  document.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-preview-sync]');
+    if (!button) return;
+    const fields = Object.fromEntries(new FormData(button.closest('form')));
+    const result = await action({
+      action: 'preview-sync',
+      tag: fields.tag,
+      targetKind: fields.targetKind,
+      targetValue: fields.targetValue,
+    });
+    if (result) complete('preview-sync', result);
+  });
+}
+function restoreSecrets(kind, tokens) {
+  const form = [...document.querySelectorAll('form[data-form]')].find((form) => form.dataset.form === kind);
+  if (!form) return;
+  for (const [name, value] of Object.entries(tokens)) {
+    const field = form.elements.namedItem(name);
+    if (field && value) field.value = value;
+  }
+}
+function ordinaryFields(form, fields) {
+  const errors = [];
+  if (
+    !/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)[\w.-]+\/[\w.-]+(?:\.git)?\/?$/.test(
+      fields.sourceUrl?.trim() ?? '',
+    )
+  )
+    errors.push({ field: 'sourceUrl', message: '填写 GitHub 仓库 HTTPS 或 SSH 地址，不含凭据、查询参数或文件路径。' });
+  if (!['version', 'continuous'].includes(fields.mode))
+    errors.push({ field: 'mode', message: '请选择你要同步的内容。' });
+  if (errors.length) {
+    showFormErrors(form.dataset.form, errors);
+    return false;
+  }
+  return true;
+}

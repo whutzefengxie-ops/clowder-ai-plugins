@@ -69,7 +69,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByLabel('目标类型').selectOption('tag');
   await page.getByLabel('目标 tag 名称 / 完整 commit SHA').fill('v2.0.0');
-  await page.getByRole('button', { name: 'PR 同步 · 自动执行到待审核 →' }).click();
+  await page.getByRole('button', { name: '开始同步 →' }).click();
   for (let number = 1; number <= 2; number++) {
     await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
     const active = (await receiver.status()).active;
@@ -81,7 +81,15 @@ try {
     if (number === 1) await page.screenshot({ path: join(evidence, 'automatic-waiting-review.png'), fullPage: true });
     await page.getByRole('button', { name: '展开全部阶段' }).click();
     assert.ok((await page.locator('[data-stage="2"]').innerText()).includes('创建 / 复用并回读内部 Issue'));
-    assert.ok((await page.locator('[data-stage="3"]').innerText()).includes('关联并回读内部 Issue 与本笔 PR'));
+    assert.equal(
+      await page.locator('[data-stage="3"] [data-step-key="issue-link"]').getAttribute('data-operation-state'),
+      'DONE',
+    );
+    assert.ok(
+      (await page.locator('[data-stage="3"] [data-step-key="issue-link"] > b').innerText()).includes(
+        '关联并回读内部 PR 与 Issue #',
+      ),
+    );
     assert.equal(await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]), '内部默认中文版');
     if (number === 2) await platform.edit({ loseUpdate: true });
     await f.merge(active);

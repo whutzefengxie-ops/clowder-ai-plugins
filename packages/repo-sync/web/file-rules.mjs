@@ -11,8 +11,9 @@ export function hydrateFileRules() {
   const items = JSON.parse(panel.querySelector('[data-file-tree]').dataset.items);
   panel.querySelector('[data-selected-rules]').innerHTML = ruleList(rules);
   const remaining = items.filter((item) => item.blocking && !ruleState(rules, item.path).checked).length;
+  const retained = items.filter((item) => ruleState(rules, item.path).checked).length;
   panel.querySelector('[data-rule-count]').textContent =
-    `已选 ${rules.length} 条保留规则；报告中仍有 ${remaining} 个未处理差异。最终以完整重新核验结果为准。`;
+    `完整清单 ${items.length} 个文件：草稿将保留内部 ${retained} 个，跟随外部 ${items.length - retained} 个；已选 ${rules.length} 条保留规则；仍有 ${remaining} 个未处理差异。最终以完整重新核验结果为准。`;
 }
 export function initializeFileRules({ snapshot, action, saveDraft, errorPanel }) {
   let saving = false;
@@ -65,7 +66,7 @@ function selectionInput(current, button) {
   if (keys.some((key) => (fields[key] ?? '').trim() !== (current.config[key] ?? '')))
     throw new Error('仓库、分支或同步方式有未保存修改。请先保存仓库配置并重新读取差异，再从文件树选择规则。');
   return {
-    baseline: { action: 'adopt', upstream: panel.dataset.upstream, internal: panel.dataset.internal },
+    baseline: { action: 'inspect-baseline', upstream: panel.dataset.upstream, internal: panel.dataset.internal },
     input: current.connection
       ? {
           action: 'configure-file-rules',
@@ -77,14 +78,14 @@ function selectionInput(current, button) {
   };
 }
 function showVerification(verified, errorPanel) {
-  if (!verified) {
+  if (!verified || !verified.result?.valid) {
     feedback(`规则已保存，基线未通过。${errorPanel.textContent} 请处理下面的剩余差异后重试；已保存规则会保留。`);
     return;
   }
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
-  status.textContent = '所选内部保留规则已保存，核心文件核验通过，基线已登记。下一步：进入同步工作台。';
-  document.querySelector('#content').prepend(status);
+  status.textContent = '所选内部保留规则已保存，核心文件核验通过；尚未启用。下一步：继续确认启用。';
+  document.querySelector('#baseline-step')?.append(status);
 }
 function feedback(message) {
   const target = document.querySelector('[data-rule-feedback]');
