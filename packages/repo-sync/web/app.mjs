@@ -338,11 +338,31 @@ setInterval(() => {
   )
     refresh({ background: true }).catch(() => {});
 }, 5000);
+let lastAutomationStatus;
 function focusLiveStage(task, policy) {
-  if (task?.status !== 'RUNNING') return;
-  if (liveStage !== policy.stage) {
-    liveStage = policy.stage;
-    content.querySelector(`[data-stage="${policy.stage}"]`)?.setAttribute('open', '');
+  const run = snapshot.state?.automation;
+  const currentStatus = run?.status;
+
+  // 当自动化状态从 RUNNING/WAITING_REVIEW 变为 PAUSED/FAILED/COMPLETE 时，重置 liveStage
+  if (['RUNNING', 'WAITING_REVIEW'].includes(lastAutomationStatus) &&
+      !['RUNNING', 'WAITING_REVIEW'].includes(currentStatus)) {
+    liveStage = null;
   }
-  content.querySelector(`[data-stage="${policy.stage || stageOf(snapshot.state.active)}"]`)?.setAttribute('open', '');
+  lastAutomationStatus = currentStatus;
+
+  // 只在任务实际运行时才自动展开阶段
+  if (task?.status !== 'RUNNING') return;
+
+  const targetStage = policy?.stage || stageOf(snapshot.state.active);
+  if (liveStage !== targetStage) {
+    liveStage = targetStage;
+    // 先关闭其他阶段，避免多个阶段同时展开
+    content.querySelectorAll('[data-stage][open]').forEach(el => {
+      if (Number(el.dataset.stage) !== targetStage) {
+        el.removeAttribute('open');
+      }
+    });
+    // 只打开当前活跃的阶段
+    content.querySelector(`[data-stage="${targetStage}"]`)?.setAttribute('open', '');
+  }
 }

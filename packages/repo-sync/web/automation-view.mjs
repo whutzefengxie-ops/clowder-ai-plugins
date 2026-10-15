@@ -1,6 +1,7 @@
 import { actionBar } from './actionbar.mjs';
 import { attempts } from './attempts.mjs';
-import { esc, when } from './ui.mjs';
+import { esc, when, title } from './ui.mjs';
+import { continuationControls } from './continuation-view.mjs';
 
 export function automationBanner(snapshot) {
   const run = snapshot.state?.automation;
@@ -17,20 +18,27 @@ export function automationBanner(snapshot) {
     COMPLETE: '本轮自动同步完成',
   };
   const error = run.error ?? snapshot.observation?.error;
+  const current = snapshot.state.active;
+  const currentLabel = current ? `<p><b>当前${snapshot.journeyProgress ? `第 ${snapshot.journeyProgress.completed + 1} 笔` : '同步'} · ${esc(title(current))}</b></p>` : run.status === 'PAUSED' ? '<p><b>上一笔接收已结束，停在两笔之间；下一笔尚未开始。</b></p>' : '';
   const progress = snapshot.journeyProgress;
   const count = progress
     ? `<p>${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</p>`
     : '';
-  return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3><p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${count}${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}${['RUNNING', 'WAITING_REVIEW'].includes(run.status) ? '<button type="button" data-action="pause-sync">暂停后续自动处理</button>' : ''}</section>`;
+  return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3>${currentLabel}<p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${count}${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}${continuationControls(snapshot)}</section>`;
 }
 export function automaticPolicy(snapshot, delivery) {
   const run = snapshot.state?.automation;
   if (!run || run.status === 'COMPLETE') return null;
   const reference = referenceRemedy(delivery);
   if (reference) return reference;
-  if (['FAILED', 'PAUSED'].includes(run.status))
+  if (run.status === 'PAUSED' && !snapshot.state.active && run.pauseRequested)
+    return { stage: 5, text: '上一笔的合入核验、Issue 和结果已处理；下一笔未开始。确认后继续下一笔，接收节奏保持不变。', action: 'resume-sync', label: '继续下一笔同步 →' };
+  if (run.status === 'PAUSED')
+    return { stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
+      text: '原轮次已暂停，保留当前候选和对象，恢复后继续原位置。', action: 'resume-sync', label: '恢复原同步 →' };
+  if (run.status === 'FAILED')
     return {
-      stage: delivery?.acceptedInternal ? 5 : delivery?.candidate ? 3 : 2,
+      stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
       text: '修正当前错误后恢复原轮次，保留已创建的 Issue、候选和 PR。',
       action: 'resume-sync',
       label: '恢复原同步 →',
@@ -46,7 +54,7 @@ export function automaticPolicy(snapshot, delivery) {
       label: '打开内部 PR ↗',
     };
   return {
-    stage: delivery?.acceptedInternal ? 5 : delivery?.candidate ? 3 : 2,
+    stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
     text: '系统正在自动执行，当前子步骤会在流程内显示。',
   };
 }
