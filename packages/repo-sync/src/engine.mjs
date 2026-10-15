@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { recoverDelivery } from './acceptance.mjs';
+import { adoptionBaseline } from './adoption-baseline.mjs';
 import { fail, validateConfig } from './config.mjs';
-import { configurationErrors } from './configuration-errors.mjs';
 import { continuousPreview } from './continuous-preview.mjs';
 import { execution, phase, safeError } from './execution.mjs';
 import { GitReceiver } from './git.mjs';
@@ -16,7 +16,6 @@ import { git } from './process.mjs';
 import { createPr, linkPr, prUrl } from './pull-requests.mjs';
 import { recordDelivery } from './recording.mjs';
 import { event, Store } from './store.mjs';
-import { assertProjection } from './trees.mjs';
 import { cancelVersion, selectTag, sourceStillValid, tags, versionTemplate } from './version.mjs';
 import { VersionGitReceiver } from './version-git.mjs';
 
@@ -68,24 +67,9 @@ export class Receiver {
     return this.store.locked(async () => {
       if (await this.read()) fail('ALREADY_ADOPTED', '已有台账，不能重新初始化覆盖');
       const heads = await this.git.fetch();
-      await phase('baseline-check', '核验 U0 / I0 与历史', async () => {
-        upstream = await this.git.sha(upstream);
-        internal = await this.git.sha(internal);
-        if (heads.internal !== internal) configurationErrors([['internal', 'head']], 'STALE_INTERNAL_HEAD');
-        if (!(await this.git.isAncestor(upstream, heads.upstream)))
-          fail('BASELINE_HISTORY_MISMATCH', 'U0 不在外部交付分支历史中，请重新选择上次已同步版本；未登记基线');
-        if (this.config.mode === 'version') await this.git.baseline(upstream, internal);
-        else
-          await assertProjection(
-            this.git.directory,
-            upstream,
-            internal,
-            { internalPaths: this.config.internalPaths ?? [], mergePaths: [] },
-            'BASELINE_MISMATCH',
-          );
-        if (!(await this.git.mainBoundary(upstream, heads.upstream)))
-          fail('BASELINE_NOT_MAIN_BOUNDARY', '基线必须是上游 main 的实际接受边界');
-      });
+      ({ upstream, internal } = await phase('baseline-check', '核验 U0 / I0 与历史', () =>
+        adoptionBaseline(this, upstream, internal, heads),
+      ));
       const state = {
         schema: 1,
         mode: this.config.mode,

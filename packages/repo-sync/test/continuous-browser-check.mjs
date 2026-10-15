@@ -49,10 +49,10 @@ const sourceProvider = {
     path === 'repos/demo/core'
       ? { node_id: 'repository' }
       : path.includes('/commits/')
-        ? prs.filter((pr) => path.includes(pr.merge_commit_sha))
+        ? prs.filter((pr) => pr.number === 1 && path.includes(pr.merge_commit_sha))
         : prs.find((pr) => path === `repos/demo/core/pulls/${pr.number}`),
   collectIssues: async (_, pr) => [
-    { ...f.plans[pr.number - 1].issues[0], relation: pr.number === 1 ? 'related' : 'closes' },
+    { ...f.plans[(pr?.number ?? 2) - 1].issues[0], relation: pr?.number === 1 ? 'related' : 'closes' },
   ],
 };
 const server = createReceiverServer(receiver, { sourceProvider });
@@ -68,13 +68,24 @@ try {
   await page.getByLabel('目标类型').selectOption('tag');
   await page.getByLabel('目标 tag 名称 / 完整 commit SHA').fill('v2.0.0');
   await page.getByRole('button', { name: '读取到目标版本的 PR 清单 →' }).click();
+  await page
+    .getByText(/DIRECT_COMMITS_CONFIRMATION_REQUIRED/)
+    .first()
+    .waitFor({ timeout: 30000 });
+  assert.equal((await receiver.status()).accepted.upstream, f.u0);
+  assert.equal((await receiver.status()).queue.length, 0);
+  await page.getByLabel('包含无 PR 的主干提交').check();
+  await page.getByRole('button', { name: '读取到目标版本的 PR 清单 →' }).click();
   await page.getByRole('button', { name: '同步上游 PR #1 →' }).waitFor({ timeout: 30000 });
   assert.equal((await receiver.status()).queue.length, 2);
   for (let number = 1; number <= 2; number++) {
-    await page.getByRole('button', { name: `同步上游 PR #${number} →` }).click();
+    await page
+      .getByRole('button', { name: number === 1 ? '同步上游 PR #1 →' : `同步主干提交 ${f.u2.slice(0, 12)} →` })
+      .click();
     await page.getByRole('button', { name: '自动搬运 Issue、检查并推送候选 →' }).click();
     await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
     const active = (await receiver.status()).active;
+    if (number === 2) assert.equal(active.source.kind, 'commit');
     assert.equal(active.prUrl, `https://codehub.example/core/pull/${number}`);
     assert.equal(await page.locator('[data-stage]').count(), 5);
     await page.getByRole('button', { name: '展开全部阶段' }).click();

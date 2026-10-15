@@ -19,7 +19,12 @@ export const labels = {
   CODE_ACCEPTED_PENDING_METADATA: 'Issue 接收记录待保存',
 };
 export const title = (delivery) =>
-  delivery.source.tag ?? (delivery.source.number ? `PR #${delivery.source.number}` : delivery.source.title);
+  delivery.source.tag ??
+  (delivery.source.kind === 'commit'
+    ? `主干提交 ${delivery.source.commit.slice(0, 12)}`
+    : delivery.source.number
+      ? `PR #${delivery.source.number}`
+      : delivery.source.title);
 export const stageOf = (delivery) =>
   ({
     ISSUES_REQUIRED: 2,

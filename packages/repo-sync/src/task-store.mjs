@@ -33,6 +33,7 @@ const keys = new Set([
   'tag',
   'targetKind',
   'targetValue',
+  'includeDirectCommits',
   'deliveryId',
   'expectedBinding',
   'expectedRevision',
@@ -48,6 +49,11 @@ const keys = new Set([
   'content',
 ]);
 export function taskInput(input) {
+  if (
+    input?.includeDirectCommits !== undefined &&
+    (input.action !== 'discover' || typeof input.includeDirectCommits !== 'boolean')
+  )
+    fail('INVALID_TASK_INPUT', '无 PR 提交确认只适用于本轮读取，且需要布尔值。');
   if (!taskActions.has(input?.action)) fail('UNKNOWN_ACTION', '此操作不支持后台执行');
   if (!/^[a-f0-9]{32}$/.test(input.requestId ?? '') || Object.keys(input).some((key) => !keys.has(key)))
     fail('INVALID_TASK_INPUT', '任务需要有效请求标识和受限操作参数');
@@ -80,10 +86,12 @@ export function taskPlan(action) {
       ['github-auth', '检查已提供 GitHub API 读取认证'],
       ['github-repository', '读取 GitHub 仓库元数据'],
       ...fetch,
+      ['target-check', '核验目标与来源分支的提交关系'],
       ['github-deliveries', '读取并核对 PR / Issue / commit 对应'],
     ],
     adopt: [...fetch, ['baseline-check', '核验 U0 / I0 与历史'], ['baseline-save', '登记已有基线']],
     tags: [['source-tags', '读取上游 tag']],
+    'select-tag': [...fetch, ['target-check', '核验发布 tag 与已接收版本的关系']],
     pr: [['platform-pr', '核验候选并登记 PR 引用']],
     'clear-pr': [['platform-pr', '核验未合入并撤销错误引用']],
     'create-pr': [['platform-pr', '查询/创建并回读内部 PR']],

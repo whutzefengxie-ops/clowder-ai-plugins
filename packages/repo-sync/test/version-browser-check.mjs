@@ -20,6 +20,9 @@ const browser = await chromium.launch({
 try {
   for (const conflicting of [false, true]) {
     const f = await versionRepositories();
+    await git(f.source, ['switch', '-c', 'main-like', f.u0]);
+    await git(f.source, ['commit', '--allow-empty', '-m', 'source branch without release tag']);
+    f.config.sourceBranch = 'main-like';
     if (conflicting) {
       await writeFile(join(f.review, 'README.md'), '内部新版介绍\n\n运行说明\n\n内部联系说明\n');
       await git(f.review, ['add', '.']);
@@ -56,6 +59,25 @@ try {
       await page.getByRole('heading', { name: '初始对应' }).waitFor({ timeout: 20000 });
       await page.getByRole('button', { name: '同步工作台', exact: true }).click();
       await page.getByRole('button', { name: '读取可用 tag' }).click();
+      const selector = page.locator('select[name="tag"]');
+      await selector.waitFor();
+      const size = await selector.evaluate((element) => ({
+        width: element.getBoundingClientRect().width,
+        height: element.getBoundingClientRect().height,
+        formWidth: element.form.getBoundingClientRect().width,
+        font: Number.parseFloat(getComputedStyle(element).fontSize),
+      }));
+      assert.ok(size.height >= 48 && size.font >= 16, 'tag selector needs a readable 48px control');
+      assert.ok(size.width >= Math.min(480, size.formWidth - 2), 'tag selector must use the available form width');
+      await page.screenshot({ path: join(evidence, 'tag-selector-desktop.png'), fullPage: true });
+      await page.setViewportSize({ width: 390, height: 844 });
+      if (!(await selector.isVisible())) await page.locator('[data-record="current"]').click();
+      const mobileSize = await selector.boundingBox();
+      assert.ok(mobileSize.width >= 250 && mobileSize.height >= 48);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await selector.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(evidence, 'tag-selector-mobile.png'), fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1100 });
       await page.getByLabel('目标 tag').selectOption('v2.0.0');
       await page.getByRole('button', { name: '核对内部差异并选择这个版本 →' }).click();
       await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();

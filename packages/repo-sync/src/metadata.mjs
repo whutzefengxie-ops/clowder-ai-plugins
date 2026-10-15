@@ -66,9 +66,12 @@ function checkClosing(status, pending) {
 export function templates(delivery, mappings = {}) {
   const source = delivery.source;
   return {
-    title: `[上游同步] PR #${source.number} · ${source.title}`,
+    title: `[上游同步] ${source.kind === 'commit' ? `主干提交 ${source.commit.slice(0, 12)}` : `PR #${source.number}`} · ${source.title}`,
     body: [
       `来源：${source.url}`,
+      ...(source.kind === 'commit'
+        ? ['来源类型：主干提交（无关联上游 PR），已由用户明确选择接收；内部仍创建正常审核 PR。']
+        : []),
       `交付标识：${delivery.id}`,
       `上游范围：${delivery.base.upstream} → ${delivery.target}`,
       `候选 head：${delivery.candidate ?? '尚未准备'}`,

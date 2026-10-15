@@ -66,7 +66,7 @@ export function renderTask(task) {
     task.action === 'heads' && task.status === 'FAILED'
       ? '<button type="button" data-action="heads">重新检查两侧连接</button>'
       : '';
-  const auth = githubRecovery(task);
+  const auth = githubRecovery(task) + targetRecovery(task);
   const detail = `${steps}${error}${auth}${cancel}${waiting}${heads}${retry}<small>任务 ${esc(task.id)}；百分比属于当前 Git 下载阶段。</small>`;
   if (task.persistence?.status === 'FAILED') return recordPending(task, detail);
   if (task.status === 'SUCCEEDED')
@@ -76,6 +76,18 @@ export function renderTask(task) {
 function githubRecovery(task) {
   return /^GITHUB_(AUTH|ACCESS|RATE)/.test(task.error?.code ?? '')
     ? '<button type="button" data-reveal="github-source-auth">配置 GitHub 读取认证</button><p>提供令牌后回到目标版本，重新读取 PR 清单。原同步记录保留。</p>'
+    : '';
+}
+function targetRecovery(task) {
+  if (task.error?.code === 'DIRECT_COMMITS_CONFIRMATION_REQUIRED')
+    return '<p>上方目标表单可以明确包含这些无 PR 主干提交，然后重新读取同一目标；每笔仍需在内部平台审核。原队列和接收基线未推进。</p>';
+  return [
+    'TARGET_NOT_ON_SOURCE_BRANCH',
+    'TARGET_NOT_MAIN_BOUNDARY',
+    'TARGET_NOT_FORWARD',
+    'VERSION_NOT_FORWARD',
+  ].includes(task.error?.code)
+    ? '<p>本次目标未被接受，原基线、同步历史和内部代码保持不变。回到上方目标输入选择有效版本后可重试。需要改用另一种同步模式时，请新增独立项目；不要重置或覆盖原台账。</p><button type="button" data-view="configuration">查看当前仓库与同步模式</button>'
     : '';
 }
 function recordPending(task, detail) {

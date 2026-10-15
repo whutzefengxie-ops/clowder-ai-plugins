@@ -8,7 +8,14 @@ export async function checkPlan(receiver, plan, base, head) {
   )
     fail('NONCONTIGUOUS_PLAN', '交付目标不在连续上游接受路径中');
   objectUrl(plan.source.url);
-  if (typeof plan.source.id !== 'string' || !plan.source.id) fail('SOURCE_UNPROVEN', 'PR 来源稳定身份不完整');
+  if (plan.source.kind === 'commit' && plan.syncTarget?.includeDirectCommits !== true)
+    fail('DIRECT_COMMITS_CONFIRMATION_REQUIRED', '独立主干提交没有本轮明确接收记录，不能发起交付。');
+  if (typeof plan.source.id !== 'string' || !plan.source.id) fail('SOURCE_UNPROVEN', '上游来源稳定身份不完整');
+  if (
+    plan.source.kind === 'commit' &&
+    (plan.source.commit !== plan.target || plan.source.number !== undefined || !plan.source.id.startsWith('commit:'))
+  )
+    fail('SOURCE_UNPROVEN', '独立主干提交的来源 SHA 或身份不一致，不能伪造 PR。');
   for (const issue of plan.issues) await checkIssue(receiver, issue);
 }
 async function checkIssue(receiver, issue) {

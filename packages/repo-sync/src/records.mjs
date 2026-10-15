@@ -84,10 +84,11 @@ function summary(delivery) {
             kind: delivery.syncTarget.kind,
             value: delivery.syncTarget.value,
             commit: delivery.syncTarget.commit,
+            ...(delivery.syncTarget.includeDirectCommits ? { includeDirectCommits: true } : {}),
           },
         }
       : {}),
-    source: { title: source.title, tag: source.tag, number: source.number },
+    source: { title: source.title, tag: source.tag, number: source.number, kind: source.kind, commit: source.commit },
     status,
     startedAt,
     finishedAt,

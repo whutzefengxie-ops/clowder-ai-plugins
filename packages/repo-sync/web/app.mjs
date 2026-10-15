@@ -230,6 +230,7 @@ document.addEventListener('submit', async (event) => {
   let input =
     form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
   normalizeRuleInput(input, fields);
+  if (input.action === 'discover') input.includeDirectCommits = fields.includeDirectCommits === 'on';
   if (input.action === 'issue') input.sourceId = form.dataset.source;
   if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
   if (input.action === 'receipts')

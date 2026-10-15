@@ -28,7 +28,7 @@ test('rebase landings collect the actual contiguous main commits', () => {
   assert.deepEqual(groups[0].boundaries, ['a', 'b', 'c']);
 });
 test('unknown commits, ambiguous PR ownership and a development head pause discovery', () => {
-  for (const items of [[], [pr('one', 'a'), pr('two', 'a')], [pr('one', 'development-head')]]) {
+  for (const items of [[pr('one', 'a'), pr('two', 'a')], [pr('one', 'development-head')]]) {
     assert.throws(() => groupLandings(['a'], { a: items }, 'main'), { code: 'SOURCE_UNPROVEN' });
   }
 });

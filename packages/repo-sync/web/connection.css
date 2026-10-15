@@ -95,3 +95,22 @@
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+#release-target-tag {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+  padding: 12px 14px;
+}
+.tag-selection form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 18px;
+}
+.tag-selection form > button {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+}

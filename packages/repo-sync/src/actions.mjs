@@ -23,7 +23,15 @@ export async function dispatch(receiver, input, options = {}) {
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () =>
-      discover(receiver, { kind: input.targetKind ?? 'latest', value: input.targetValue }, options.sourceProvider),
+      discover(
+        receiver,
+        {
+          kind: input.targetKind ?? 'latest',
+          value: input.targetValue,
+          includeDirectCommits: input.includeDirectCommits,
+        },
+        options.sourceProvider,
+      ),
     start: () => receiver.start(input.expectedTarget),
     issue: () => receiver.linkIssue(input.sourceId, input.internalId, input.url, input),
     'sync-issues': () => receiver.syncIssues(),

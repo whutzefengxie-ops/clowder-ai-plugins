@@ -28,13 +28,15 @@ export function issueReferences(texts, repo) {
   return [...refs.values()];
 }
 export function closureEvidence(events, prId, introduced) {
-  return events.filter((event) => event.closer?.id === prId || introduced.includes(event.closer?.oid));
+  return events.filter(
+    (event) => (typeof prId === 'string' && event.closer?.id === prId) || introduced.includes(event.closer?.oid),
+  );
 }
 export async function collectIssues(repo, pr, introduced, messages) {
-  const candidates = await closingIssues(repo, pr.number);
+  const candidates = pr ? await closingIssues(repo, pr.number) : [];
   const byUrl = new Map(candidates.map((issue) => [issue.url, { issue, repo: issue.repository.nameWithOwner }]));
   // Mentions identify candidates only; actual ClosedEvent provenance decides closing.
-  for (const reference of issueReferences([pr.body ?? '', ...messages], repo)) {
+  for (const reference of issueReferences([pr?.body ?? '', ...messages], repo)) {
     const issue = await api(`repos/${reference.repo}/issues/${reference.number}`);
     if (!issue.pull_request)
       byUrl.set(issue.html_url, { issue: { ...issue, id: issue.node_id, url: issue.html_url }, repo: reference.repo });
@@ -43,7 +45,7 @@ export async function collectIssues(repo, pr, introduced, messages) {
   for (const { issue, repo: issueRepo } of byUrl.values()) {
     const detail = await api(`repos/${issueRepo}/issues/${issue.number}`);
     const events = await closedEvents(issue.id);
-    const evidence = closureEvidence(events, pr.node_id, introduced);
+    const evidence = closureEvidence(events, pr?.node_id, introduced);
     issues.push({
       sourceId: issue.id,
       number: issue.number,

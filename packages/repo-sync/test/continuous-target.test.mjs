@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Receiver } from '../src/engine.mjs';
+import { runExecution } from '../src/execution.mjs';
 import { discover } from '../src/github.mjs';
 import { git } from '../src/process.mjs';
 import { repositories } from './fixtures.mjs';
@@ -79,5 +80,34 @@ test('a target inside an unfinished PR cannot produce a truncated synchronizatio
       : original(path);
   const before = await readFile(receiver.store.path, 'utf8');
   await assert.rejects(() => discover(receiver, { kind: 'commit', value: f.u1 }, source), { code: 'SOURCE_UNPROVEN' });
+  assert.equal(await readFile(receiver.store.path, 'utf8'), before);
+});
+
+test('a release tag outside main has a failed target substep without scanning PRs or changing the ledger', async () => {
+  const { f, receiver } = await prepare();
+  await git(f.source, ['switch', '-c', 'release-only', f.u0]);
+  await git(f.source, ['commit', '--allow-empty', '-m', 'release-only commit']);
+  await git(f.source, ['tag', 'off-branch']);
+  const source = metadata(f),
+    api = source.api,
+    reports = [];
+  source.api = (path) => {
+    assert.equal(path, 'repos/demo/core', 'invalid target must stop before PR and Issue requests');
+    return api(path);
+  };
+  const before = await readFile(receiver.store.path, 'utf8');
+  await assert.rejects(
+    () =>
+      runExecution({ signal: new AbortController().signal, report: (event) => reports.push(event) }, () =>
+        discover(receiver, { kind: 'tag', value: 'off-branch' }, source),
+      ),
+    { code: 'TARGET_NOT_ON_SOURCE_BRANCH' },
+  );
+  assert.ok(
+    reports.some(
+      (event) =>
+        event.id === 'target-check' && event.kind === 'failed' && event.error.code === 'TARGET_NOT_ON_SOURCE_BRANCH',
+    ),
+  );
   assert.equal(await readFile(receiver.store.path, 'utf8'), before);
 });

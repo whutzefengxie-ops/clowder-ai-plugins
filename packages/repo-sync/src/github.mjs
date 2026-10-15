@@ -3,28 +3,12 @@ import { phase } from './execution.mjs';
 import { api, withGithub } from './gh-api.mjs';
 import { requireGithubToken } from './github-auth.mjs';
 import { collectIssues } from './github-issues.mjs';
+import { groupLandings } from './github-landings.mjs';
 import { git } from './process.mjs';
 import { attachIssueRequirements } from './requirements.mjs';
 import { sourceTarget } from './source-target.mjs';
 
-export function groupLandings(boundaries, associations, branch) {
-  const groups = [];
-  for (const sha of boundaries) {
-    const candidates = associations[sha].filter((pr) => pr.merged_at && pr.base.ref === branch);
-    if (candidates.length !== 1) fail('SOURCE_UNPROVEN', '主干提交不能唯一归属已合入 PR，暂停核对真实来源集合');
-    const pr = candidates[0];
-    const previous = groups.at(-1);
-    if (previous?.pr.node_id === pr.node_id) {
-      previous.target = sha;
-      previous.boundaries.push(sha);
-    } else groups.push({ pr, target: sha, boundaries: [sha] });
-  }
-  for (const group of groups) {
-    if (group.pr.merge_commit_sha !== group.target)
-      fail('SOURCE_UNPROVEN', 'PR 实际合入边界与 main 范围不符，不能搬运开发分支范围');
-  }
-  return groups;
-}
+export { groupLandings } from './github-landings.mjs';
 export function githubRepository(url) {
   const match =
     /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(
@@ -36,6 +20,8 @@ export function githubRepository(url) {
 const nativeProvider = { api, collectIssues };
 export async function discover(receiver, selection, provider = nativeProvider) {
   if (receiver.config.mode === 'version') fail('WRONG_MODE', '按版本更新从 Git 读取 tag，不扫描 Issue / PR');
+  if (selection?.includeDirectCommits !== undefined && typeof selection.includeDirectCommits !== 'boolean')
+    fail('INVALID_TARGET', '包含无 PR 主干提交需要明确的布尔确认，不能使用其他值。');
   return withGithub(receiver.config, () => receiver.store.locked(() => discoverLocked(receiver, selection, provider)));
 }
 async function discoverLocked(receiver, selection, provider) {
@@ -49,9 +35,11 @@ async function discoverLocked(receiver, selection, provider) {
   const repo = githubRepository(receiver.config.sourceUrl);
   const repository = await phase('github-repository', '读取 GitHub 仓库元数据', () => provider.api(`repos/${repo}`));
   const heads = await receiver.git.fetch();
-  if (!(await receiver.git.isAncestor(state.accepted.upstream, heads.upstream)))
-    fail('SOURCE_REWRITTEN', '上游 main 历史发生改写');
-  const target = await sourceTarget(receiver, state, heads, selection);
+  const target = await phase('target-check', '核验目标与来源分支的提交关系', async () => {
+    if (!(await receiver.git.isAncestor(state.accepted.upstream, heads.upstream)))
+      fail('SOURCE_REWRITTEN', '来源分支已不包含已接收版本，请核对是否发生历史改写；未推进接收基线。');
+    return sourceTarget(receiver, state, heads, selection);
+  });
   const output = await git(receiver.git.directory, [
     'rev-list',
     '--first-parent',
@@ -63,12 +51,16 @@ async function discoverLocked(receiver, selection, provider) {
     const associations = {};
     for (const sha of boundaries)
       associations[sha] = await provider.api(`repos/${repo}/commits/${sha}/pulls?per_page=100`, true);
-    const groups = groupLandings(boundaries, associations, receiver.config.sourceBranch);
+    const groups = groupLandings(
+      boundaries,
+      associations,
+      receiver.config.sourceBranch,
+      selection?.includeDirectCommits === true,
+    );
     const plans = [];
     let base = state.accepted.upstream;
     for (const group of groups) {
-      const pr = await provider.api(`repos/${repo}/pulls/${group.pr.number}`);
-      if (!pr.merged || pr.merge_commit_sha !== group.target) fail('SOURCE_CHANGED', '扫描过程中 PR 来源发生变化');
+      const { pr, source } = await landingSource(receiver, provider, repo, repository, group);
       const introduced = (await git(receiver.git.directory, ['rev-list', `${base}..${group.target}`])).split('\n');
       const messages = [];
       for (const sha of introduced)
@@ -77,14 +69,7 @@ async function discoverLocked(receiver, selection, provider) {
       plans.push({
         target: group.target,
         syncTarget: target,
-        source: {
-          id: pr.node_id,
-          repositoryId: repository.node_id,
-          number: pr.number,
-          url: pr.html_url,
-          title: pr.title,
-          mergedAt: pr.merged_at,
-        },
+        source,
         issues,
       });
       base = group.target;
@@ -95,4 +80,40 @@ async function discoverLocked(receiver, selection, provider) {
     await receiver.store.save(state);
     return state;
   });
+}
+async function landingSource(receiver, provider, repo, repository, group) {
+  if (typeof repository.node_id !== 'string' || !repository.node_id)
+    fail('METADATA_INCOMPLETE', '来源仓库缺少稳定身份，不能记录不完整交付。');
+  if (!group.pr)
+    return {
+      pr: null,
+      source: {
+        kind: 'commit',
+        id: `commit:${repository.node_id}:${group.target}`,
+        repositoryId: repository.node_id,
+        commit: group.target,
+        url: `https://github.com/${repo}/commit/${group.target}`,
+        title: await git(receiver.git.directory, ['show', '-s', '--format=%s', group.target]),
+      },
+    };
+  const pr = await provider.api(`repos/${repo}/pulls/${group.pr.number}`);
+  if (
+    !pr.merged ||
+    pr.merge_commit_sha !== group.target ||
+    pr.node_id !== group.pr.node_id ||
+    pr.base?.ref !== receiver.config.sourceBranch
+  )
+    fail('SOURCE_CHANGED', '扫描过程中 PR 来源发生变化');
+  return {
+    pr,
+    source: {
+      kind: 'pr',
+      id: pr.node_id,
+      repositoryId: repository.node_id,
+      number: pr.number,
+      url: pr.html_url,
+      title: pr.title,
+      mergedAt: pr.merged_at,
+    },
+  };
 }
