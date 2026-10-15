@@ -3,6 +3,7 @@ import { captureDraft, configuration, repositoryInput, restoreDraft } from './co
 import { baselineContent, diagnostics } from './diagnostics.mjs';
 import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
+import { createGithubAuthentication } from './github-auth.mjs';
 import { createHistory } from './history.mjs';
 import { createIssueAuthentication } from './issue-auth.mjs';
 import { issueSettings } from './issue-settings.mjs';
@@ -11,6 +12,7 @@ import { createOperations } from './operations.mjs';
 import { platformSettings, serviceLabel } from './platform.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { createProjectNavigation } from './projects.mjs';
+import { createTaskFocus, focusBaselineInput, revealSetupResult } from './setup-navigation.mjs';
 import { button, esc, sha, stageOf } from './ui.mjs';
 import { workbench } from './workbench.mjs';
 import { actionBar, attempts } from './workflow.mjs';
@@ -23,7 +25,9 @@ let mobileDetail = !!new URL(location.href).searchParams.get('record');
 let availableTags = [];
 const projectNavigation = createProjectNavigation(() => snapshot, saveDraft);
 const issueAuthentication = createIssueAuthentication(() => snapshot, refresh, errorPanel);
+const githubAuthentication = createGithubAuthentication(() => snapshot, refresh);
 const records = createHistory(() => snapshot, render);
+const focusTask = createTaskFocus();
 const operations = createOperations({
   snapshot: () => snapshot,
   refresh,
@@ -64,7 +68,7 @@ function render() {
   document.getElementById('mode').textContent = serviceLabel(snapshot);
   content.innerHTML =
     view === 'configuration'
-      ? `${configuration(snapshot, esc, sha, button)}${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}<div id="operation"></div><div id="error-slot"></div>`
+      ? `${configuration(snapshot, esc, sha, button)}${snapshot.config && snapshot.connection ? `<details class="card" data-platform-options><summary>PR / Issue 平台设置（按需修改）</summary>${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}</details>` : ''}`
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   content.querySelector('#error-slot')?.append(errorPanel);
   restoreDraft(savedDraft());
@@ -102,6 +106,7 @@ function onTask(task) {
     const panel = content.querySelector('#operation');
     if (panel) panel.innerHTML = renderTask(task);
   }
+  focusTask(task, snapshot);
 }
 function updateAttempts(nodes, record, task, historical) {
   const opened = new Set(
@@ -174,6 +179,7 @@ async function navigate(element) {
     for (let parent = target; parent; parent = parent.parentElement)
       if (parent.tagName === 'DETAILS') parent.open = true;
     target?.querySelector('input, button, select')?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: 'start' });
   }
   if (element.hasAttribute('data-expand-all'))
     for (const stage of content.querySelectorAll('[data-stage]')) stage.open = true;
@@ -209,11 +215,13 @@ function showActionResult(kind, result) {
     if (heads)
       heads.innerHTML = `<p>读取成功：外部最新 ${sha(result.result.upstream)}<br>内部当前 ${sha(result.result.internal)}。请核对并填写上次已同步的 U0。</p>`;
     saveDraft();
+    focusBaselineInput();
   }
 }
 document.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.target;
+  if (form.hasAttribute('data-github-auth')) return githubAuthentication.submit(form);
   if (form.hasAttribute('data-secret-form')) return issueAuthentication.submit(form);
   const issueToken = issueAuthentication.take(form);
   const fields = Object.fromEntries(new FormData(form));
@@ -221,15 +229,7 @@ document.addEventListener('submit', async (event) => {
   if (form.hasAttribute('data-record-filter')) return records.filter(fields);
   let input =
     form.dataset.form === 'configure-repositories' ? repositoryInput(fields) : { action: form.dataset.form, ...fields };
-  if (input.action === 'configure')
-    for (const key of ['internalPaths', 'mergePaths'])
-      input[key] =
-        key === 'internalPaths' || fields.mergePaths
-          ? (fields[key] ?? '')
-              .split(/\r?\n/)
-              .map((value) => value.trim())
-              .filter(Boolean)
-          : [];
+  normalizeRuleInput(input, fields);
   if (input.action === 'issue') input.sourceId = form.dataset.source;
   if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
   if (input.action === 'receipts')
@@ -246,6 +246,17 @@ document.addEventListener('submit', async (event) => {
   if (!(await issueAuthentication.complete(result, issueToken))) return;
   showConfigurationConfirmation(input.action, result);
 });
+function normalizeRuleInput(input, fields) {
+  if (input.action !== 'configure') return;
+  for (const key of ['internalPaths', 'mergePaths'])
+    input[key] =
+      key === 'internalPaths' || fields.mergePaths
+        ? (fields[key] ?? '')
+            .split(/\r?\n/)
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : [];
+}
 function showConfigurationConfirmation(action, result) {
   if (
     !result ||
@@ -261,7 +272,14 @@ function showConfigurationConfirmation(action, result) {
     'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
     'configure-closure': '关单规则确认已保存。原基线与 Issue 映射保留，可继续本笔同步。',
   }[action];
-  content.prepend(confirmation);
+  const setup = ['configure', 'configure-repositories'].includes(action);
+  const form = content.querySelector(`form[data-form="${action}"]`);
+  if (!setup && form) {
+    form.after(confirmation);
+    confirmation.scrollIntoView({ block: 'nearest' });
+  } else (content.querySelector('[data-setup-current]') ?? content).prepend(confirmation);
+  revealSetupResult(action, snapshot);
+  saveDraft();
 }
 
 document.addEventListener('input', saveDraft);

@@ -43,6 +43,7 @@ const evidence = process.env.REPO_SYNC_EVIDENCE || join(folder, 'evidence');
 await mkdir(evidence, { recursive: true });
 try {
   await page.goto(`${base}/?view=configuration`);
+  await page.getByText('查看或修改已保存的仓库信息', { exact: true }).click();
   await page.getByText('修改尚未启用的仓库配置', { exact: true }).click();
   const form = page.locator('form[data-form="configure-repositories"]');
   assert.equal(await form.locator('[data-issue-api]').isVisible(), false);
@@ -96,7 +97,10 @@ try {
   const inferred = (await (await projects.connection()).current()).config;
   assert.equal(inferred.issues.apiUrl, 'https://codehub.example/api/v4');
   assert.equal(inferred.issues.projectId, 'innersource/team_G/core');
-  if (!(await form.isVisible())) await page.getByText('修改尚未启用的仓库配置', { exact: true }).click();
+  if (!(await form.isVisible())) {
+    await page.getByText('查看或修改已保存的仓库信息', { exact: true }).click();
+    await page.getByText('修改尚未启用的仓库配置', { exact: true }).click();
+  }
   await form.getByText('高级接口设置（可选：覆盖自动推断）', { exact: true }).click();
   await form.getByLabel('内部平台 API 地址').fill(`${platform.api}/`);
   await form.getByLabel('API 项目 ID / 路径').fill('innersource%2Fteam_G%2Fcore');
@@ -108,6 +112,7 @@ try {
   ]);
   assert.equal(saved.status(), 200);
   await saved.finished();
+  await page.getByText('PR / Issue 平台设置（按需修改）', { exact: true }).click();
   await page.locator('[data-secret-form]').getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
   await page.getByRole('button', { name: '提供 / 更换 Token（本次服务）', exact: true }).click();
   await page
@@ -122,7 +127,10 @@ try {
   assert.equal((await readFile(file, 'utf8')).includes(platform.token), false);
   assert.equal(await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token), false);
   await page.reload();
-  assert.equal(await page.locator('input[type="password"]').inputValue(), '');
+  assert.equal(
+    await page.locator('input[type="password"]').evaluateAll((fields) => fields.every((field) => field.value === '')),
+    true,
+  );
   await git(f.review, ['commit', '--allow-empty', '-m', 'internal history after initial import']);
   await git(f.review, ['push', 'origin', 'main']);
   const currentInternal = await git(f.review, ['rev-parse', 'HEAD']);

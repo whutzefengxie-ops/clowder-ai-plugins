@@ -12,7 +12,7 @@ icon:
 configuration:
   - key: configurationFile
     label: Private configuration file
-    description: Absolute private JSON path outside Git and plugin installation. May be new; open the workbench to configure repositories. Credentials stay with Git and gh.
+    description: Absolute private JSON path outside Git and plugin installation. May be new; open the workbench to configure repositories. Git handles code credentials; GitHub read tokens remain in service memory or the startup environment. No gh dependency.
     kind: string
     required: true
 contributions:

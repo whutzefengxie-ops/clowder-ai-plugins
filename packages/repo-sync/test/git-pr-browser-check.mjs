@@ -28,6 +28,7 @@ await mkdir(evidence, { recursive: true });
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByRole('button', { name: '仓库设置', exact: true }).click();
+  await page.getByText('PR / Issue 平台设置（按需修改）', { exact: true }).click();
   await page.locator('#platform-settings').getByLabel('PR 创建方式').selectOption('git');
   await page.getByRole('button', { name: '保存 PR 创建设置' }).click();
   await page.getByText('PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。').waitFor();

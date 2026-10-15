@@ -38,8 +38,12 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
   }
   function feedback(message) {
     const target = document.querySelector('[data-auth-feedback]');
-    if (target) target.textContent = message;
-    else {
+    if (target) {
+      target.textContent = message;
+      for (let parent = target.parentElement; parent; parent = parent.parentElement)
+        if (parent.tagName === 'DETAILS') parent.open = true;
+      target.scrollIntoView({ block: 'nearest' });
+    } else {
       errorPanel.textContent = message;
       errorPanel.hidden = false;
     }

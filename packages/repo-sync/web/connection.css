@@ -1,6 +1,26 @@
 .repository-fields {
   align-items: start;
 }
+.setup-current {
+  border-color: var(--accent);
+  scroll-margin-top: 16px;
+}
+[data-setup-repositories] > summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+}
+[data-setup-repositories] > summary span {
+  color: var(--accent);
+  font-size: 14px;
+}
+#operation {
+  scroll-margin-top: 16px;
+}
+#operation:empty {
+  display: none;
+}
 .repository-fields fieldset {
   min-width: 0;
   margin: 0;

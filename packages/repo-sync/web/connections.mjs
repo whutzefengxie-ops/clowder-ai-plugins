@@ -1,4 +1,5 @@
 import { fileRuleFields } from './file-rule-fields.mjs';
+import { githubAuthForm } from './github-auth.mjs';
 import { updateIssueFields } from './issue-auth.mjs';
 import { issueFields } from './issue-settings.mjs';
 import { prCreationFields, prCreationSummary } from './platform.mjs';
@@ -22,10 +23,25 @@ function baseline(config, state, _esc, sha, button) {
 }
 export function configuration(snapshot, esc, sha, button) {
   const { config, state, connection } = snapshot;
+  const activity =
+    '<div id="operation" role="region" aria-label="当前步骤执行情况" tabindex="-1"></div><div id="error-slot"></div>';
+  const current = baselineStep(snapshot, esc, sha, button, activity);
   if (!connection)
-    return `${modeSettings(config, state, esc)}<section class="card"><h2>3 · 仓库连接与基线</h2>${summary(config, esc)}<p>地址与检查命令来自本地私有配置，凭据使用本机 Git / gh 登录。</p>${baseline(config, state, esc, sha, button)}</section>`;
+    return `<details class="card" data-setup-repositories><summary>查看或修改已保存的仓库信息</summary>${summary(config, esc)}${modeSettings(config, state, esc)}</details>${current}${githubAuthForm(snapshot)}`;
   const steps = `<ol class="flow setup"><li><b>${config ? '✓' : '●'} 1 · 连接真实仓库</b><small>地址、分支、方式与文件规则</small></li><li><b>${state ? '✓' : config ? '●' : '○'} 2 · 核验已有基线</b><small>读取两侧版本，登记 U0 ↔ I0</small></li><li><b>${state ? '✓' : '○'} 3 · 开始同步</b><small>读取更新，准备候选分支与内部 PR</small></li></ol>`;
-  return `${steps}<section class="card"><h2>1 · 连接真实仓库</h2>${config ? `${summary(config, esc)}${connection.editable ? `<details><summary>修改尚未启用的仓库配置</summary>${connectionForm(config, connection, esc)}</details>` : '<p>此配置已固定，或由操作者手工管理。另一组仓库请点击上方“新增项目”，原配置与台账会保留。</p>'}` : connectionForm(config, connection, esc)}</section>${config ? `<section class="card"><h2>2 · 核验已有基线</h2><p>先确保本机 git 已安装且有两侧仓库读取权限、内部候选分支写权限。按开发过程同步还需要 gh 已登录，以读取 GitHub 的 Issue / PR。</p>${baseline(config, state, esc, sha, button)}</section>` : ''}<section class="card"><h3>配置保存在本机</h3><p>配置文件：<code>${esc(connection.configurationFile)}</code>${connection.stateDir ? `<br>台账目录：<code>${esc(connection.stateDir)}</code>` : ''}</p><p>重启时使用同一个配置文件即可续接；配置不会上传到 GitHub。PR 按选定方式自动创建或人工登记，审核合入在内部平台完成。</p>${config ? `<p>当前检查：${config.checkProfile === 'git-integrity' ? 'Git 基础完整性；尚未配置项目构建与插件兼容检查' : '私有配置中的项目检查'}。</p>` : ''}</section>`;
+  return `${steps}${savedRepositories(snapshot, esc, activity)}${current}${githubAuthForm(snapshot)}${storageDetails(snapshot, esc)}`;
+}
+function baselineStep({ config, state }, esc, sha, button, activity) {
+  if (!config) return '';
+  return `<section class="card setup-current" id="baseline-step" data-setup-current tabindex="-1"><span class="badge">当前步骤 · ${state ? '3 / 3' : '2 / 3'}</span><h2>${state ? '3 · 开始同步' : '2 · 核验已有基线'}</h2>${state ? '' : '<p>仓库信息已保存。现在只需填写外部已同步的 U0 与内部当前的 I0，然后核验。</p>'}${baseline(config, state, esc, sha, button)}${activity}</section>`;
+}
+function savedRepositories({ config, connection }, esc, activity) {
+  if (!config)
+    return `<section class="card setup-current" data-setup-current><h2>1 · 连接真实仓库</h2>${connectionForm(config, connection, esc)}${activity}</section>`;
+  return `<details class="card" data-setup-repositories><summary><b>✓ 1 · 仓库信息已保存</b><span>查看或修改已保存的仓库信息</span></summary>${summary(config, esc)}${connection.editable ? `<details><summary>修改尚未启用的仓库配置</summary>${connectionForm(config, connection, esc)}</details>` : '<p>此绑定已固定。另一组仓库请使用“新增项目”，原配置与台账保留。</p>'}</details>`;
+}
+function storageDetails({ config, connection }, esc) {
+  return `<details class="card setup-storage"><summary>配置保存位置与检查说明</summary><p>配置文件：<code>${esc(connection.configurationFile)}</code>${connection.stateDir ? `<br>台账目录：<code>${esc(connection.stateDir)}</code>` : ''}</p><p>重启时使用同一个配置文件即可续接；配置不会上传到 GitHub。审核合入在内部平台完成。</p>${config ? `<p>当前检查：${config.checkProfile === 'git-integrity' ? 'Git 基础完整性；项目构建与插件兼容检查需在私有配置补充' : '私有配置中的项目检查'}。</p>` : ''}</details>`;
 }
 export function repositoryInput(fields) {
   const input = {

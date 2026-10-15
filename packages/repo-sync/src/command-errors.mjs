@@ -1,4 +1,5 @@
 import { fail } from './config.mjs';
+import { githubCommandFailure, startupFailure } from './tool-diagnostics.mjs';
 
 const reasons = [
   [
@@ -37,8 +38,9 @@ const reasons = [
     '网络连接失败，请在本机核对 DNS、网络通道及远端服务',
   ],
 ];
-export function commandFailure(stderr, code) {
-  if (code === 'ENOENT') fail('COMMAND_NOT_FOUND', '执行工具未安装或不在 PATH 中，请核对 Git / gh 和项目检查工具');
+export function commandFailure(stderr, code, executable) {
+  startupFailure(code, executable);
+  githubCommandFailure(stderr, executable);
   for (const [pattern, reason, message] of reasons) if (pattern.test(stderr)) fail(reason, message);
   fail('COMMAND_FAILED', `命令执行失败，退出状态 ${Number.isInteger(code) ? code : '未知'}。请在本机核对原始输出`, {
     exitCode: code,

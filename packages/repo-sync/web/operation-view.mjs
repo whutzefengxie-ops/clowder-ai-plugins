@@ -66,11 +66,17 @@ export function renderTask(task) {
     task.action === 'heads' && task.status === 'FAILED'
       ? '<button type="button" data-action="heads">重新检查两侧连接</button>'
       : '';
-  const detail = `${steps}${error}${cancel}${waiting}${heads}${retry}<small>任务 ${esc(task.id)}；百分比属于当前 Git 下载阶段。</small>`;
+  const auth = githubRecovery(task);
+  const detail = `${steps}${error}${auth}${cancel}${waiting}${heads}${retry}<small>任务 ${esc(task.id)}；百分比属于当前 Git 下载阶段。</small>`;
   if (task.persistence?.status === 'FAILED') return recordPending(task, detail);
   if (task.status === 'SUCCEEDED')
     return `<section class="card"><details><summary>✓ ${esc(actions[task.action])}完成 · ${elapsed} 秒 · 查看执行记录</summary>${detail}</details></section>`;
   return `<section class="card task"><span class="badge">${badge}</span><h2>${esc(actions[task.action])}</h2>${detail}</section>`;
+}
+function githubRecovery(task) {
+  return /^GITHUB_(AUTH|ACCESS|RATE)/.test(task.error?.code ?? '')
+    ? '<button type="button" data-reveal="github-source-auth">配置 GitHub 读取认证</button><p>提供令牌后回到目标版本，重新读取 PR 清单。原同步记录保留。</p>'
+    : '';
 }
 function recordPending(task, detail) {
   const repair = task.persistence.canRetry

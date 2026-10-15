@@ -61,6 +61,7 @@ try {
   assert.equal(await checkbox('internal-docs/file-003.md').isChecked(), false);
   await checkbox('internal-docs/').check();
   const unchanged = await readFile(file, 'utf8');
+  await page.getByText('查看或修改已保存的仓库信息', { exact: true }).click();
   await page.getByText('修改尚未启用的仓库配置', { exact: true }).click();
   await page.getByLabel('内部合入分支', { exact: true }).fill('other');
   await panel.getByRole('button', { name: '保存所选规则并重新核验' }).click();

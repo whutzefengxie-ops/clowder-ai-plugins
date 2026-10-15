@@ -4,6 +4,7 @@ import { commandFailure } from './command-errors.mjs';
 import { fail } from './config.mjs';
 import { checkpoint, execution, progress } from './execution.mjs';
 import { terminateTree } from './terminate.mjs';
+import { checkCommandDirectory } from './tool-diagnostics.mjs';
 
 export async function command(executable, args, options = {}) {
   checkpoint();
@@ -78,7 +79,8 @@ export async function command(executable, args, options = {}) {
       }[cause],
     );
   onOutput?.({ stdout: Buffer.concat(stdout).toString('utf8'), stderr, truncated });
-  if (spawnError || code !== 0) commandFailure(stderr, spawnError?.code ?? code);
+  if (spawnError) await checkCommandDirectory(spawnOptions.cwd);
+  if (spawnError || code !== 0) commandFailure(stderr, spawnError?.code ?? code, executable);
   const output = Buffer.concat(stdout);
   return binary ? output : output.toString('utf8').trim();
 }

@@ -1,6 +1,7 @@
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
-import { api } from './gh-api.mjs';
+import { api, withGithub } from './gh-api.mjs';
+import { requireGithubToken } from './github-auth.mjs';
 import { collectIssues } from './github-issues.mjs';
 import { git } from './process.mjs';
 import { attachIssueRequirements } from './requirements.mjs';
@@ -32,14 +33,19 @@ export function githubRepository(url) {
   if (!match) fail('SOURCE_PLATFORM_UNSUPPORTED', '来源需要 github.com 仓库；本地仓仅用于合成验证');
   return `${match[1]}/${match[2]}`;
 }
-export async function discover(receiver, selection, provider = { api, collectIssues }) {
+const nativeProvider = { api, collectIssues };
+export async function discover(receiver, selection, provider = nativeProvider) {
   if (receiver.config.mode === 'version') fail('WRONG_MODE', '按版本更新从 Git 读取 tag，不扫描 Issue / PR');
-  return receiver.store.locked(() => discoverLocked(receiver, selection, provider));
+  return withGithub(receiver.config, () => receiver.store.locked(() => discoverLocked(receiver, selection, provider)));
 }
 async function discoverLocked(receiver, selection, provider) {
   const state = await receiver.read();
   if (!state) fail('NOT_ADOPTED', '先登记基线');
   if (receiver.active(state)) fail('RECOVERY_FIRST', '先恢复未完成交付，再扫描新的范围');
+  if (provider === nativeProvider)
+    await phase('github-auth', '检查已提供 GitHub API 读取认证', async () => {
+      requireGithubToken(receiver.config);
+    });
   const repo = githubRepository(receiver.config.sourceUrl);
   const repository = await phase('github-repository', '读取 GitHub 仓库元数据', () => provider.api(`repos/${repo}`));
   const heads = await receiver.git.fetch();

@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { dispatch } from './actions.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
+import { retainGithubToken } from './github-auth.mjs';
 import { retainIssueToken } from './issue-auth.mjs';
 import { checkIssueSettings, issueConfiguration, issueInputKeys } from './issue-settings.mjs';
 import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
@@ -49,7 +50,8 @@ export async function createConnection(file, options = {}) {
       fail('CONFIGURATION_CHANGED', '配置已变化，请刷新后重新核对，未覆盖原配置');
     if (!editable)
       fail('CONFIGURATION_READ_ONLY', '已登记基线或使用手工配置，不能在向导覆盖；另一套绑定请使用新的私有配置文件');
-    const next = repositoryConfiguration(receiver?.config, input, path);
+    const previous = receiver?.config;
+    const next = repositoryConfiguration(previous, input, path);
     next.stateDir = stateDirectory(path, next.bindingId, options);
     githubRepository(next.sourceUrl);
     const candidate = await configuredReceiver(next);
@@ -57,7 +59,9 @@ export async function createConnection(file, options = {}) {
     if ((await readPrivate(path)).revision !== revision) fail('CONFIGURATION_CHANGED', '配置已被本地修改，请刷新核对');
     await writePrivate(path, next);
     loaded = false;
-    return current();
+    const configured = await current();
+    if (previous) retainGithubToken(previous, configured.config);
+    return configured;
   }
   await current();
   async function savePlatform(input) {
@@ -136,6 +140,7 @@ export async function createConnection(file, options = {}) {
     loaded = false;
     const configured = await current();
     retainIssueToken(previous, configured.config);
+    retainGithubToken(previous, configured.config);
     return configured;
   }
   async function saveIssues(input) {

@@ -76,6 +76,12 @@ export function taskPlan(action) {
   ];
   const plans = {
     heads: probes,
+    discover: [
+      ['github-auth', '检查已提供 GitHub API 读取认证'],
+      ['github-repository', '读取 GitHub 仓库元数据'],
+      ...fetch,
+      ['github-deliveries', '读取并核对 PR / Issue / commit 对应'],
+    ],
     adopt: [...fetch, ['baseline-check', '核验 U0 / I0 与历史'], ['baseline-save', '登记已有基线']],
     tags: [['source-tags', '读取上游 tag']],
     pr: [['platform-pr', '核验候选并登记 PR 引用']],

@@ -7,6 +7,8 @@ import packageInfo from '../package.json' with { type: 'json' };
 import { dispatch } from './actions.mjs';
 import { fail } from './config.mjs';
 import { safeError } from './execution.mjs';
+import { clearGithubTokens, githubAuthentication } from './github-auth.mjs';
+import { githubAuthRequest } from './github-auth-http.mjs';
 import { body, requestPath, requireToken, send } from './http.mjs';
 import { publicIssues } from './issue-adapter.mjs';
 import { clearIssueTokens } from './issue-auth.mjs';
@@ -58,6 +60,8 @@ const assets = new Map([
     'file-rule-fields.mjs',
     'file-rule-selection.mjs',
     'file-rules.css',
+    'setup-navigation.mjs',
+    'github-auth.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -98,6 +102,7 @@ export function createReceiverServer(receiver, options = {}) {
   server.shutdown = async () => {
     await scopes.close();
     clearIssueTokens(options.runtime.instanceId);
+    clearGithubTokens(options.runtime.instanceId);
     if (server.listening) await new Promise((done) => server.close(done));
   };
   return server;
@@ -196,6 +201,7 @@ async function get(receiver, options, token, path, response, url = '') {
   const compact = new URL(url || '/', 'http://localhost').searchParams.get('compact') === '1';
   return send(response, 200, {
     token,
+    sourceAuthentication: githubAuthentication(receiver?.config),
     state:
       state && compact
         ? {
@@ -268,6 +274,7 @@ async function workspaceSnapshot(options) {
 
 async function privateRequest(request, response, path, context, token, owner) {
   const { tasks } = context;
+  if (await githubAuthRequest(request, response, path, context, token, owner)) return true;
   if (await issueAuthRequest(request, response, path, context, token, owner)) return true;
   if (await recordRequest(request, response, context.receiver, tasks, token, path)) return true;
   if (path.startsWith('/api/tasks')) {
