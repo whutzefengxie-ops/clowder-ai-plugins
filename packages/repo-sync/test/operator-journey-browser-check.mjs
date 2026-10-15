@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,7 +21,10 @@ Object.assign(process.env, {
 const connection = await createConnection(join(folder, 'config.json'));
 const server = createReceiverServer(null, { connection, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
@@ -102,6 +106,6 @@ try {
   await page.screenshot({ path: join(evidence, 'operator-failure.png'), fullPage: true });
   throw error;
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

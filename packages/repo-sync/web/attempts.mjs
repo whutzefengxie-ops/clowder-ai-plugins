@@ -1,8 +1,9 @@
 import { errorGuide } from './error-guide.mjs';
+import { plannedSteps, businessStep, projectStep } from './step-plan.mjs';
 import { taskProgress } from './task-progress.mjs';
 import { esc, stageOf, when } from './ui.mjs';
 
-const marks = { DONE: '✓', RUNNING: '●', FAILED: '×', PENDING: '○', WAITING: '●', UNRECORDED: '—' };
+const marks = { DONE: '✓', RUNNING: '●', FAILED: '×', PENDING: '○', WAITING: '●', UNRECORDED: '—', SKIPPED: '—' };
 const states = {
   DONE: 'done',
   RUNNING: 'current',
@@ -10,6 +11,7 @@ const states = {
   PENDING: 'pending',
   WAITING: 'current',
   UNRECORDED: 'unrecorded',
+  SKIPPED: 'skipped',
 };
 const labels = {
   DONE: '已完成',
@@ -18,28 +20,40 @@ const labels = {
   PENDING: '计划 · 尚未执行',
   WAITING: '等待人工审核',
   UNRECORDED: '执行证据未记录',
+  SKIPPED: '不适用 · 本笔无关联 Issue',
 };
 
 export function attempts(stage, record, operation, historical, snapshot = {}) {
   const delivery = record?.delivery ?? snapshot.state?.active;
   const tasks = selectedTasks(record, operation, historical, delivery?.id);
-  const groups = new Map();
-  for (const task of tasks)
-    for (const step of task.steps ?? []) {
-      if (step.stage !== stage || (delivery?.id && step.deliveryId && step.deliveryId !== delivery.id)) continue;
-      const key = step.key ?? step.id;
-      const identity = `${key}${key.startsWith('issue-') ? `:${step.label.match(/#\d+/)?.[0] ?? ''}` : ''}`;
-      if (!groups.has(identity)) groups.set(identity, { key, entries: [] });
-      groups.get(identity).entries.push({ task, step });
-    }
-  for (const [key, label] of planned(stage, delivery, snapshot))
-    if (![...groups.values()].some((group) => group.key === key))
-      groups.set(key, {
+  const version = (delivery?.mode ?? snapshot.config?.mode) === 'version';
+  const groups = new Map(
+    plannedSteps(stage, version).map(([key, label]) => [
+      key,
+      {
         key,
         label,
         status: historical || (delivery && stage < stageOf(delivery)) ? 'UNRECORDED' : 'PENDING',
         entries: [],
-      });
+      },
+    ]),
+  );
+  if (delivery && !delivery.issues?.length)
+    for (const group of groups.values()) if (group.key.startsWith('issue-')) group.status = 'SKIPPED';
+  for (const task of tasks) {
+    const byId = new Map((task.steps ?? []).map((step) => [step.id, step]));
+    for (const step of task.steps ?? []) {
+      if (step.stage !== stage || (delivery?.id && step.deliveryId && step.deliveryId !== delivery.id)) continue;
+      let parent = byId.get(step.parentId);
+      const visited = new Set();
+      while (parent && !groups.has(parent.key) && !visited.has(parent.id)) {
+        visited.add(parent.id);
+        parent = byId.get(parent.parentId);
+      }
+      const key = businessStep(stage, step.key ?? step.id, groups, parent?.key);
+      groups.get(key)?.entries.push({ task, step });
+    }
+  }
   if (stage === 4 && delivery) {
     groups.set('platform-review', {
       key: 'platform-review',
@@ -64,10 +78,8 @@ function selectedTasks(record, operation, historical, deliveryId) {
 }
 
 function stepView(group, stage) {
-  const actual = group.entries.filter(({ step }) => step.startedAt || step.status !== 'PENDING');
-  const latest = actual.at(-1) ?? group.entries.at(-1);
-  const status = latest?.step.status ?? group.status;
-  const label = latest?.step.label ?? group.label;
+  const { actual, latest, status } = projectStep(group);
+  const label = group.label;
   const tone = status === 'FAILED' ? 'bad' : status === 'DONE' ? 'good' : '';
   const timing = latest
     ? `开始 ${when(latest.step.startedAt)} · 结束 ${when(latest.step.finishedAt)}`
@@ -79,7 +91,7 @@ function stepView(group, stage) {
 }
 
 function evidence({ task, step }, index) {
-  return `<details data-attempt="${esc(`${task.id}:${step.id}`)}" data-attempt-task="${esc(task.id)}"><summary>执行证据 ${index + 1} · ${labels[step.status] ?? '状态未记录'} · ${when(step.startedAt)}</summary><small>任务 ${esc(task.id)} · 开始 ${when(step.startedAt)} · 结束 ${when(step.finishedAt)}</small>${taskProgress(step, esc)}${step.error ? `<p class="bad">× ${esc(step.error.code)}：${esc(step.error.message)}</p>` : ''}</details>`;
+  return `<details data-attempt="${esc(`${task.id}:${step.id}`)}" data-attempt-task="${esc(task.id)}"><summary>执行证据 ${index + 1} · ${labels[step.status] ?? '状态未记录'} · ${when(step.startedAt)}</summary><small>${esc(step.label)}<br>任务 ${esc(task.id)} · 开始 ${when(step.startedAt)} · 结束 ${when(step.finishedAt)}</small>${taskProgress(step, esc)}${step.error ? `<p class="bad">× ${esc(step.error.code)}：${esc(step.error.message)}</p>` : ''}</details>`;
 }
 
 function addUnscopedFailure(groups, tasks, stage, delivery) {
@@ -103,19 +115,15 @@ function addUnscopedFailure(groups, tasks, stage, delivery) {
     ) {
       const owner = task.steps?.findLast((step) => step.status === 'RUNNING')?.stage ?? stageOf(delivery);
       if (owner === stage)
-        groups.set('task-result', {
-          key: 'task-result',
-          entries: [
-            {
-              task,
-              step: {
-                id: 'task-result',
-                label: '核对原任务未完成结果',
-                status: 'FAILED',
-                error: task.error,
-              },
-            },
-          ],
+        groups.get(businessStep(stage, 'task-result', groups))?.entries.push({
+          task,
+          step: {
+            id: 'task-result',
+            key: 'task-result',
+            label: '核对原任务未完成结果',
+            status: 'FAILED',
+            error: task.error,
+          },
         });
     }
   }
@@ -128,36 +136,4 @@ function operationSlot(stage, operation, delivery, historical) {
       ? 5
       : (operation?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage ?? stageOf(delivery));
   return stage === current ? '<div id="operation" aria-live="polite"></div>' : '';
-}
-
-function planned(stage, delivery, snapshot) {
-  const version = (delivery?.mode ?? snapshot.config?.mode) === 'version';
-  const issues = !version && (!delivery || delivery.issues?.length);
-  return (
-    {
-      1: [
-        ['target-check', '解析目标并核对历史与来源范围'],
-        ...(!version ? [['github-deliveries', '读取真实 PR、主干提交与 Issue 来源']] : []),
-      ],
-      2: [
-        ...(issues ? [['issue-create', '创建 / 复用并回读内部 Issue']] : []),
-        ['candidate-build', '准备提交映射、保留内部范围并构造候选'],
-        ['candidate-check', '执行配置的候选检查'],
-      ],
-      3: [
-        ['publish-intent', '保存原发布意图'],
-        ['candidate-publish', '推送原候选分支'],
-        ['candidate-ref', '回读候选 ref'],
-        ['platform-pr', '创建 / 回读原内部 PR'],
-        ...(issues ? [['issue-link', '关联并回读内部 Issue 与 PR']] : []),
-      ],
-      4: [['platform-review', '在内部平台审核并合入']],
-      5: [
-        ['merge-verify', '核验实际合入的核心文件与历史'],
-        ...(issues ? [['issue-state', '核对接收条件、更新应关闭的 Issue 并回读']] : []),
-        ['acceptance-save', '保存本笔接收结果'],
-        ['execution-record', '保存原执行记录'],
-      ],
-    }[stage] ?? []
-  );
 }

@@ -1,4 +1,5 @@
 import { pageProjectId, projectUrl } from './project-scope.mjs';
+import { boundaryDeliveryId } from './flow-stage.mjs';
 import { esc, labels, title, when } from './ui.mjs';
 
 export function createHistory(snapshot, changed) {
@@ -56,7 +57,8 @@ export function createHistory(snapshot, changed) {
     const pending = snapshot().operation?.persistence?.status === 'FAILED';
     const id =
       chosen === 'current'
-        ? (snapshot().state.active?.id ?? (pending ? snapshot().operation.deliveryId : null))
+        ? (snapshot().state.active?.id ??
+          (pending ? snapshot().operation.deliveryId : boundaryDeliveryId(snapshot().state)))
         : chosen;
     if (invalidate && (id === snapshot().state.active?.id || pending)) cache.delete(id);
     return id;

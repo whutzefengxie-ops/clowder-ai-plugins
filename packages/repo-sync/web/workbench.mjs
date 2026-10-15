@@ -7,6 +7,7 @@ import { sourceTargetForm } from './source-target.mjs';
 import { button, esc, sha, title, when } from './ui.mjs';
 import { tagSelector } from './version.mjs';
 import { workflow } from './workflow.mjs';
+import { boundaryDeliveryId } from './flow-stage.mjs';
 
 export function workbench(snapshot, records, tags, mobileDetail) {
   const { config, state } = snapshot;
@@ -14,14 +15,16 @@ export function workbench(snapshot, records, tags, mobileDetail) {
   if (!state)
     return `<section class="card task"><h2>先确认两侧已有基线</h2><p>连接已从私有配置载入，登记外部已同步版本与内部当前版本即可开始。</p><button type="button" data-view="configuration" class="primary">配置同步基线 →</button></section>`;
   const historical = records.selected !== 'current' && records.selected !== state.active?.id;
-  const delivery = records.detail?.delivery ?? (historical ? null : state.active);
+  const expectedId = state.active?.id ?? boundaryDeliveryId(state);
+  const detailRecord = historical || records.detail?.delivery.id === expectedId ? records.detail : null;
+  const delivery = detailRecord?.delivery ?? (historical ? null : state.active);
   const summary = repositorySummary(config, state);
   const detail = records.error
     ? `<p class="record-gap bad" role="alert">× ${esc(records.error)}<br>记录读取失败，原选择保留，不用其他记录替代。</p><button type="button" data-reload-record>重新读取记录</button>`
     : delivery
       ? workflow(
           snapshot,
-          records.detail ?? {
+          detailRecord ?? {
             delivery,
             tasks: [],
             configurations: [],

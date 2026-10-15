@@ -19,7 +19,11 @@ export function automationBanner(snapshot) {
   };
   const error = run.error ?? snapshot.observation?.error;
   const current = snapshot.state.active;
-  const currentLabel = current ? `<p><b>当前${snapshot.journeyProgress ? `第 ${snapshot.journeyProgress.completed + 1} 笔` : '同步'} · ${esc(title(current))}</b></p>` : run.status === 'PAUSED' ? '<p><b>上一笔接收已结束，停在两笔之间；下一笔尚未开始。</b></p>' : '';
+  const currentLabel = current
+    ? `<p><b>当前${snapshot.journeyProgress ? `第 ${snapshot.journeyProgress.completed + 1} 笔` : '同步'} · ${esc(title(current))}</b></p>`
+    : run.status === 'PAUSED'
+      ? `<p><b>${run.pauseRequested?.afterDeliveryId ? '上一笔接收已结束，停在两笔之间；下一笔尚未开始。' : '本轮已暂停，尚未开始首笔交付。'}</b></p>`
+      : '';
   const progress = snapshot.journeyProgress;
   const count = progress
     ? `<p>${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</p>`
@@ -32,10 +36,21 @@ export function automaticPolicy(snapshot, delivery) {
   const reference = referenceRemedy(delivery);
   if (reference) return reference;
   if (run.status === 'PAUSED' && !snapshot.state.active && run.pauseRequested)
-    return { stage: 5, text: '上一笔的合入核验、Issue 和结果已处理；下一笔未开始。确认后继续下一笔，接收节奏保持不变。', action: 'resume-sync', label: '继续下一笔同步 →' };
+    return {
+      stage: run.pauseRequested.afterDeliveryId ? 5 : 1,
+      text: run.pauseRequested.afterDeliveryId
+        ? '上一笔的合入核验、Issue 和结果已处理；下一笔未开始。确认后继续下一笔，接收节奏保持不变。'
+        : '尚未开始首笔交付，确认后继续原轮次。',
+      action: 'resume-sync',
+      label: '继续下一笔同步 →',
+    };
   if (run.status === 'PAUSED')
-    return { stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
-      text: '原轮次已暂停，保留当前候选和对象，恢复后继续原位置。', action: 'resume-sync', label: '恢复原同步 →' };
+    return {
+      stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
+      text: '原轮次已暂停，保留当前候选和对象，恢复后继续原位置。',
+      action: 'resume-sync',
+      label: '恢复原同步 →',
+    };
   if (run.status === 'FAILED')
     return {
       stage: delivery?.acceptedInternal ? 5 : delivery?.prUrl ? 4 : delivery?.candidate ? 3 : 2,
@@ -49,7 +64,7 @@ export function automaticPolicy(snapshot, delivery) {
       text:
         snapshot.config.mode === 'version'
           ? '只需在内部平台审核合入，后台自动核验并保存版本结果；此模式不搬运 Issue。'
-          : '只需在内部平台审核合入。后台会自动核验、按接收条件关单，再处理下一笔。',
+          : `只需在内部平台审核合入。后台会自动核验、按接收条件关单，${run.pauseRequested || run.continuation === 'after-each' ? '本笔完成后暂停，确认继续才开始下一笔。' : '再处理下一笔。'}`,
       href: delivery?.prUrl,
       label: '打开内部 PR ↗',
     };

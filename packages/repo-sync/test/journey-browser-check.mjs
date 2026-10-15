@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,7 +14,10 @@ const receiver = new Receiver(f.config);
 await receiver.adopt(f.u0, f.i0);
 const server = createReceiverServer(receiver, { syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const evidence = process.env.REPO_SYNC_EVIDENCE || join(tmpdir(), 'repo-sync-journey-evidence');
 const errors = [];
@@ -149,6 +153,6 @@ try {
   throw error;
 } finally {
   releaseCheck();
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { access, mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -29,7 +30,7 @@ const connection = await createConnection(file);
 const server = createReceiverServer(null, { connection });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
   ...(process.env.REPO_SYNC_CHROME ? { executablePath: process.env.REPO_SYNC_CHROME } : {}),
 });
@@ -143,7 +144,7 @@ try {
     'PASS：空配置 → 保存真实连接 → Git 读取 → U0/I0 → tag 更新 → 真实候选推送 → 平台 PR 链接 → Git 合入核验 → 重启续接；无模拟平台路由。',
   );
 } finally {
-  await browser.close();
+  await closeBrowser();
   await new Promise((done) => server.close(done));
   for (const [key, value] of Object.entries(previous)) {
     if (value === undefined) delete process.env[key];

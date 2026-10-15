@@ -27,6 +27,7 @@ export async function dispatch(receiver, input, options = {}) {
     synchronize: () => synchronize(receiver, input, options),
     'resume-sync': () => synchronize(receiver, input, options),
     'pause-sync': () => synchronize(receiver, input, options),
+    'configure-continuation': () => synchronize(receiver, input, options),
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () =>

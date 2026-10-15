@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -41,7 +42,7 @@ ra.git.heads = async () => {
 const server = createReceiverServer(null, { projects });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`,
-  browser = await chromium.launch({
+  { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
     headless: true,
     executablePath: process.env.REPO_SYNC_CHROME,
   });
@@ -162,6 +163,6 @@ try {
   );
 } finally {
   release();
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

@@ -120,6 +120,10 @@ export function validateRecording(delivery) {
       fail('RECORD_INVALID', '同步历史时间无效');
 }
 export function phaseLocation(action, key, parent) {
+  if (key === 'delivery-verify') return { stage: 5, group: 'result' };
+  if (key === 'delivery-start') return { stage: 1, group: 'objects' };
+  if (key === 'delivery-prepare') return { stage: 2, group: 'content' };
+  if (parent?.stage === 5) return { stage: 5, group: parent.group };
   const stage =
     {
       start: 1,
@@ -129,7 +133,7 @@ export function phaseLocation(action, key, parent) {
       heads: 0,
       adopt: 0,
       issue: 2,
-      'sync-issues': 2,
+      'sync-issues': 5,
       prepare: 2,
       resolve: 2,
       'cancel-version': 2,
@@ -139,7 +143,7 @@ export function phaseLocation(action, key, parent) {
       recover: 5,
       receipts: 5,
       synchronize: 1,
-      'resume-sync': 2,
+      'resume-sync': 5,
     }[action] ?? 0;
   if (
     parent &&

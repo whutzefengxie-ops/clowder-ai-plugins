@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,7 +11,7 @@ import { configuredReceiver } from '../src/settings.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
   executablePath: process.env.REPO_SYNC_CHROME,
 });
@@ -150,5 +151,5 @@ try {
     'PASS: product file-tree/search/pagination, wrong PR rejection/correction/withdrawal, real Git merge, inline baseline differences/rule draft/content/recheck; desktop and mobile.',
   );
 } finally {
-  await browser.close();
+  await closeBrowser();
 }

@@ -30,28 +30,31 @@ export function repositoryInput(fields) {
   return input;
 }
 export function captureDraft() {
-  return [...document.querySelectorAll('form[data-form]')].map((form) => ({
-    kind: form.dataset.form,
-    open: form.closest('details')?.open ?? false,
-    openSummary: form.closest('details')?.querySelector(':scope > summary')?.textContent ?? '',
-    reference: form.elements.namedItem('previousUrl')?.value ?? '',
-    source: form.dataset.source ?? '',
-    path: form.elements.namedItem('path')?.value ?? '',
-    deliveryId: form.elements.namedItem('deliveryId')?.value ?? '',
-    values: [...form.elements]
-      .filter(
-        (element) =>
-          element.name &&
-          element.type !== 'password' &&
-          element.name !== 'issueToken' &&
-          !['expectedRevision', 'previousUrl', 'deliveryId'].includes(element.name),
-      )
-      .map((element) => ({
-        name: element.name,
-        value: element.value,
-        checked: element.checked,
-      })),
-  }));
+  return [...document.querySelectorAll('form[data-form]')]
+    .filter((form) => form.dataset.form !== 'configure-continuation')
+    .map((form) => ({
+      kind: form.dataset.form,
+      open: form.closest('details')?.open ?? false,
+      openSummary: form.closest('details')?.querySelector(':scope > summary')?.textContent ?? '',
+      reference: form.elements.namedItem('previousUrl')?.value ?? '',
+      source: form.dataset.source ?? '',
+      path: form.elements.namedItem('path')?.value ?? '',
+      deliveryId: form.elements.namedItem('deliveryId')?.value ?? '',
+      runId: form.elements.namedItem('runId')?.value ?? '',
+      values: [...form.elements]
+        .filter(
+          (element) =>
+            element.name &&
+            element.type !== 'password' &&
+            element.name !== 'issueToken' &&
+            !['expectedRevision', 'previousUrl', 'deliveryId', 'runId'].includes(element.name),
+        )
+        .map((element) => ({
+          name: element.name,
+          value: element.value,
+          checked: element.checked,
+        })),
+    }));
 }
 export function restoreDraft(drafts) {
   for (const draft of drafts) {
@@ -61,7 +64,8 @@ export function restoreDraft(drafts) {
         (item.dataset.source ?? '') === (draft.source ?? '') &&
         (item.elements.namedItem('path')?.value ?? '') === (draft.path ?? '') &&
         (item.elements.namedItem('previousUrl')?.value ?? '') === (draft.reference ?? '') &&
-        (item.elements.namedItem('deliveryId')?.value ?? '') === (draft.deliveryId ?? ''),
+        (item.elements.namedItem('deliveryId')?.value ?? '') === (draft.deliveryId ?? '') &&
+        (item.elements.namedItem('runId')?.value ?? '') === (draft.runId ?? ''),
     );
     if (!form) continue;
     restoreForm(form, draft);

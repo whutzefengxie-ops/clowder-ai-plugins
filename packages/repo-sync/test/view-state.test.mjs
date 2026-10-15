@@ -23,8 +23,10 @@ function field({
   value = '',
   name = 'url',
   type = 'url',
+  run = '',
+  renderedValue = value,
 } = {}) {
-  const values = { deliveryId: delivery, previousUrl: reference, path };
+  const values = { deliveryId: delivery, previousUrl: reference, path, runId: run };
   const form = {
     dataset: { form: kind, source },
     elements: { namedItem: (key) => (Object.hasOwn(values, key) ? { value: values[key] } : null) },
@@ -35,6 +37,7 @@ function field({
     name,
     type,
     value,
+    options: type === 'select-one' ? [{ value: renderedValue, defaultSelected: true }] : undefined,
     selectionStart: 0,
     selectionEnd: value.length,
     closest: (selector) => (selector === 'form' ? form : null),
@@ -124,4 +127,28 @@ test('same Git binding with a changed configuration revision clears unsubmitted 
     );
     if (focusedIndex === 0) assert.equal(after[0].value, 'typed-branch', 'ordinary focused drafts remain available');
   }
+});
+
+test('a changed server continuation policy is not overwritten by the old focused select value', () => {
+  const control = { kind: 'configure-continuation', run: 'same-run', name: 'continuation', type: 'select-one' };
+  const before = [field({ ...control, value: 'after-each', renderedValue: 'after-each' })];
+  const after = [field({ ...control, value: 'automatic', renderedValue: 'automatic' })];
+  renderCycle(before, 0, after);
+  assert.equal(after[0].value, 'automatic');
+});
+
+test('a focused continuation draft cannot cross into a different run', () => {
+  const control = { kind: 'configure-continuation', name: 'continuation', type: 'select-one' };
+  const before = [field({ ...control, run: 'old-run', value: 'after-each', renderedValue: 'automatic' })];
+  const after = [field({ ...control, run: 'new-run', value: 'automatic', renderedValue: 'automatic' })];
+  renderCycle(before, 0, after);
+  assert.equal(after[0].value, 'automatic');
+});
+
+test('a focused unsaved continuation choice survives polling when the run and server baseline are unchanged', () => {
+  const control = { kind: 'configure-continuation', run: 'same-run', name: 'continuation', type: 'select-one' };
+  const before = [field({ ...control, value: 'after-each', renderedValue: 'automatic' })];
+  const after = [field({ ...control, value: 'automatic', renderedValue: 'automatic' })];
+  renderCycle(before, 0, after);
+  assert.equal(after[0].value, 'after-each');
 });

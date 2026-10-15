@@ -66,9 +66,14 @@ test('stale automatic intent cannot be replaced or paused with another run ident
     code: 'AUTOMATION_CHANGED',
   });
   await dispatch(receiver, { action: 'pause-sync', runId: 'd'.repeat(32) });
-  assert.equal((await receiver.status()).automation.status, 'PAUSED');
-  await assert.rejects(() => dispatch(receiver, { action: 'synchronize', requestId: 'e'.repeat(32) }), {
-    code: 'AUTOMATION_EXISTS',
-  });
+  const waiting = await receiver.status();
+  assert.equal(waiting.automation.status, 'WAITING_REVIEW');
+  assert.equal(waiting.automation.pauseRequested.afterDeliveryId, original.id);
+  assert.equal(waiting.automation.continuation, 'after-each');
+  // A duplicate synchronize at review reuses the original run; it cannot replace
+  // its identity, frozen target or pending boundary request.
+  await dispatch(receiver, { action: 'synchronize', requestId: 'e'.repeat(32) });
+  assert.equal((await receiver.status()).automation.id, 'd'.repeat(32));
+  assert.equal((await receiver.status()).automation.pauseRequested.afterDeliveryId, original.id);
   assert.equal((await receiver.status()).deliveries.length, 1);
 });

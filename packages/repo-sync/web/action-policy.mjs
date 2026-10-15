@@ -3,7 +3,17 @@ import { stageOf } from './ui.mjs';
 
 export function nextAction(snapshot, delivery, historical = false) {
   if (historical) return { stage: 0, text: '此记录只读，可展开各阶段查看当时信息。' };
-  return taskPolicy(snapshot, delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
+  const policy =
+    taskPolicy(snapshot, delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
+  const task = snapshot.operation;
+  const owns = ownsTask(task, delivery) || task?.deliveryIds?.includes(delivery?.id);
+  const failed =
+    owns &&
+    task?.status === 'FAILED' &&
+    task.steps?.findLast(
+      (step) => step.status === 'FAILED' && (!step.deliveryId || !delivery || step.deliveryId === delivery.id),
+    );
+  return failed?.stage && task.persistence?.status !== 'FAILED' ? { ...policy, stage: failed.stage } : policy;
 }
 function taskPolicy(snapshot, delivery) {
   const task = snapshot.operation;

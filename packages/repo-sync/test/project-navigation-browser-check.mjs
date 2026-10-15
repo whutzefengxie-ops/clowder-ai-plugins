@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -17,7 +18,10 @@ const other = await projects.create({
 const server = createReceiverServer(null, { projects, syncInterval: 60000 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 page.setDefaultTimeout(10000);
 const errors = [];
@@ -111,6 +115,6 @@ try {
   console.log('Component browser errors:', errors, '\nVisible page:', await page.locator('body').innerText());
   throw error;
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

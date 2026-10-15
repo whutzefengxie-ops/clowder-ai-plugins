@@ -74,6 +74,11 @@ const assets = new Map([
     'error-guide.mjs',
     'operator-journey.css',
     'task-progress.mjs',
+    'step-plan.mjs',
+    'flow-stage.mjs',
+    'live-workflow.mjs',
+    'continuation-view.mjs',
+    'action-scope.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {

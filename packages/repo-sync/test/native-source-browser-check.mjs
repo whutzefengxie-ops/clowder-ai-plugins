@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -86,7 +87,10 @@ globalThis.fetch = async (input, options) => {
 };
 const server = createReceiverServer(null, { connection });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }),
   errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
@@ -135,7 +139,7 @@ try {
     'PASS: real Git tag, no gh on Windows PATH, native REST/GraphQL, missing-token failure, memory-only project token, unchanged baseline and resumed two-PR/Issue closure provenance.',
   );
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
   globalThis.fetch = nativeFetch;
   for (const key of Object.keys(process.env)) if (!(key in environment)) delete process.env[key];

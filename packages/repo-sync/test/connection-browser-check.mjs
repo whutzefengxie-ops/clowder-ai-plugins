@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,7 +33,7 @@ receiver.git.heads = async () => {
 const server = createReceiverServer(receiver, { connection });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
   ...(process.env.REPO_SYNC_CHROME ? { executablePath: process.env.REPO_SYNC_CHROME } : {}),
 });
@@ -117,6 +118,6 @@ try {
     'PASS：SSH 原因与 × → 回执丢失查询原任务 → 真实轻量 HEAD → 分块进度 → 刷新续看 → 取消下载无基线 → 重试实际 Git 核验。',
   );
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

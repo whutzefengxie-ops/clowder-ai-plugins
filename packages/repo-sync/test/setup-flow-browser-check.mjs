@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,7 +22,7 @@ Object.assign(process.env, {
 const connection = await createConnection(join(folder, 'config.json')),
   server = createReceiverServer(null, { connection });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
   executablePath: process.env.REPO_SYNC_CHROME,
 });
@@ -121,6 +122,6 @@ try {
     'PASS: saved repositories collapse, baseline focus and viewport, inline progress, draft-safe edit/reload, desktop/mobile and real Git adoption.',
   );
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

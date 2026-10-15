@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
 const f = await versionRepositories();
@@ -41,7 +42,10 @@ const initial = await receiver.status();
 const connection = await createConnection(file);
 const server = createReceiverServer(null, { connection });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
@@ -79,13 +83,20 @@ try {
   await page.locator('#error').filter({ hasText: 'LEDGER_WRITE_FAILED' }).waitFor({ timeout: 20000 });
   assert.equal((await receiver.status()).active.prUrl, url);
   await page.reload();
-  const failedLedger = page.locator('[data-step-key="ledger-save"][data-step-state="failed"]');
-  await failedLedger.filter({ hasText: '保存交付台账' }).waitFor();
-  await failedLedger.getByText('错误码与脱敏诊断摘要', { exact: true }).click();
-  await failedLedger
+  const failedReference = page.locator('[data-stage="3"] [data-step-key="platform-pr"][data-step-state="failed"]');
+  await failedReference.waitFor();
+  const ledgerEvidence = failedReference
+    .locator('[data-attempt]')
+    .filter({ hasText: '保存交付台账' })
+    .filter({ hasText: 'LEDGER_WRITE_FAILED' });
+  await ledgerEvidence.locator(':scope > summary').click();
+  await ledgerEvidence.getByText(/LEDGER_WRITE_FAILED/).waitFor();
+  await failedReference.getByText('错误码与脱敏诊断摘要', { exact: true }).click();
+  await failedReference
     .getByText(/LEDGER_WRITE_FAILED/)
     .first()
     .waitFor();
+  assert.doesNotMatch(await failedReference.innerText(), /private file and original error/);
   await page.setViewportSize({ width: 390, height: 1050 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(evidence, 'ledger-save-failed-mobile.png'), fullPage: true });
@@ -118,7 +129,7 @@ try {
 } finally {
   fs.rename = rename;
   await page.close();
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
   for (const [key, value] of Object.entries(previous)) {
     if (value === undefined) delete process.env[key];

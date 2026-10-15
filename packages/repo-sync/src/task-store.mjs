@@ -12,6 +12,7 @@ export const taskActions = new Set([
   'synchronize',
   'resume-sync',
   'pause-sync',
+  'configure-continuation',
   'heads',
   'adopt',
   'discover',
@@ -31,6 +32,8 @@ export const taskActions = new Set([
 ]);
 const keys = new Set([
   'runId',
+  'continuation',
+  'observeOnly',
   'action',
   'requestId',
   'projectId',
@@ -55,6 +58,14 @@ const keys = new Set([
   'content',
 ]);
 export function taskInput(input) {
+  if (
+    input?.continuation !== undefined &&
+    (!['synchronize', 'configure-continuation'].includes(input.action) ||
+      !['automatic', 'after-each'].includes(input.continuation))
+  )
+    fail('INVALID_TASK_INPUT', '后续处理方式只接受连续同步或每笔完成后暂停。');
+  if (input?.observeOnly !== undefined && (input.action !== 'resume-sync' || typeof input.observeOnly !== 'boolean'))
+    fail('INVALID_TASK_INPUT', '后台观察只能用于原轮次恢复，且需要布尔值。');
   if (
     input?.includeDirectCommits !== undefined &&
     (input.action !== 'discover' || typeof input.includeDirectCommits !== 'boolean')

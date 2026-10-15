@@ -1,5 +1,6 @@
 import { fail } from './config.mjs';
-import { safeError } from './execution.mjs';
+import { armBoundary, boundaryReached, configureContinuation, continuationModes, startNext } from './continuation.mjs';
+import { execution, phase, safeError } from './execution.mjs';
 import { discover } from './github.mjs';
 
 export function validateAutomation(value) {
@@ -10,18 +11,29 @@ export function validateAutomation(value) {
     !['RUNNING', 'WAITING_REVIEW', 'FAILED', 'PAUSED', 'COMPLETE'].includes(value.status) ||
     !Number.isFinite(Date.parse(value.startedAt)) ||
     !value.selection ||
-    !['latest', 'tag', 'commit', 'queue'].includes(value.selection.kind)
+    !['latest', 'tag', 'commit', 'queue'].includes(value.selection.kind) ||
+    (value.continuation !== undefined && !continuationModes.has(value.continuation)) ||
+    (value.pauseRequested !== undefined &&
+      (!value.pauseRequested ||
+        typeof value.pauseRequested !== 'object' ||
+        Array.isArray(value.pauseRequested) ||
+        Object.keys(value.pauseRequested).some((key) => !['afterDeliveryId', 'requestedAt'].includes(key)) ||
+        !Number.isFinite(Date.parse(value.pauseRequested.requestedAt)) ||
+        (value.pauseRequested.afterDeliveryId !== null &&
+          !/^[a-f0-9]{24}$/.test(value.pauseRequested.afterDeliveryId ?? ''))))
   )
     fail('AUTOMATION_INVALID', '自动同步记录损坏，保留原台账；不能重建另一轮。');
 }
 export async function synchronize(receiver, input, options = {}) {
   const state = await receiver.read();
   validateRequest(state, input);
+  if (input.action === 'configure-continuation') return configureContinuation(receiver, input);
   if (input.action === 'pause-sync') return pause(receiver, input.runId);
   if (reuseRun(state, input)) return state;
   requireCapabilities(receiver.config);
   const id = input.action === 'synchronize' ? input.requestId : state.automation.id;
-  await register(receiver, input, id);
+  const registered = await register(receiver, input, id);
+  if (registered.automation.status !== 'RUNNING') return registered;
   try {
     await scan(receiver, options);
     await advance(receiver);
@@ -39,6 +51,11 @@ export async function synchronize(receiver, input, options = {}) {
   }
 }
 function validateRequest(state, input) {
+  if (
+    (input.observeOnly !== undefined && typeof input.observeOnly !== 'boolean') ||
+    (input.continuation !== undefined && !continuationModes.has(input.continuation))
+  )
+    fail('INVALID_CONTINUATION', '继续方式无效，请重新核对原同步轮次。');
   if (input.targetKind !== undefined && !['latest', 'tag', 'commit'].includes(input.targetKind))
     fail('INVALID_TARGET', '请选择最新分支、tag 或完整 commit。');
   if (
@@ -69,14 +86,25 @@ function requireCapabilities(config) {
 function pause(receiver, id) {
   return receiver.change((saved) => {
     if (saved.automation?.id !== id) fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
-    Object.assign(saved.automation, { status: 'PAUSED', updatedAt: new Date().toISOString() });
+    const run = saved.automation,
+      active = receiver.active(saved);
+    run.continuation = 'after-each';
+    armBoundary(run, active);
+    if (!active && run.status !== 'COMPLETE') {
+      run.status = 'PAUSED';
+      run.pauseRequested ??= { afterDeliveryId: null, requestedAt: new Date().toISOString() };
+    }
+    run.updatedAt = new Date().toISOString();
   });
 }
 function register(receiver, input, id) {
   return receiver.change((saved) => {
     if (input.action !== 'synchronize' && saved.automation?.id !== id) fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
+    if (input.observeOnly && ['PAUSED', 'FAILED', 'COMPLETE'].includes(saved.automation?.status)) return;
     checkQueuedTarget(saved, input);
     const active = receiver.active(saved);
+    const releaseBoundary =
+      input.action === 'resume-sync' && !input.observeOnly && saved.automation?.status === 'PAUSED' && !active;
     saved.automation =
       input.action === 'synchronize'
         ? {
@@ -84,12 +112,15 @@ function register(receiver, input, id) {
             status: 'RUNNING',
             startedAt: new Date().toISOString(),
             startingDeliveryId: active?.id ?? null,
+            continuation: input.continuation ?? 'automatic',
             selection: input.targetKind
               ? { kind: input.targetKind, value: input.targetValue }
               : { kind: saved.queue.length || active ? 'queue' : 'latest' },
             scanned: Boolean(active || (!input.targetKind && saved.queue.length)),
           }
         : { ...saved.automation, status: 'RUNNING' };
+    if (releaseBoundary) delete saved.automation.pauseRequested;
+    armBoundary(saved.automation, active);
     delete saved.automation.error;
   });
 }
@@ -106,18 +137,32 @@ async function advance(receiver) {
   let state = await receiver.status();
   if (state.active) {
     if (state.active.prUrl || state.active.acceptedInternal || state.active.status === 'PUSH_RESULT_UNKNOWN')
-      await receiver.recover();
+      await phase('delivery-verify', '核验原交付的合入、Issue 与接收结果', () => receiver.recover(), false);
     state = await receiver.status();
     if (state.active?.status === 'CODE_ACCEPTED_PENDING_METADATA' && !state.active.issues.length)
-      await receiver.receipts([]);
+      await phase('delivery-verify', '保存原交付的接收结果', () => receiver.receipts([]), false);
   }
   state = await receiver.status();
-  if (!state.active && state.queue.length) await receiver.start(state.queue[0].target);
+  if (boundaryReached(receiver, state)) return;
+  if (state.active?.status === 'WAITING_APPROVAL') return;
+  if (!state.active && state.queue.length) {
+    const context = execution();
+    if (context) {
+      context.associate?.(null);
+      context.deliveryId = null;
+    }
+    await phase(
+      'delivery-start',
+      '登记下一笔交付',
+      () => startNext(receiver, state.queue[0].target, state.automation.id),
+      false,
+    );
+  }
   state = await receiver.status();
   if (!state.active || state.active.acceptedInternal) return;
   if (state.active.issues.length && !receiver.config.issues)
     fail('ISSUE_AUTOMATION_REQUIRED', '请在仓库设置配置内部 Issue 自动创建与关单，然后恢复原轮次。');
-  await receiver.prepare();
+  await phase('delivery-prepare', '准备当前交付与内部 PR', () => receiver.prepare(), false);
 }
 function finish(receiver) {
   return receiver.change((saved) => {
@@ -125,7 +170,13 @@ function finish(receiver) {
     if (active && active.status !== 'WAITING_APPROVAL')
       fail('PR_READBACK_REQUIRED', '内部 PR 仍未完成回读，请恢复原交付；不会重复创建。');
     Object.assign(saved.automation, {
-      status: active ? 'WAITING_REVIEW' : 'COMPLETE',
+      status: active
+        ? 'WAITING_REVIEW'
+        : !saved.queue.length
+          ? 'COMPLETE'
+          : saved.automation.status === 'PAUSED' || boundaryReached(receiver, saved)
+            ? 'PAUSED'
+            : 'RUNNING',
       deliveryId: active?.id ?? null,
       updatedAt: new Date().toISOString(),
     });

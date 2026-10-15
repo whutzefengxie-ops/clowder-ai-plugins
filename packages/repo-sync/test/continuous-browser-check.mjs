@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -59,7 +60,10 @@ const sourceProvider = {
 };
 const server = createReceiverServer(receiver, { sourceProvider, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
@@ -85,11 +89,15 @@ try {
       await page.locator('[data-stage="3"] [data-step-key="issue-link"]').getAttribute('data-operation-state'),
       'DONE',
     );
-    assert.ok(
-      (await page.locator('[data-stage="3"] [data-step-key="issue-link"] > b').innerText()).includes(
-        '关联并回读内部 PR 与 Issue #',
-      ),
-    );
+    const issueLink = page.locator('[data-stage="3"] [data-step-key="issue-link"]');
+    assert.ok(active.issues.length, 'fixture must verify actual Issue associations');
+    for (const issue of active.issues) {
+      const label = `关联并回读内部 PR 与 Issue #${issue.number}`;
+      const evidence = issueLink.locator('details[data-attempt]').filter({ hasText: label });
+      assert.ok(await evidence.count(), `the original Issue #${issue.number} association evidence must remain`);
+      await evidence.last().locator(':scope > summary').click();
+      assert.ok((await issueLink.innerText()).includes(label));
+    }
     assert.equal(await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]), '内部默认中文版');
     if (number === 2) await platform.edit({ loseUpdate: true });
     await f.merge(active);
@@ -133,6 +141,6 @@ try {
     'PASS：过程模式目标 tag、逐笔 PR、README 保留、Issue 自动创建/关联/关单、失败 × 与原对象恢复、历史配置和移动端。',
   );
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

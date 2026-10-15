@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -71,7 +72,10 @@ const sourceProvider = {
 const connection = await createConnection(file),
   server = createReceiverServer(null, { connection, sourceProvider, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browser = await chromium.launch({ headless: true, executablePath: process.env.REPO_SYNC_CHROME });
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  headless: true,
+  executablePath: process.env.REPO_SYNC_CHROME,
+});
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } }),
   errors = [];
 page.setDefaultTimeout(15000);
@@ -207,7 +211,7 @@ try {
     .catch(() => {});
   throw error;
 } finally {
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
   await platform.close();
   globalThis.fetch = nativeFetch;

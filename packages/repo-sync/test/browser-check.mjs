@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { repositories } from './fixtures.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.REPO_SYNC_PLAYWRIGHT || 'playwright');
@@ -18,24 +19,33 @@ await receiver.setQueue(fixture.plans);
 const server = createReceiverServer(receiver);
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
+  host: '127.0.0.1',
   headless: true,
   ...(process.env.REPO_SYNC_CHROME ? { executablePath: process.env.REPO_SYNC_CHROME } : {}),
 });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+const errors = [],
+  posted = [];
+page.on('pageerror', (error) => errors.push(error.message));
+page.on('request', (request) => {
+  if (!request.url().endsWith('/api/tasks') || request.method() !== 'POST') return;
+  const input = request.postDataJSON();
+  posted.push(input.action);
+  if (input.action === 'receipts') {
+    assert.equal(input['issue-71'], undefined);
+    assert.match(input.deliveryId, /^[a-f0-9]{24}$/);
+    assert.equal(input.observations.length, 1);
+  }
+});
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
-  const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('request', (request) => {
-    if (!request.url().endsWith('/api/tasks') || request.method() !== 'POST') return;
-    const input = request.postDataJSON();
-    if (input.action === 'receipts') {
-      assert.equal(input['issue-71'], undefined);
-      assert.match(input.deliveryId, /^[a-f0-9]{24}$/);
-      assert.equal(input.observations.length, 1);
-    }
-  });
-  await page.goto(base);
+  try {
+    await page.goto(base);
+  } catch (error) {
+    if (!error.message.includes('net::ERR_ABORTED')) throw error;
+    console.warn('Retrying initial read-only navigation after ERR_ABORTED.');
+    await page.goto(base);
+  }
   for (let index = 0; index < 2; index++) {
     await page.locator('[data-action="start"]').click();
     await page.locator('[data-stage="2"][data-stage-state="current"]').waitFor();
@@ -44,8 +54,22 @@ try {
       await page.getByLabel('内部 Issue 具体链接').fill('https://codehub.example/core/issues/318');
       await page.getByRole('button', { name: '保存此 Issue 映射' }).click();
     } else assert.equal(await page.locator('[data-form="issue"]').count(), 0);
+    if (!index)
+      await page.evaluate(() => {
+        // A status poll can repaint the same action while its click awaits navigation.
+        const repaint = (event) => {
+          const button = event.target.closest('[data-action="prepare"]');
+          if (!button) return;
+          document.removeEventListener('click', repaint, true);
+          const footer = button.closest('.next-action');
+          footer.replaceWith(footer.cloneNode(true));
+          document.documentElement.dataset.prepareRepainted = String(!button.isConnected);
+        };
+        document.addEventListener('click', repaint, true);
+      });
     await page.locator('[data-action="prepare"]').click();
     await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
+    if (!index) assert.equal(await page.locator('html').getAttribute('data-prepare-repainted'), 'true');
     const before = await receiver.status();
     assert.equal((await receiver.git.fetch()).internal, before.accepted.internal);
     assert.match(before.templates.body, /内部 #318/);
@@ -88,7 +112,31 @@ try {
   console.log(
     'PASS：真实 Git 两笔接收、Issue 映射复用、具体 PR 页面、合入后游标恢复、元数据失败 ×、U1 open / U2 closed 与移动端。',
   );
+} catch (error) {
+  const state = await receiver.status();
+  console.error(
+    'Browser failure diagnostics:',
+    JSON.stringify({
+      failure: error.message,
+      errors,
+      posted,
+      active: state?.active && { id: state.active.id, status: state.active.status },
+      forms: await page.locator('[data-form="pr"]').count(),
+      stages: await page.locator('[data-stage]').evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          stage: node.dataset.stage,
+          state: node.dataset.stageState,
+          open: node.open,
+        })),
+      ),
+    }),
+  );
+  await page.screenshot({ path: join(evidence, 'browser-failure.png'), fullPage: true });
+  throw error;
 } finally {
-  await browser.close();
-  await new Promise((done) => server.close(done));
+  try {
+    await closeBrowser();
+  } finally {
+    await server.shutdown();
+  }
 }

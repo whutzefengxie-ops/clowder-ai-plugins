@@ -1,11 +1,14 @@
+import { updateLiveWorkflow } from './live-workflow.mjs';
+import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
 import { initializeSubmissions } from './form-submission.mjs';
 import { createSetupFlow } from './setup-flow.mjs';
 import { retainView } from './view-state.mjs';
 import { previewPanel } from './preview-view.mjs';
-import { nextAction } from './action-policy.mjs';
+import { guardRenderedScope, snapshotIdentity } from './action-scope.mjs';
+
 import { captureDraft, configuration, restoreDraft } from './connections.mjs';
 import { baselineContent, diagnostics } from './diagnostics.mjs';
-import { restoreExpansion } from './expansion.mjs';
+import { rememberExpansion, restoreExpansion } from './expansion.mjs';
 import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
 import { createGithubAuthentication } from './github-auth.mjs';
@@ -18,9 +21,9 @@ import { platformSettings, serviceLabel } from './platform.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { createProjectNavigation } from './projects.mjs';
 import { createTaskFocus, focusBaselineInput, revealSetupResult } from './setup-navigation.mjs';
-import { button, esc, sha, stageOf } from './ui.mjs';
+import { button, esc, sha } from './ui.mjs';
 import { workbench } from './workbench.mjs';
-import { actionBar, attempts } from './workflow.mjs';
+
 const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
 let snapshot;
@@ -61,7 +64,12 @@ function savedDraft() {
   }
 }
 function expandedKey() {
-  return `${draftKey()}:expanded`;
+  const selection = records.get();
+  const id =
+    selection.selected === 'current'
+      ? (snapshot.state?.active?.id ?? boundaryDeliveryId(snapshot.state) ?? snapshot.state?.automation?.id)
+      : selection.selected;
+  return `${draftKey()}:expanded:${id ?? 'setup'}`;
 }
 function render({ keepScroll = false } = {}) {
   const restoreView = retainView(content, snapshot.config?.bindingId, snapshot.connection?.revision);
@@ -79,11 +87,18 @@ function render({ keepScroll = false } = {}) {
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   content.dataset.binding = snapshot.config?.bindingId ?? 'setup';
   content.dataset.revision = snapshot.connection?.revision ?? '';
+  content.dataset.actionScope = snapshotIdentity(snapshot);
   if (preview && view !== 'configuration' && records.get().selected === 'current' && !snapshot.state?.active)
     content.querySelector('.record-detail')?.insertAdjacentHTML('beforeend', previewPanel(preview));
   content.querySelector('#error-slot')?.append(errorPanel);
   restoreDraft(savedDraft());
-  restoreExpansion(content, snapshot, records.get().selected, expandedKey());
+  restoreExpansion(
+    content,
+    snapshot,
+    records.get().selected,
+    expandedKey(),
+    currentRecord(snapshot, records.get())?.delivery ?? snapshot.state?.active,
+  );
   if (view === 'configuration') {
     const baseline = content.querySelector('form[data-form="inspect-baseline"]')?.closest('.card');
     const panel = diagnostics(snapshot.operation?.error, snapshot, esc);
@@ -95,40 +110,19 @@ function render({ keepScroll = false } = {}) {
   operations.lock();
   restoreView({ keepScroll });
 }
-let liveStage;
+
 function onTask(task) {
   if (!snapshot) return;
   snapshot.operation = task;
-  const record = records.get().detail;
+  const record = currentRecord(snapshot, records.get());
   const historical = records.get().selected !== 'current' && records.get().selected !== snapshot.state?.active?.id;
   showActivity(task);
   if (historical) return;
-  const nodes = content.querySelectorAll('[data-attempts-stage]');
-  if (nodes.length) {
-    updateAttempts(nodes, record, task, historical);
-    const footer = content.querySelector('.next-action');
-    const policy = nextAction(snapshot, snapshot.state.active);
-    if (footer && footer.dataset.policy !== JSON.stringify(policy)) {
-      footer.outerHTML = actionBar(policy, false);
-      content.querySelector('.next-action').dataset.policy = JSON.stringify(policy);
-    }
-    focusLiveStage(task, policy);
-  } else {
+  if (!updateLiveWorkflow(content, snapshot, record, task, records.get().selected, expandedKey())) {
     const panel = content.querySelector('#operation');
     if (panel) panel.innerHTML = renderTask(task);
   }
   focusTask(task, snapshot);
-}
-function updateAttempts(nodes, record, task, historical) {
-  const opened = new Set(
-    [...content.querySelectorAll('[data-attempt][open]')].map(
-      (item) => `${item.closest('[data-stage]').dataset.stage}:${item.dataset.attempt}`,
-    ),
-  );
-  for (const node of nodes)
-    node.innerHTML = attempts(Number(node.dataset.attemptsStage), record, task, historical, snapshot);
-  for (const node of content.querySelectorAll('[data-attempt]'))
-    if (opened.has(`${node.closest('[data-stage]').dataset.stage}:${node.dataset.attempt}`)) node.open = true;
 }
 let refreshing = 0;
 async function refresh({ background = false } = {}) {
@@ -150,7 +144,18 @@ async function refresh({ background = false } = {}) {
   operations.observe(snapshot.operation);
 }
 initializeFormErrors();
-const action = (input, form) => operations.action(input, form?.dataset.form);
+const action = (input, form, expectedScope = content.dataset.actionScope) => {
+  if (expectedScope !== snapshotIdentity(snapshot)) {
+    staleScope();
+    return null;
+  }
+  return operations.action(input, form?.dataset.form);
+};
+function staleScope() {
+  errorPanel.textContent = '同步状态已变化，请等待页面更新后重试；旧页面操作未执行。';
+  errorPanel.hidden = false;
+}
+guardRenderedScope(content, () => snapshot, staleScope);
 initializeFileRules({
   snapshot: () => snapshot,
   action: async (...args) => {
@@ -164,6 +169,7 @@ initializeFileRules({
 document.addEventListener('click', async (event) => {
   const element = event.target.closest('button, [data-reveal]');
   if (!snapshot || !element) return;
+  const clickedScope = content.dataset.actionScope;
   await navigate(element);
   if (element.hasAttribute('data-baseline-read')) {
     const result = await action({
@@ -181,18 +187,22 @@ document.addEventListener('click', async (event) => {
   if (element.dataset.view) changeView(element.dataset.view);
   if (element.dataset.action) {
     mobileDetail = true;
-    const result = await action({
-      action: element.dataset.action,
-      ...(['synchronize', 'resume-sync', 'pause-sync'].includes(element.dataset.action)
-        ? {}
-        : { deliveryId: snapshot.state?.active?.id }),
-      ...(['resume-sync', 'pause-sync'].includes(element.dataset.action)
-        ? { runId: snapshot.state.automation.id }
-        : {}),
-      ...(['start', 'synchronize'].includes(element.dataset.action)
-        ? { expectedTarget: snapshot.state?.queue[0]?.target }
-        : {}),
-    });
+    const result = await action(
+      {
+        action: element.dataset.action,
+        ...(['synchronize', 'resume-sync', 'pause-sync'].includes(element.dataset.action)
+          ? {}
+          : { deliveryId: snapshot.state?.active?.id }),
+        ...(['resume-sync', 'pause-sync'].includes(element.dataset.action)
+          ? { runId: snapshot.state.automation.id }
+          : {}),
+        ...(['start', 'synchronize'].includes(element.dataset.action)
+          ? { expectedTarget: snapshot.state?.queue[0]?.target }
+          : {}),
+      },
+      undefined,
+      clickedScope,
+    );
     showActionResult(element.dataset.action, result);
   }
 });
@@ -213,8 +223,11 @@ async function navigate(element) {
     target?.querySelector('input, button, select')?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: 'start' });
   }
-  if (element.hasAttribute('data-expand-all'))
-    for (const stage of content.querySelectorAll('[data-stage]')) stage.open = true;
+  if (element.hasAttribute('data-expand-all')) {
+    const stages = [...content.querySelectorAll('[data-stage]')];
+    rememberExpansion(expandedKey(), Object.fromEntries(stages.map((stage) => [stage.dataset.stage, true])));
+    for (const stage of stages) stage.open = true;
+  }
   if (element.dataset.record) {
     saveDraft();
     mobileDetail = true;
@@ -307,14 +320,7 @@ document.addEventListener('click', (event) => {
   const summary = event.target.closest('[data-stage] > summary');
   if (!summary) return;
   const stage = summary.parentElement;
-  const key = expandedKey();
-  const next = !stage.open;
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(key)) ?? {};
-    const manual = Array.isArray(saved) ? Object.fromEntries(saved.map((id) => [id, true])) : saved;
-    manual[stage.dataset.stage] = next;
-    sessionStorage.setItem(key, JSON.stringify(manual));
-  } catch {}
+  rememberExpansion(expandedKey(), { [stage.dataset.stage]: !stage.open });
 });
 projectNavigation
   .load()
@@ -338,31 +344,3 @@ setInterval(() => {
   )
     refresh({ background: true }).catch(() => {});
 }, 5000);
-let lastAutomationStatus;
-function focusLiveStage(task, policy) {
-  const run = snapshot.state?.automation;
-  const currentStatus = run?.status;
-
-  // 当自动化状态从 RUNNING/WAITING_REVIEW 变为 PAUSED/FAILED/COMPLETE 时，重置 liveStage
-  if (['RUNNING', 'WAITING_REVIEW'].includes(lastAutomationStatus) &&
-      !['RUNNING', 'WAITING_REVIEW'].includes(currentStatus)) {
-    liveStage = null;
-  }
-  lastAutomationStatus = currentStatus;
-
-  // 只在任务实际运行时才自动展开阶段
-  if (task?.status !== 'RUNNING') return;
-
-  const targetStage = policy?.stage || stageOf(snapshot.state.active);
-  if (liveStage !== targetStage) {
-    liveStage = targetStage;
-    // 先关闭其他阶段，避免多个阶段同时展开
-    content.querySelectorAll('[data-stage][open]').forEach(el => {
-      if (Number(el.dataset.stage) !== targetStage) {
-        el.removeAttribute('open');
-      }
-    });
-    // 只打开当前活跃的阶段
-    content.querySelector(`[data-stage="${targetStage}"]`)?.setAttribute('open', '');
-  }
-}

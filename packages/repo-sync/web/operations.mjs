@@ -10,6 +10,7 @@ const longActions = new Set([
   'synchronize',
   'resume-sync',
   'pause-sync',
+  'configure-continuation',
   'heads',
   'adopt',
   'discover',

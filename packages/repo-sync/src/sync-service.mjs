@@ -47,6 +47,7 @@ export class SyncService {
     if (this.stopped) return;
     await scope.tasks.start({
       action: 'resume-sync',
+      observeOnly: true,
       runId: run.id,
       requestId: randomBytes(16).toString('hex'),
       expectedBinding: receiver.config.bindingId,

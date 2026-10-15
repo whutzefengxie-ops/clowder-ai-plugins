@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,12 +19,11 @@ await initial.selectTag('v2.0.0');
 const connection = await createConnection(configFile);
 const server = createReceiverServer(null, { connection, syncInterval: 100 });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
-const browserServer = await chromium.launchServer({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   host: '127.0.0.1',
   headless: true,
   executablePath: process.env.REPO_SYNC_CHROME,
 });
-const browser = await chromium.connect(browserServer.wsEndpoint());
 const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
@@ -117,13 +117,8 @@ try {
   fs.rename = rename;
   try {
     await page.close();
-    // A connected client disconnects separately; kill() owns only this fixture's Chromium process.
-    await browser.close();
+    await closeBrowser();
   } finally {
-    try {
-      await browserServer.kill();
-    } finally {
-      await server.shutdown();
-    }
+    await server.shutdown();
   }
 }

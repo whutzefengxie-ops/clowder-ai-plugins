@@ -103,6 +103,7 @@ export class Tasks {
       action: input.action,
       deliveryId: input.deliveryId,
       associate: (id) => {
+        this.associateAdmission(id);
         this.value.deliveryId = id;
         this.value.deliveryIds ??= [];
         if (id && !this.value.deliveryIds.includes(id)) this.value.deliveryIds.push(id);
@@ -153,6 +154,27 @@ export class Tasks {
     const snapshot = structuredClone(this.value);
     this.writes = this.writes.catch(() => {}).then(() => saveTask(this.config, snapshot));
     this.writes.catch(() => {});
+  }
+  associateAdmission(id) {
+    if (!id) return;
+    const byId = new Map(this.value.steps.map((step) => [step.id, step]));
+    let root = this.step;
+    while (root && root.key !== 'delivery-start') root = byId.get(root.parentId);
+    if (!root || root.status !== 'RUNNING' || root.deliveryId) return;
+    // Admission downloads can finish before the delivery identity exists. Scope only
+    // this live subtree; genuine round scans and previously accepted work stay intact.
+    const children = new Map();
+    for (const step of this.value.steps) {
+      if (!children.has(step.parentId)) children.set(step.parentId, []);
+      children.get(step.parentId).push(step);
+    }
+    const pending = [root];
+    while (pending.length) {
+      const step = pending.pop();
+      if (step.deliveryId && step.deliveryId !== id) continue;
+      step.deliveryId = id;
+      pending.push(...(children.get(step.id) ?? []));
+    }
   }
   report(event) {
     if (!['RUNNING', 'CANCELLING'].includes(this.value?.status)) return;

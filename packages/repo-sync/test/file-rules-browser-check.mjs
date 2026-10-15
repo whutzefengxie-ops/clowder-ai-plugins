@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -39,7 +40,7 @@ const projects = await createProjectWorkspace(file),
   server = createReceiverServer(null, { projects });
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
   executablePath: process.env.REPO_SYNC_CHROME,
 });
@@ -156,6 +157,6 @@ try {
   );
 } finally {
   await page.close();
-  await browser.close();
+  await closeBrowser();
   await server.shutdown();
 }

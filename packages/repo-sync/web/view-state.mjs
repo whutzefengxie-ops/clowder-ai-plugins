@@ -10,7 +10,7 @@ export function retainView(content, binding, revision) {
       ? JSON.stringify([
           form.dataset.form ?? '',
           form.dataset.source ?? '',
-          ...['deliveryId', 'previousUrl', 'path'].map((name) => form.elements.namedItem(name)?.value ?? ''),
+          ...['deliveryId', 'previousUrl', 'path', 'runId'].map((name) => form.elements.namedItem(name)?.value ?? ''),
         ])
       : element.closest('.record-list')
         ? 'history-filter'
@@ -24,6 +24,8 @@ export function retainView(content, binding, revision) {
           value: active.value,
           start: active.selectionStart,
           end: active.selectionEnd,
+          policy: active.form?.dataset.form === 'configure-continuation',
+          renderedValue: [...(active.options ?? [])].find((option) => option.defaultSelected)?.value,
         }
       : null;
   const secrets = controls
@@ -40,7 +42,13 @@ export function retainView(content, binding, revision) {
     if (focused && (sameRevision || !controls.some((element) => element === active && element.type === 'password'))) {
       const field = find(focused);
       if (field && !field.disabled) {
-        field.value = focused.value;
+        // Keep an unsaved choice only while its server baseline is unchanged.
+        // A newer run/control decision wins over an older focused DOM value.
+        if (
+          !focused.policy ||
+          focused.renderedValue === [...(field.options ?? [])].find((option) => option.defaultSelected)?.value
+        )
+          field.value = focused.value;
         field.focus({ preventScroll: true });
         if (typeof focused.start === 'number' && ['text', 'search', 'password', 'email', 'url'].includes(field.type))
           try {

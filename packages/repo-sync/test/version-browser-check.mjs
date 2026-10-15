@@ -1,3 +1,4 @@
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -14,7 +15,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.REPO_SYNC_PLAYWRIGHT || 'playwright');
 const evidence = process.env.REPO_SYNC_EVIDENCE || join(tmpdir(), 'repo-sync-version-evidence');
 await mkdir(evidence, { recursive: true });
-const browser = await chromium.launch({
+const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
   ...(process.env.REPO_SYNC_CHROME ? { executablePath: process.env.REPO_SYNC_CHROME } : {}),
 });
@@ -157,10 +158,15 @@ try {
       );
       throw error;
     } finally {
+      console.log(`Cleanup version ${conflicting}: closing page`);
       await page.close();
+      console.log(`Cleanup version ${conflicting}: closing server`);
       await new Promise((done) => server.close(done));
+      console.log(`Cleanup version ${conflicting}: server closed`);
     }
   }
 } finally {
-  await browser.close();
+  console.log('Cleanup version: closing browser');
+  await closeBrowser();
+  console.log('Cleanup version: browser closed');
 }
