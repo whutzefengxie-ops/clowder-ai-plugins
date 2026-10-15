@@ -50,7 +50,7 @@ export function renderTask(task) {
   const steps = `<ol class="operation-steps">${task.steps.map(stepView).join('')}</ol>`;
   const error =
     task.status === 'FAILED'
-      ? errorGuide(task.error, { action: actions[task.action] ?? task.action })
+      ? errorGuide(task.error, { action: actions[task.action] ?? task.action, deliveryId: task.deliveryId })
       : errorView(task);
   const cancel = task.cancellable
     ? `<button type="button" data-cancel-operation>${task.action === 'prepare' ? '取消候选准备' : '取消当前读取 / 下载'}</button>`

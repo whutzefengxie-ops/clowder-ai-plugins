@@ -7,6 +7,7 @@ import { groupLandings } from './github-landings.mjs';
 import { git } from './process.mjs';
 import { attachIssueRequirements } from './requirements.mjs';
 import { sourceTarget } from './source-target.mjs';
+import { assertTransferWritable } from './transfer-state.mjs';
 
 export { groupLandings } from './github-landings.mjs';
 export function githubRepository(url) {
@@ -25,6 +26,7 @@ export async function discover(receiver, selection, provider = nativeProvider) {
   return withGithub(receiver.config, () => receiver.store.locked(() => discoverLocked(receiver, selection, provider)));
 }
 async function discoverLocked(receiver, selection, provider) {
+  await assertTransferWritable(receiver.config);
   const state = await receiver.read();
   if (!state) fail('NOT_ADOPTED', '先登记基线');
   if (receiver.active(state)) fail('RECOVERY_FIRST', '先恢复未完成交付，再扫描新的范围');

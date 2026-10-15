@@ -9,6 +9,7 @@ import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-setting
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
 import { recordDelivery } from './recording.mjs';
 import { configuredReceiver } from './settings.mjs';
+import { assertTransferWritable } from './transfer-state.mjs';
 
 const allowed = new Set([
   ...issueInputKeys,
@@ -48,6 +49,7 @@ export async function createConnection(file, options = {}) {
     if (!input || Object.keys(input).some((key) => !allowed.has(key)))
       fail('INVALID_CONFIGURATION_INPUT', '网页只接受仓库、分支、模式与文件规则，不能提交执行命令或目录');
     await current();
+    await assertTransferWritable(receiver?.config);
     if (input.expectedRevision !== revision)
       fail('CONFIGURATION_CHANGED', '配置已变化，请刷新后重新核对，未覆盖原配置');
     if (!editable)
@@ -112,6 +114,7 @@ export async function createConnection(file, options = {}) {
     save: (input) => configurationLock(path, () => save(input)),
     run: (input, options = {}) =>
       configurationLock(path, async () => {
+        await assertTransferWritable((await current())?.config);
         const editor = editors.get(input.action);
         if (editor) return editor(input);
         const bound = await current();

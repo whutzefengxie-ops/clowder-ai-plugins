@@ -3,6 +3,7 @@ import { readText, writeJson } from './atomic-file.mjs';
 import { fail, validateConfig } from './config.mjs';
 import { Receiver } from './engine.mjs';
 import { privateLocation } from './private-config.mjs';
+import { assertTransferWritable } from './transfer-state.mjs';
 
 export async function configuredReceiver(config) {
   await assertStateLocation(config);
@@ -51,6 +52,7 @@ async function assertStateLocation(config) {
 }
 export async function configure(receiver, input) {
   return receiver.store.locked(async () => {
+    await assertTransferWritable(receiver.config);
     if (!['continuous', 'version'].includes(input.mode)) fail('INVALID_MODE', '请选择同步模式');
     if (await receiver.read())
       fail('ALREADY_ADOPTED', '已启用绑定不能更换模式或文件规则，请为另一种模式配置独立台账目录');

@@ -27,7 +27,8 @@ export function createGithubAuthentication(snapshot, refresh) {
   function feedback(message) {
     const panel = document.querySelector('#github-source-auth');
     if (!panel) return;
-    panel.open = true;
+    for (let parent = panel; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') parent.open = true;
     panel.querySelector('[data-github-feedback]').textContent = message;
     panel.querySelector('[data-github-feedback]').scrollIntoView({ block: 'nearest' });
   }
@@ -41,6 +42,7 @@ export function createGithubAuthentication(snapshot, refresh) {
     try {
       await request('/api/github-auth', { token });
       await refresh();
+      document.dispatchEvent(new CustomEvent('repo-sync-auth-provided', { detail: { kind: 'github' } }));
       feedback('GitHub 读取令牌已提供，仅在当前服务内存。请只读验证，或重新读取目标版本的 PR 清单；尚未开始同步。');
     } catch (error) {
       feedback(error.message);

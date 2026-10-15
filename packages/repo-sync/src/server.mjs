@@ -18,6 +18,8 @@ import { publicApi, publicPlatform } from './pr-settings.mjs';
 import { recordDetail, recordList } from './records.mjs';
 import { checkProjectInput, projectRequest, serverScopes } from './server-projects.mjs';
 import { configure } from './settings.mjs';
+import { transferRequest } from './transfer-http.mjs';
+import { transferState } from './transfer-state.mjs';
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), '../web');
 const assets = new Map([
@@ -79,6 +81,10 @@ const assets = new Map([
     'live-workflow.mjs',
     'continuation-view.mjs',
     'action-scope.mjs',
+    'transfer-view.mjs',
+    'transfers.mjs',
+    'transfers.css',
+    'recovery-navigation.mjs',
   ].map((file) => [`/${file}`, file]),
 ]);
 export function createReceiverServer(receiver, options = {}) {
@@ -221,6 +227,7 @@ async function get(receiver, options, token, path, response, url = '') {
   const compact = new URL(url || '/', 'http://localhost').searchParams.get('compact') === '1';
   return send(response, 200, {
     token,
+    transfer: await transferState(receiver?.config),
     sourceAuthentication: githubAuthentication(receiver?.config),
     journeyProgress: journeyProgress(state),
     state:
@@ -298,6 +305,7 @@ async function workspaceSnapshot(options) {
 
 async function privateRequest(request, response, path, context, token, owner) {
   const { tasks } = context;
+  if (await transferRequest(request, response, path, context, token)) return true;
   if (await githubAuthRequest(request, response, path, context, token, owner)) return true;
   if (await issueAuthRequest(request, response, path, context, token, owner)) return true;
   if (await recordRequest(request, response, context.receiver, tasks, token, path)) return true;

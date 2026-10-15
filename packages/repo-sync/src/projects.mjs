@@ -5,8 +5,10 @@ import { createConnection } from './connections.mjs';
 import { safeError } from './execution.mjs';
 import { readPrivate } from './private-config.mjs';
 import { projectRegistry, validProjectId } from './project-registry.mjs';
+import { transferWorkspace } from './transfer-workspace.mjs';
+import { receivingRepositoryKey } from './repository-identity.mjs';
 
-export async function createProjectWorkspace(file) {
+export async function createProjectWorkspace(file, options = {}) {
   const registry = await projectRegistry(file),
     connections = new Map();
   async function get(id = 'default') {
@@ -60,7 +62,11 @@ export async function createProjectWorkspace(file) {
       const config = (await readPrivate(registry.configuration(entry.id))).config;
       if (entry.configured && !config)
         fail('PROJECT_CONFIGURATION_MISSING', '另一项目配置缺失，无法证明接收范围互不冲突；请先恢复原配置');
-      if (config && config.internalUrl === input.internalUrl && config.targetBranch === input.targetBranch)
+      if (
+        config &&
+        receivingRepositoryKey(config.internalUrl) === receivingRepositoryKey(input.internalUrl) &&
+        config.targetBranch === input.targetBranch
+      )
         fail(
           'PROJECT_DESTINATION_IN_USE',
           `项目“${entry.name}”已接管此内部仓库与分支，请选择该项目继续，或配置其他接收仓库 / 分支`,
@@ -93,6 +99,7 @@ export async function createProjectWorkspace(file) {
   }
   if ((await registry.read()).value.projects.length === 1) await get();
   return {
+    transfers: await transferWorkspace(file, options),
     connection: get,
     list,
     current: async () => (await get()).current(),

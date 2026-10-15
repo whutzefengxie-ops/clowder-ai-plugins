@@ -59,7 +59,7 @@ function stageError(stage, failedStage, failure, historical, snapshot, record) {
       task.persistence?.error?.code === failure.error.code ||
       task.steps?.some((step) => step.stage === stage && step.error?.code === failure.error.code),
   );
-  return `${represented ? '' : errorGuide(failure.error, { stage })}${historical ? '' : diagnostics(failure.error, snapshot, esc)}`;
+  return `${represented ? '' : errorGuide(failure.error, { stage, deliveryId: record?.delivery?.id, historical })}${historical ? '' : diagnostics(failure.error, snapshot, esc)}`;
 }
 function editableStage(stage, delivery, snapshot, historical) {
   if (historical || delivery.id !== snapshot.state?.active?.id) return '';

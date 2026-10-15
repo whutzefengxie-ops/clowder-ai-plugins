@@ -1,4 +1,5 @@
 import { esc } from './ui.mjs';
+import { repairButton } from './recovery-navigation.mjs';
 const guides = [
   [
     /BASELINE_MISMATCH|TREE_MISMATCH|UNAPPROVED_DIFFERENCE|CORE_DRIFT/,
@@ -60,7 +61,7 @@ export function errorGuide(error, context = {}) {
     '原因尚未确认。保留当前交付，核对具体失败步骤与安全详情，再恢复原操作。',
   ];
   const diagnostic = `错误码：${error.code ?? 'OPERATION_FAILED'}\n步骤：${context.stage ?? '当前步骤'}\n动作：${context.action ?? '未记录'}\n此摘要不含仓库地址、文件内容、Token 或原始日志。`;
-  return `<section class="error-guide" role="alert"><h3>× ${title}</h3><p>${esc(error.message)}</p><p><b>接下来：</b>${next}</p><p>已创建对象与已接受版本保留；恢复按原对象核对。</p><details><summary>错误码与脱敏诊断摘要</summary><pre class="bounded-text" data-diagnostic-text>${esc(diagnostic)}</pre><button type="button" data-copy-diagnostic>复制摘要</button><span data-copy-result role="status"></span></details></section>`;
+  return `<section class="error-guide" role="alert"><h3>× ${title}</h3><p>${esc(error.message)}</p><p><b>接下来：</b>${next}</p>${repairButton(error, context)}<p>已创建对象与已接受版本保留；恢复按原对象核对。</p><details><summary>错误码与脱敏诊断摘要</summary><pre class="bounded-text" data-diagnostic-text>${esc(diagnostic)}</pre><button type="button" data-copy-diagnostic>复制摘要</button><span data-copy-result role="status"></span></details></section>`;
 }
 globalThis.document?.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-copy-diagnostic]');

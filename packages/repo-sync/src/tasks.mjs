@@ -4,6 +4,7 @@ import { runExecution, safeError } from './execution.mjs';
 import { configSnapshot, phaseLocation } from './recording.mjs';
 import { Store } from './store.mjs';
 import { publicTask, readTask, saveTask, taskInput, taskPlan } from './task-store.mjs';
+import { assertTransferWritable } from './transfer-state.mjs';
 
 const running = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
 export class Tasks {
@@ -89,6 +90,7 @@ export class Tasks {
       if (old.inputHash !== hash) fail('REQUEST_CHANGED', '相同请求标识不能更改任务参数');
       return this.latest(old.id);
     }
+    await assertTransferWritable(receiver.config);
     if (this.busy() || running.has((await this.latest())?.status))
       fail('OPERATION_RUNNING', '已有任务正在执行，请读取原任务；不能重复发起');
     this.config = receiver.config;

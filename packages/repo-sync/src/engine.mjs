@@ -19,6 +19,7 @@ import { recordDelivery } from './recording.mjs';
 import { event, Store } from './store.mjs';
 import { cancelVersion, selectTag, sourceStillValid, tags, versionTemplate } from './version.mjs';
 import { VersionGitReceiver } from './version-git.mjs';
+import { assertTransferWritable } from './transfer-state.mjs';
 
 export class Receiver {
   constructor(input) {
@@ -35,6 +36,7 @@ export class Receiver {
   }
   async change(action, preserveError = false) {
     return this.store.locked(async () => {
+      await assertTransferWritable(this.config);
       const state = await this.read();
       if (!state) fail('NOT_ADOPTED', '先核验并登记两侧已有基线');
       if (execution()?.deliveryId && this.active(state)?.id !== execution().deliveryId)
@@ -66,6 +68,7 @@ export class Receiver {
   }
   async adopt(upstream, internal) {
     return this.store.locked(async () => {
+      await assertTransferWritable(this.config);
       if (await this.read()) fail('ALREADY_ADOPTED', '已有台账，不能重新初始化覆盖');
       const heads = await this.git.fetch();
       ({ upstream, internal } = await phase('baseline-check', '核验 U0 / I0 与历史', () =>

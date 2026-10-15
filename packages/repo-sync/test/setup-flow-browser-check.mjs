@@ -1,12 +1,11 @@
 import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
 import { phase } from '../src/execution.mjs';
-import { command } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
@@ -36,6 +35,22 @@ const visible = (selector) =>
     const rect = element.getBoundingClientRect();
     return rect.top >= 0 && rect.top < innerHeight - 80;
   });
+let releaseHeads = () => {};
+async function holdNextHeads() {
+  releaseHeads();
+  // Saving the connection replaces its Receiver. Probe the currently bound one each time.
+  const current = await connection.current(),
+    original = current.git.heads.bind(current.git);
+  const gate = new Promise((release) => {
+    releaseHeads = release;
+  });
+  current.git.heads = async () => {
+    current.git.heads = original;
+    // Keep the genuine task running until the browser has measured progress and visibility.
+    await phase('test-probe-wait', '等待独立测试仓连接', () => gate);
+    return original();
+  };
+}
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/?view=configuration`);
   await page.locator('[name="mode"]').selectOption('version');
@@ -61,19 +76,17 @@ try {
     path: join(evidence, 'setup-current-baseline-desktop.png'),
     fullPage: false,
   });
-  const receiver = await connection.current(),
-    originalHeads = receiver.git.heads.bind(receiver.git);
-  receiver.git.heads = async () => {
-    await phase('test-probe-wait', '等待独立测试仓连接', () =>
-      command(process.execPath, ['-e', 'setTimeout(()=>{},1200)']),
-    );
-    return originalHeads();
-  };
+  const receiver = await connection.current();
   await page.getByLabel('上次已经接收的外部版本').fill(f.u0);
-  await page.getByRole('button', { name: '读取两侧当前版本' }).click();
-  await page.locator('#operation [data-operation-state="RUNNING"]').waitFor();
-  assert.ok(await page.locator('#baseline-step #operation').count());
-  assert.ok(await visible('#operation'));
+  await holdNextHeads();
+  try {
+    await page.getByRole('button', { name: '读取两侧当前版本' }).click();
+    await page.locator('#operation [data-operation-state="RUNNING"]').waitFor();
+    assert.ok(await page.locator('#baseline-step #operation').count());
+    assert.ok(await visible('#operation'));
+  } finally {
+    releaseHeads();
+  }
   await page
     .locator('#observed-heads')
     .getByText(/读取成功/)
@@ -96,14 +109,16 @@ try {
   await page.getByLabel('内部当前接收位置').waitFor();
   assert.equal(await page.locator('[data-setup-repositories]').evaluate((element) => element.open), false);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: '读取两侧当前版本' }).click();
-  await page.locator('#operation [data-operation-state="RUNNING"]').waitFor();
-  assert.ok(await visible('#operation'));
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  await page.screenshot({
-    path: join(evidence, 'setup-progress-mobile.png'),
-    fullPage: false,
-  });
+  await holdNextHeads();
+  try {
+    await page.getByRole('button', { name: '读取两侧当前版本' }).click();
+    await page.locator('#operation [data-operation-state="RUNNING"]').waitFor();
+    assert.ok(await visible('#operation'));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: join(evidence, 'setup-progress-mobile.png'), fullPage: false });
+  } finally {
+    releaseHeads();
+  }
   await page
     .locator('#observed-heads')
     .getByText(/读取成功/)
@@ -121,7 +136,13 @@ try {
   console.log(
     'PASS: saved repositories collapse, baseline focus and viewport, inline progress, draft-safe edit/reload, desktop/mobile and real Git adoption.',
   );
+} catch (error) {
+  await writeFile(join(evidence, 'setup-flow-failure.txt'), await page.locator('body').innerText());
+  await page.screenshot({ path: join(evidence, 'setup-flow-failure.png'), fullPage: true });
+  console.error(JSON.stringify({ evidence, pageErrors: errors, error: error.message }));
+  throw error;
 } finally {
+  releaseHeads();
   await closeBrowser();
   await server.shutdown();
 }

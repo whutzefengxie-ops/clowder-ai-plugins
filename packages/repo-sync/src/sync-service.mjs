@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { safeError } from './execution.mjs';
+import { transferState } from './transfer-state.mjs';
 
 // The server owns observation. Browser lifecycle never owns merge/Issue completion.
 export class SyncService {
@@ -24,6 +25,8 @@ export class SyncService {
     const scope = await this.resolveScope(),
       receiver = scope.receiver;
     if (!receiver || scope.tasks.busy()) return;
+    const transfer = await transferState(receiver.config);
+    if (transfer && transfer.status !== 'ACTIVE') return;
     const state = await receiver.status(),
       run = state?.automation;
     if (!run || !['RUNNING', 'WAITING_REVIEW'].includes(run.status)) return;

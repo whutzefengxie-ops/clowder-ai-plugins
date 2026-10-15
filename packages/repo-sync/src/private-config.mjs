@@ -42,6 +42,15 @@ async function outsideRepository(path) {
     if (basename(parent).toLowerCase() === 'node_modules')
       fail('PRIVATE_CONFIG_IN_INSTALLATION', '配置不能放在依赖安装目录');
     try {
+      const [head, objects, refs] = await Promise.all(
+        ['HEAD', 'objects', 'refs'].map((name) => lstat(join(parent, name))),
+      );
+      if (head.isFile() && objects.isDirectory() && refs.isDirectory())
+        fail('PRIVATE_CONFIG_IN_REPOSITORY', '配置与迁移台账不能放在裸 Git 仓库中，请选择独立私有目录');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    try {
       await access(join(parent, '.git'));
     } catch (error) {
       if (error.code === 'ENOENT') {

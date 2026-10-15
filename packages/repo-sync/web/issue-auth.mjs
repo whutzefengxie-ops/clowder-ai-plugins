@@ -1,4 +1,5 @@
 import { updateIssueInference } from './issue-inference.mjs';
+import { esc } from './ui.mjs';
 
 export function tokenField() {
   return '<label>内部平台 Token<input type="password" name="issueToken" autocomplete="off" placeholder="输入 Token，不回显原值"></label><p>仅供当前项目的平台 API 使用；只保留在本次服务内存，重启后需要重新输入，不保存到浏览器草稿、配置或执行记录。</p>';
@@ -7,7 +8,7 @@ export function authenticationForm(config) {
   const api = config.platformApi ?? config.issueAutomation;
   if (api?.mode !== 'gitlab') return '';
   const available = api.authentication?.available;
-  return `<section id="issue-auth"><h4>平台认证与接口验证</h4><p>${available ? '认证已提供；仍需验证接口。' : '需要提供 Token，或恢复原环境变量。'}输入 Token 不代表平台接口已通过核验。</p><form data-secret-form="issue-token">${tokenField()}<button type="submit">提供 / 更换 Token（本次服务）</button><button type="button" data-issue-check>验证平台接口（只读）</button><button type="button" data-issue-clear>清除本次输入的 Token</button></form><p data-auth-feedback role="status"></p></section>`;
+  return `<section id="issue-auth"><h4>平台认证与接口验证</h4><p>${available ? '认证已提供；仍需验证接口。' : '需要提供 Token，或恢复原环境变量。'}输入 Token 不代表平台接口已通过核验。</p><p class="credential-scope"><b>此 Token 的 API 接收地址：</b><code>${esc(api.apiUrl ?? '请先核对平台接口配置')}</code><br>平台项目：<code>${esc(api.projectId ?? '未配置')}</code>。导入的配置也会使用此地址；请核对它属于预期的内部平台，再提供认证和检查。</p><form data-secret-form="issue-token">${tokenField()}<button type="submit">提供 / 更换 Token（本次服务）</button><button type="button" data-issue-check>验证平台接口（只读）</button><button type="button" data-issue-clear>清除本次输入的 Token</button></form><p data-auth-feedback role="status"></p></section>`;
 }
 export function createIssueAuthentication(snapshot, refresh, errorPanel) {
   async function request(path, value, scope = snapshot()) {
@@ -37,6 +38,7 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
   async function set(value, scope) {
     await request('/api/issue-auth', { token: value }, scope);
     await refresh();
+    if (value) document.dispatchEvent(new CustomEvent('repo-sync-auth-provided', { detail: { kind: 'platform' } }));
   }
   function feedback(message) {
     const target = document.querySelector('[data-auth-feedback]');

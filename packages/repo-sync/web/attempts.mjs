@@ -63,7 +63,7 @@ export function attempts(stage, record, operation, historical, snapshot = {}) {
     });
   }
   addUnscopedFailure(groups, tasks, stage, delivery);
-  return `<ol class="substeps">${[...groups.values()].map((group) => stepView(group, stage)).join('')}</ol>${operationSlot(stage, operation, delivery, historical)}`;
+  return `<ol class="substeps">${[...groups.values()].map((group) => stepView(group, stage, historical)).join('')}</ol>${operationSlot(stage, operation, delivery, historical)}`;
 }
 
 function selectedTasks(record, operation, historical, deliveryId) {
@@ -77,7 +77,7 @@ function selectedTasks(record, operation, historical, deliveryId) {
   return tasks.sort((a, b) => (Date.parse(a.startedAt) || 0) - (Date.parse(b.startedAt) || 0));
 }
 
-function stepView(group, stage) {
+function stepView(group, stage, historical) {
   const { actual, latest, status } = projectStep(group);
   const label = group.label;
   const tone = status === 'FAILED' ? 'bad' : status === 'DONE' ? 'good' : '';
@@ -86,7 +86,15 @@ function stepView(group, stage) {
     : group.key === 'platform-review'
       ? '平台审批时间未记录；实际合入结果由第五阶段核验。'
       : labels[status];
-  const error = status === 'FAILED' ? errorGuide(latest?.step.error, { stage, action: latest?.task.action }) : '';
+  const error =
+    status === 'FAILED'
+      ? errorGuide(latest?.step.error, {
+          stage,
+          action: latest?.task.action,
+          deliveryId: latest?.step.deliveryId ?? latest?.task.deliveryId,
+          historical,
+        })
+      : '';
   return `<li data-step-key="${esc(group.key)}" data-operation-state="${esc(status)}" data-step-state="${states[status] ?? 'pending'}"><span class="${tone}">${marks[status] ?? '○'}</span> <b>${esc(label)}</b> · ${labels[status] ?? '状态未记录'}<small>${timing}</small>${latest ? taskProgress(latest.step, esc) : ''}${error}${actual.map(evidence).join('')}</li>`;
 }
 

@@ -5,6 +5,8 @@ import { createSetupFlow } from './setup-flow.mjs';
 import { retainView } from './view-state.mjs';
 import { previewPanel } from './preview-view.mjs';
 import { guardRenderedScope, snapshotIdentity } from './action-scope.mjs';
+import { createTransfers } from './transfers.mjs';
+import { createRecoveryNavigation, showActivity } from './recovery-navigation.mjs';
 
 import { captureDraft, configuration, restoreDraft } from './connections.mjs';
 import { baselineContent, diagnostics } from './diagnostics.mjs';
@@ -33,6 +35,12 @@ let availableTags = [];
 const projectNavigation = createProjectNavigation(() => snapshot, saveDraft);
 const issueAuthentication = createIssueAuthentication(() => snapshot, refresh, errorPanel);
 const githubAuthentication = createGithubAuthentication(() => snapshot, refresh);
+const transfers = createTransfers(() => snapshot, refresh);
+const recovery = createRecoveryNavigation({
+  snapshot: () => snapshot,
+  changeView,
+  action: (...args) => action(...args),
+});
 const records = createHistory(() => snapshot, render);
 const focusTask = createTaskFocus();
 const setup = createSetupFlow({ snapshot: () => snapshot, render, action: (...args) => action(...args) });
@@ -85,6 +93,8 @@ function render({ keepScroll = false } = {}) {
     view === 'configuration'
       ? `${configuration(snapshot, esc, sha, button, setup.state())}${snapshot.state && snapshot.config && snapshot.connection ? `<details class="card" data-platform-options><summary>PR / Issue 平台设置（按需修改）</summary>${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}</details>` : ''}`
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
+  transfers.render(content, view);
+  recovery.mount(content, view);
   content.dataset.binding = snapshot.config?.bindingId ?? 'setup';
   content.dataset.revision = snapshot.connection?.revision ?? '';
   content.dataset.actionScope = snapshotIdentity(snapshot);
@@ -329,14 +339,6 @@ projectNavigation
     errorPanel.textContent = error.message;
     errorPanel.hidden = false;
   });
-function showActivity(task) {
-  const activity = document.getElementById('current-activity');
-  if (activity)
-    activity.textContent =
-      task && ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status)
-        ? `当前同步：${task.status} · 状态最近成功读取 ${task.observedAt ?? '未记录'} · 可点击“当前同步”返回查看`
-        : '';
-}
 setInterval(() => {
   if (
     ['RUNNING', 'WAITING_REVIEW'].includes(snapshot?.state?.automation?.status) ||

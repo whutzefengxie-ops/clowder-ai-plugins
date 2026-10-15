@@ -4,6 +4,7 @@ import { discover } from './github.mjs';
 import { createProjectWorkspace } from './projects.mjs';
 import { createReceiverServer, listen } from './server.mjs';
 import { configuredReceiver } from './settings.mjs';
+import { assertTransferWritable } from './transfer-state.mjs';
 
 const [operation, configPath, ...args] = process.argv.slice(2);
 try {
@@ -49,6 +50,7 @@ try {
     serve,
   };
   if (!Object.hasOwn(actions, operation)) throw new Error('未知命令');
+  if (!['setup', 'serve', 'status', 'unlock'].includes(operation)) await assertTransferWritable(receiver.config);
   const result = await actions[operation]();
   if (!['setup', 'serve'].includes(operation))
     console.log(JSON.stringify(operation === 'status' ? result : (result ?? { ok: true }), null, 2));
