@@ -35,7 +35,11 @@ function task(id, status, stepStatus) {
         ...(stepStatus === 'FAILED'
           ? {
               finishedAt: stamp,
-              error: { code: 'CHECK_FAILED', message: '候选检查未完成', stderr: 'secret-must-not-render' },
+              error: {
+                code: 'CHECK_FAILED',
+                message: '候选检查未完成',
+                stderr: 'secret-must-not-render',
+              },
             }
           : {}),
       },
@@ -43,9 +47,22 @@ function task(id, status, stepStatus) {
   };
 }
 function record(tasks = []) {
-  return { delivery, tasks, current: true, configurations: [], issues: [], events: [], missingTasks: [], taskPage: {} };
+  return {
+    delivery,
+    tasks,
+    current: true,
+    configurations: [],
+    issues: [],
+    events: [],
+    missingTasks: [],
+    taskPage: {},
+  };
 }
-const snapshot = { config: { mode: 'version' }, state: { active: delivery, issues: {} }, platform: {} };
+const snapshot = {
+  config: { mode: 'version' },
+  state: { active: delivery, issues: {} },
+  platform: {},
+};
 
 test('each real substep has one current row with retries folded underneath and the latest state on that row', () => {
   const first = task('1'.repeat(32), 'FAILED', 'FAILED');
@@ -83,6 +100,7 @@ test('workflow uses the same substep list for rendering and incremental updates,
   assert.equal((html.match(/data-step-key="candidate-check"/g) ?? []).length, 1);
   assert.equal((html.match(/class="substeps"/g) ?? []).length, 5);
   assert.match(html, /data-stage="2" data-stage-state="failed"/);
+  assert.match(html, /data-stage-detail>异常 · CHECK_FAILED · 展开查看处理建议/);
   assert.match(html, /error-guide/);
   assert.doesNotMatch(html, /secret-must-not-render|class="attempt-steps"/);
   assert.doesNotMatch(
@@ -134,10 +152,18 @@ test('pre-delivery flow accepts the shared action policy so audit repair never o
         action: 'synchronize',
         status: 'SUCCEEDED',
         steps: [],
-        persistence: { status: 'FAILED', error: { code: 'TASK_STORE_FAILED', message: '执行记录未保存' } },
+        persistence: {
+          status: 'FAILED',
+          error: { code: 'TASK_STORE_FAILED', message: '执行记录未保存' },
+        },
       },
     },
-    { stage: 5, special: 'persist-operation', label: '只补存原任务记录', text: '只修记录，不重跑业务。' },
+    {
+      stage: 5,
+      special: 'persist-operation',
+      label: '只补存原任务记录',
+      text: '只修记录，不重跑业务。',
+    },
   );
   assert.equal((html.match(/data-persist-operation/g) ?? []).length, 1);
   assert.doesNotMatch(html, /data-action="resume-sync"|data-action="synchronize"/);
@@ -147,10 +173,16 @@ test('pre-delivery flow accepts the shared action policy so audit repair never o
 test('live admission keeps showing scoped substeps before the next status read supplies the delivery', () => {
   const operation = task('6'.repeat(32), 'RUNNING', 'RUNNING');
   operation.steps[0].deliveryId = delivery.id;
-  const html = attempts(2, null, operation, false, { config: { mode: 'version' }, state: {} });
+  const html = attempts(2, null, operation, false, {
+    config: { mode: 'version' },
+    state: {},
+  });
   assert.match(html, /data-step-key="candidate-check"[^>]*data-operation-state="RUNNING"/);
   assert.equal((html.match(/id="operation"/g) ?? []).length, 1);
-  const foreign = { ...record([operation]), delivery: { ...delivery, id: 'f'.repeat(24) } };
+  const foreign = {
+    ...record([operation]),
+    delivery: { ...delivery, id: 'f'.repeat(24) },
+  };
   const isolated = attempts(2, foreign, operation, false, snapshot);
   assert.doesNotMatch(isolated, /data-operation-state="RUNNING"|data-attempt="/);
 });
@@ -185,7 +217,9 @@ test('pre-delivery stage completion requires a nonempty set of actual steps that
     },
   });
   assert.match(html, /data-stage="1" data-stage-state="done"[^>]*><summary><span class="stage-mark good">✓/);
-  assert.match(html, /data-stage="2" data-stage-state="current" open/);
+  assert.match(html, /data-stage="2" data-stage-state="current"/);
+  assert.doesNotMatch(html, /<details[^>]*\sopen(?:\s|>)/);
+  assert.match(html, /data-stage-detail>正在：准备提交映射并保留内部文件/);
   assert.match(html, /data-stage="3" data-stage-state="pending"/);
   assert.doesNotMatch(html, /data-stage="[345]" data-stage-state="done"/);
 });

@@ -1,15 +1,26 @@
 import { errorGuide } from './error-guide.mjs';
-import { plannedSteps, businessStep, projectStep } from './step-plan.mjs';
+import { automaticMergeActive } from './flow-stage.mjs';
+import { businessStep, plannedSteps, projectStep } from './step-plan.mjs';
 import { taskProgress } from './task-progress.mjs';
 import { esc, stageOf, when } from './ui.mjs';
 
-const marks = { DONE: '✓', RUNNING: '●', FAILED: '×', PENDING: '○', WAITING: '●', UNRECORDED: '—', SKIPPED: '—' };
+const marks = {
+  DONE: '✓',
+  RUNNING: '◌',
+  FAILED: '×',
+  PENDING: '○',
+  WAITING: '!',
+  AUTO_WAIT: '◷',
+  UNRECORDED: '—',
+  SKIPPED: '—',
+};
 const states = {
   DONE: 'done',
   RUNNING: 'current',
   FAILED: 'failed',
   PENDING: 'pending',
   WAITING: 'current',
+  AUTO_WAIT: 'current',
   UNRECORDED: 'unrecorded',
   SKIPPED: 'skipped',
 };
@@ -19,11 +30,49 @@ const labels = {
   FAILED: '异常待处理',
   PENDING: '计划 · 尚未执行',
   WAITING: '等待人工审核',
+  AUTO_WAIT: '自动等待',
   UNRECORDED: '执行证据未记录',
   SKIPPED: '不适用 · 本笔无关联 Issue',
 };
 
 export function attempts(stage, record, operation, historical, snapshot = {}) {
+  const groups = stageGroups(stage, record, operation, historical, snapshot);
+  return `<ol class="substeps">${[...groups.values()].map((group) => stepView(group, stage, historical)).join('')}</ol>${operationSlot(stage, operation, record?.delivery ?? snapshot.state?.active, historical)}`;
+}
+
+export function stageSummary(stage, record, operation, historical, snapshot = {}, stageState = 'pending') {
+  const groups = [...stageGroups(stage, record, operation, historical, snapshot).values()];
+  if (historical) return '历史执行详情按需展开';
+  const delivery = record?.delivery ?? snapshot.state?.active;
+  if (
+    stage === 4 &&
+    automaticMergeActive(delivery, snapshot.state?.automation) &&
+    delivery?.autoMerge?.reason &&
+    !delivery.mergeObservation &&
+    !delivery.acceptedInternal
+  )
+    return delivery.autoMerge.reason;
+  if (stageState === 'done') return `本阶段已完成 · ${groups.length} 项业务步骤`;
+  if (stage === 5 && stageState === 'pending' && !delivery?.mergeObservation && !delivery?.acceptedInternal)
+    return '确认原 PR 合入后，核验 Git、处理 Issue 并登记接收';
+  const projected = groups.map((group) => ({ group, ...projectStep(group) }));
+  const failed = projected.findLast((item) => item.status === 'FAILED');
+  if (failed) {
+    const code = failed.latest?.step.error?.code ?? failed.latest?.task.error?.code;
+    return `异常${code ? ` · ${code}` : ''} · 展开查看处理建议`;
+  }
+  const active = projected.findLast((item) => ['RUNNING', 'WAITING'].includes(item.status));
+  if (active) return `${active.status === 'WAITING' ? '等待' : '正在'}：${active.group.label}`;
+  const done = projected.filter(({ status }) => ['DONE', 'SKIPPED'].includes(status)).length;
+  const next = projected.find(({ status }) => status === 'PENDING');
+  if (next)
+    return done
+      ? `已完成 ${done} / ${groups.length} 项 · 下一项：${next.group.label}`
+      : `下一项：${next.group.label}`;
+  return `共 ${groups.length} 项业务步骤 · 展开查看`;
+}
+
+function stageGroups(stage, record, operation, historical, snapshot) {
   const delivery = record?.delivery ?? snapshot.state?.active;
   const tasks = selectedTasks(record, operation, historical, delivery?.id);
   const version = (delivery?.mode ?? snapshot.config?.mode) === 'version';
@@ -43,7 +92,8 @@ export function attempts(stage, record, operation, historical, snapshot = {}) {
   for (const task of tasks) {
     const byId = new Map((task.steps ?? []).map((step) => [step.id, step]));
     for (const step of task.steps ?? []) {
-      if (step.stage !== stage || (delivery?.id && step.deliveryId && step.deliveryId !== delivery.id)) continue;
+      if (step.stage !== stage || (delivery?.id && step.deliveryId && step.deliveryId !== delivery.id))
+        continue;
       let parent = byId.get(step.parentId);
       const visited = new Set();
       while (parent && !groups.has(parent.key) && !visited.has(parent.id)) {
@@ -55,20 +105,39 @@ export function attempts(stage, record, operation, historical, snapshot = {}) {
     }
   }
   if (stage === 4 && delivery) {
+    const merged = Boolean(delivery.mergeObservation || delivery.acceptedInternal);
+    const automatic = automaticMergeActive(delivery, historical ? undefined : snapshot.state?.automation);
+    const waiting = delivery.prUrl && !merged;
+    groups.get('merge-readiness').status = merged
+      ? 'DONE'
+      : waiting
+        ? automatic
+          ? 'AUTO_WAIT'
+          : 'SKIPPED'
+        : 'PENDING';
+    groups.get('platform-merge').status = merged && automatic ? 'DONE' : automatic ? 'PENDING' : 'SKIPPED';
+    groups.get('merge-observe').status = merged ? 'DONE' : waiting ? 'AUTO_WAIT' : 'PENDING';
     groups.set('platform-review', {
       key: 'platform-review',
-      label: '在内部平台审核并合入',
-      status: delivery.acceptedInternal ? 'DONE' : delivery.prUrl ? 'WAITING' : 'PENDING',
+      label: delivery.autoMerge?.manual ? delivery.autoMerge.reason : '在内部平台审核并合入',
+      status: merged
+        ? 'DONE'
+        : waiting
+          ? automatic && !delivery.autoMerge?.manual
+            ? 'SKIPPED'
+            : 'WAITING'
+          : 'PENDING',
       entries: [],
     });
   }
   addUnscopedFailure(groups, tasks, stage, delivery);
-  return `<ol class="substeps">${[...groups.values()].map((group) => stepView(group, stage, historical)).join('')}</ol>${operationSlot(stage, operation, delivery, historical)}`;
+  return groups;
 }
 
 function selectedTasks(record, operation, historical, deliveryId) {
   const tasks = [...(record?.tasks ?? [])];
-  const owns = !deliveryId || operation?.deliveryId === deliveryId || operation?.deliveryIds?.includes(deliveryId);
+  const owns =
+    !deliveryId || operation?.deliveryId === deliveryId || operation?.deliveryIds?.includes(deliveryId);
   if (!historical && operation && owns) {
     const index = tasks.findIndex((task) => task.id === operation.id);
     if (index >= 0) tasks[index] = operation;
@@ -81,11 +150,6 @@ function stepView(group, stage, historical) {
   const { actual, latest, status } = projectStep(group);
   const label = group.label;
   const tone = status === 'FAILED' ? 'bad' : status === 'DONE' ? 'good' : '';
-  const timing = latest
-    ? `开始 ${when(latest.step.startedAt)} · 结束 ${when(latest.step.finishedAt)}`
-    : group.key === 'platform-review'
-      ? '平台审批时间未记录；实际合入结果由第五阶段核验。'
-      : labels[status];
   const error =
     status === 'FAILED'
       ? errorGuide(latest?.step.error, {
@@ -95,17 +159,22 @@ function stepView(group, stage, historical) {
           historical,
         })
       : '';
-  return `<li data-step-key="${esc(group.key)}" data-operation-state="${esc(status)}" data-step-state="${states[status] ?? 'pending'}"><span class="${tone}">${marks[status] ?? '○'}</span> <b>${esc(label)}</b> · ${labels[status] ?? '状态未记录'}<small>${timing}</small>${latest ? taskProgress(latest.step, esc) : ''}${error}${actual.map(evidence).join('')}</li>`;
+  const waiting = group.key === 'platform-review' && status === 'PENDING';
+  const platformTiming = waiting ? '<small>平台审批时间未记录；实际合入结果由第五阶段核验。</small>' : '';
+  return `<li data-step-key="${esc(group.key)}" data-operation-state="${esc(status)}" data-step-state="${states[status] ?? 'pending'}"><span class="${tone}">${marks[status] ?? '○'}</span> <b>${esc(label)}</b> · ${labels[status] ?? '状态未记录'}${platformTiming}${latest ? taskProgress(latest.step, esc, Date.now(), false) : ''}${error}${actual.map(evidence).join('')}</li>`;
 }
 
 function evidence({ task, step }, index) {
-  return `<details data-attempt="${esc(`${task.id}:${step.id}`)}" data-attempt-task="${esc(task.id)}"><summary>执行证据 ${index + 1} · ${labels[step.status] ?? '状态未记录'} · ${when(step.startedAt)}</summary><small>${esc(step.label)}<br>任务 ${esc(task.id)} · 开始 ${when(step.startedAt)} · 结束 ${when(step.finishedAt)}</small>${taskProgress(step, esc)}${step.error ? `<p class="bad">× ${esc(step.error.code)}：${esc(step.error.message)}</p>` : ''}</details>`;
+  return `<details data-attempt="${esc(`${task.id}:${step.id}`)}" data-attempt-task="${esc(task.id)}"><summary>执行详情 ${index + 1} · ${labels[step.status] ?? '状态未记录'}</summary><small>${esc(step.label)}<br>任务 ${esc(task.id)} · 开始 ${when(step.startedAt)} · 结束 ${when(step.finishedAt)}</small>${taskProgress(step, esc, Date.now(), true)}${step.error ? `<p class="bad">× ${esc(step.error.code)}：${esc(step.error.message)}</p>` : ''}</details>`;
 }
 
 function addUnscopedFailure(groups, tasks, stage, delivery) {
   for (const task of tasks) {
     if (task.persistence?.status === 'FAILED' && stage === 5) {
-      const group = groups.get('execution-record') ?? { key: 'execution-record', entries: [] };
+      const group = groups.get('execution-record') ?? {
+        key: 'execution-record',
+        entries: [],
+      };
       group.entries.push({
         task,
         step: {
@@ -138,10 +207,12 @@ function addUnscopedFailure(groups, tasks, stage, delivery) {
 }
 
 function operationSlot(stage, operation, delivery, historical) {
-  if (historical || (delivery?.id && operation?.deliveryId && operation.deliveryId !== delivery.id)) return '';
+  if (historical || (delivery?.id && operation?.deliveryId && operation.deliveryId !== delivery.id))
+    return '';
   const current =
     operation?.persistence?.status === 'FAILED'
       ? 5
-      : (operation?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage ?? stageOf(delivery));
+      : (operation?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage ??
+        stageOf(delivery));
   return stage === current ? '<div id="operation" aria-live="polite"></div>' : '';
 }

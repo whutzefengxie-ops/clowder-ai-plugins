@@ -1,13 +1,14 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
-import { createReceiverServer } from '../src/server.mjs';
 import { git } from '../src/process.mjs';
+import { createReceiverServer } from '../src/server.mjs';
 import { gitPrFixture } from './git-pr-fixtures.mjs';
+import { openHistory } from './journey-controls.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await gitPrFixture(),
   folder = await mkdtemp(join(tmpdir(), 'repo-sync-operator-'));
@@ -42,11 +43,16 @@ try {
   assert.equal(await page.locator('[name="sourceUrl"]').getAttribute('aria-invalid'), 'true');
   assert.equal(await page.locator('[name="githubToken"]').inputValue(), 'SYNTHETIC_NOT_A_REAL_TOKEN');
   assert.equal(await connection.current(), null);
-  assert.ok(!(await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes('SYNTHETIC_NOT_A_REAL_TOKEN'));
+  assert.ok(
+    !(await page.evaluate(() => JSON.stringify({ ...sessionStorage }))).includes(
+      'SYNTHETIC_NOT_A_REAL_TOKEN',
+    ),
+  );
   await page.locator('[data-mode-card="version"]').click();
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://github.com/demo/core.git');
   await page.getByLabel('外部交付分支').fill('releases');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');
+  await page.getByLabel('PR 创建方式').selectOption('manual');
   await page.getByRole('button', { name: '保存并检查连接 →', exact: true }).click();
   await page.getByLabel('上次已经接收的外部版本').waitFor({ timeout: 30000 });
   assert.equal(await page.locator('[data-setup-repositories]').evaluate((node) => node.open), false);
@@ -67,6 +73,14 @@ try {
   await page.locator('[data-confirm-baseline]').click();
   await page.getByRole('button', { name: '启用并进入同步工作台 →' }).click();
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).waitFor({ timeout: 30000 });
+  // Seed the existing Git adapter for legacy compatibility; new UI deliberately offers API creation.
+  await connection.run({
+    action: 'configure-pr',
+    expectedRevision: connection.describe().revision,
+    prMode: 'git',
+    internalWebUrl: 'https://codehub.example/core',
+  });
+  await page.reload();
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).click();
   await page.locator('[name="tag"]').selectOption('v2.0.0');
   await page.locator('[data-preview-sync]').click();
@@ -80,16 +94,23 @@ try {
   const active = (await receiver.status()).active;
   assert.ok(active.prUrl.endsWith('/501'));
   await page.locator('[data-stage="1"] > summary').click();
+  await openHistory(page);
   await page.locator('.record-list input[name="q"]').fill('v2');
   await page.locator('.record-list input[name="q"]').evaluate((element) => element.setSelectionRange(1, 1));
   await page.waitForTimeout(5500);
   assert.equal(await page.locator('[data-stage="1"]').evaluate((element) => element.open), true);
   assert.equal(await page.evaluate(() => document.activeElement?.name), 'q');
-  assert.equal(await page.locator('.record-list input[name="q"]').evaluate((element) => element.selectionStart), 1);
+  assert.equal(
+    await page.locator('.record-list input[name="q"]').evaluate((element) => element.selectionStart),
+    1,
+  );
   for (const width of [1440, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 1050 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    await page.screenshot({ path: join(evidence, `operator-waiting-${width}.png`), fullPage: true });
+    await page.screenshot({
+      path: join(evidence, `operator-waiting-${width}.png`),
+      fullPage: true,
+    });
   }
   await f.merge(active);
   await page.getByRole('heading', { name: '当前已接收版本' }).waitFor({ timeout: 30000 });
@@ -103,7 +124,10 @@ try {
   );
 } catch (error) {
   console.error('Page errors:', errors, '\nVisible page:', await page.locator('body').innerText());
-  await page.screenshot({ path: join(evidence, 'operator-failure.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'operator-failure.png'),
+    fullPage: true,
+  });
   throw error;
 } finally {
   await closeBrowser();

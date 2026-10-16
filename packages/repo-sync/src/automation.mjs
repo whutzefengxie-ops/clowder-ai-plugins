@@ -1,8 +1,14 @@
+import { autoMergeDelivery, configureAutoMerge } from './auto-merge.mjs';
 import { fail } from './config.mjs';
-import { armBoundary, boundaryReached, configureContinuation, continuationModes, startNext } from './continuation.mjs';
+import {
+  armBoundary,
+  boundaryReached,
+  configureContinuation,
+  continuationModes,
+  startNext,
+} from './continuation.mjs';
 import { execution, phase, safeError } from './execution.mjs';
 import { discover } from './github.mjs';
-import { autoMergeDelivery, configureAutoMerge } from './auto-merge.mjs';
 
 export function validateAutomation(value) {
   if (value === undefined) return;
@@ -68,7 +74,9 @@ function validateRequest(state, input) {
     fail('INVALID_TARGET', '请选择最新分支、tag 或完整 commit。');
   if (
     input.targetValue !== undefined &&
-    (typeof input.targetValue !== 'string' || input.targetValue.length > 200 || /[\r\n\0]/.test(input.targetValue))
+    (typeof input.targetValue !== 'string' ||
+      input.targetValue.length > 200 ||
+      /[\r\n\0]/.test(input.targetValue))
   )
     fail('INVALID_TARGET', '目标名称无效。');
   if (input.action === 'synchronize' && !/^[a-f0-9]{32}$/.test(input.requestId ?? ''))
@@ -100,19 +108,30 @@ function pause(receiver, id) {
     armBoundary(run, active);
     if (!active && run.status !== 'COMPLETE') {
       run.status = 'PAUSED';
-      run.pauseRequested ??= { afterDeliveryId: null, requestedAt: new Date().toISOString() };
+      run.pauseRequested ??= {
+        afterDeliveryId: null,
+        requestedAt: new Date().toISOString(),
+      };
     }
     run.updatedAt = new Date().toISOString();
   });
 }
 function register(receiver, input, id) {
   return receiver.change((saved) => {
-    if (input.action !== 'synchronize' && saved.automation?.id !== id) fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
+    if (input.action !== 'synchronize' && saved.automation?.id !== id)
+      fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
     if (input.observeOnly && ['PAUSED', 'FAILED', 'COMPLETE'].includes(saved.automation?.status)) return;
     checkQueuedTarget(saved, input);
     const active = receiver.active(saved);
+    if (input.action === 'resume-sync' && !input.observeOnly && active?.autoMerge?.status === 'BLOCKED') {
+      delete active.autoMerge.deadlineAt;
+      delete active.autoMerge.nextCheckAt;
+    }
     const releaseBoundary =
-      input.action === 'resume-sync' && !input.observeOnly && saved.automation?.status === 'PAUSED' && !active;
+      input.action === 'resume-sync' &&
+      !input.observeOnly &&
+      saved.automation?.status === 'PAUSED' &&
+      !active;
     saved.automation =
       input.action === 'synchronize'
         ? {
@@ -195,10 +214,12 @@ function releaseTerminalDelivery(state) {
 async function completeAutomaticMerge(receiver) {
   const state = await receiver.status();
   if (state.automation?.autoMerge !== true || state.active?.status !== 'WAITING_APPROVAL') return;
-  await autoMergeDelivery(receiver);
+  const result = await autoMergeDelivery(receiver);
+  if (result.kind !== 'merged') return;
   await phase('delivery-verify', '核验平台自动合入的 Git、Issue 与接收结果', () => receiver.recover(), false);
   const current = await receiver.status();
-  if (current.active?.status === 'CODE_ACCEPTED_PENDING_METADATA' && !current.active.issues.length) await receiver.receipts([]);
+  if (current.active?.status === 'CODE_ACCEPTED_PENDING_METADATA' && !current.active.issues.length)
+    await receiver.receipts([]);
 }
 function finish(receiver) {
   return receiver.change((saved) => {

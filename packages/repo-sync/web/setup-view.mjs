@@ -1,4 +1,4 @@
-import { closureSettings, closureInstructions } from './closure-settings.mjs';
+import { closureInstructions, closureSettings } from './closure-settings.mjs';
 import { commitFields, identitySettings } from './commit-settings.mjs';
 import { fileRuleFields } from './file-rule-fields.mjs';
 import { fileTree } from './files.mjs';
@@ -7,6 +7,7 @@ import { authenticationForm } from './issue-auth.mjs';
 import { issueFields } from './issue-settings.mjs';
 import { prCreationFields } from './platform.mjs';
 import { repositoryFields } from './repository-fields.mjs';
+import { enabledSettings } from './settings-view.mjs';
 import { modeSettings } from './version.mjs';
 
 export function setupConfiguration(snapshot, esc, sha, button, flow = {}) {
@@ -17,6 +18,7 @@ export function setupConfiguration(snapshot, esc, sha, button, flow = {}) {
   const activity =
     '<div id="operation" role="region" aria-label="当前步骤执行情况" tabindex="-1"></div><div id="error-slot"></div>';
   const summary = config ? repositorySummary(config, esc) : '';
+  if (state && connection) return enabledSettings(snapshot);
   if (state)
     return `${nav}<details class="card" data-setup-repositories><summary>仓库与接收配置 · 已启用</summary>${summary}<p>绑定已启用；另一组仓库或模式请新增项目，原台账保留。</p></details><section class="card setup-current" id="baseline-step"><h2>配置已完成</h2><p>初始对应 ${sha(state.initial.upstream)} → ${sha(state.initial.internal)}</p><p>当前接收 ${sha(state.accepted.upstream)} → ${sha(state.accepted.internal)}</p><button type="button" class="primary" data-view="workbench">进入同步工作台 →</button>${activity}</section>${closureSettings(snapshot, esc)}${identitySettings(snapshot, esc)}${githubAuthForm(snapshot)}${storageDetails(snapshot, esc)}`;
   const previous = config

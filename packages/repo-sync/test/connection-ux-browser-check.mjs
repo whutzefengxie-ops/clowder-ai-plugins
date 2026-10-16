@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +8,7 @@ import { createProjectWorkspace } from '../src/projects.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { repositories } from './fixtures.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 
 const f = await repositories(),
@@ -22,7 +22,8 @@ globalThis.fetch = async (input, options) => {
   const url = new URL(String(input));
   if (url.origin === 'https://api.github.com') {
     assert.equal(options.headers.Authorization, 'Bearer SYNTHETIC_SOURCE_READ_TOKEN');
-    if (url.pathname === '/repos/demo/core') return Response.json({ full_name: 'demo/core', node_id: 'fixture-repo' });
+    if (url.pathname === '/repos/demo/core')
+      return Response.json({ full_name: 'demo/core', node_id: 'fixture-repo' });
     if (url.pathname === '/graphql') return Response.json({ data: { viewer: { login: 'fixture-reader' } } });
     throw Error(`Unexpected source request: ${url.pathname}`);
   }
@@ -108,7 +109,10 @@ try {
     'ordinary validation failure preserves the unsubmitted credential in the current form only',
   );
   assert.equal(await readFile(file, 'utf8'), originalConfig);
-  assert.equal(await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token), false);
+  assert.equal(
+    await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token),
+    false,
+  );
   await form.getByLabel('API 项目 ID / 路径').fill('innersource%2Fteam_G%2Fcore');
   await form.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
   assert.equal(await form.locator('[name="issueTokenEnv"]').isVisible(), false);
@@ -124,9 +128,14 @@ try {
   await form.getByLabel('内部平台 API 地址').fill('');
   await form.getByLabel('API 项目 ID / 路径').fill('');
   await saveConfiguration();
-  await page.locator('[data-connection-checks]').filter({ hasText: '× 内部平台' }).waitFor({ timeout: 30000 });
+  await page
+    .locator('[data-connection-checks]')
+    .filter({ hasText: '× 内部平台' })
+    .waitFor({ timeout: 30000 });
   assert.equal(
-    await page.locator('input[type="password"]').evaluateAll((fields) => fields.every((field) => field.value === '')),
+    await page
+      .locator('input[type="password"]')
+      .evaluateAll((fields) => fields.every((field) => field.value === '')),
     true,
     'successful configuration must clear Token fields in the rendered DOM, including same-binding resaves',
   );
@@ -148,7 +157,10 @@ try {
   ]);
   assert.equal(saved.status(), 200);
   await saved.finished();
-  await page.locator('[data-connection-checks]').filter({ hasText: '× 内部平台' }).waitFor({ timeout: 30000 });
+  await page
+    .locator('[data-connection-checks]')
+    .filter({ hasText: '× 内部平台' })
+    .waitFor({ timeout: 30000 });
   assert.equal(
     await page.getByRole('heading', { name: '2 · 核验已有同步起点' }).count(),
     0,
@@ -171,10 +183,15 @@ try {
   assert.equal(receiver.config.issues.projectId, 'innersource/team_G/core');
   assert.equal(receiver.config.pullRequests.mode, 'gitlab');
   assert.equal((await readFile(file, 'utf8')).includes(platform.token), false);
-  assert.equal(await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token), false);
+  assert.equal(
+    await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), platform.token),
+    false,
+  );
   await page.reload();
   assert.equal(
-    await page.locator('input[type="password"]').evaluateAll((fields) => fields.every((field) => field.value === '')),
+    await page
+      .locator('input[type="password"]')
+      .evaluateAll((fields) => fields.every((field) => field.value === '')),
     true,
   );
   await git(f.review, ['commit', '--allow-empty', '-m', 'internal history after initial import']);
@@ -203,13 +220,14 @@ try {
   assert.equal(platform.state.creates.prs, 0);
   await page.getByRole('button', { name: '仓库设置', exact: true }).click();
   await page.getByText('如何确认？查看一次性的测试步骤', { exact: true }).click();
-  await page.getByLabel('已确认：内部平台不会根据搬入的提交消息自动关闭 Issue').check();
+  await page.getByLabel('已确认平台不会按搬入提交消息误关内部同号 Issue').check();
   await page
     .getByRole('button', {
-      name: '保存关单规则确认，继续本笔同步',
+      name: '保存设置并验证 →',
       exact: true,
     })
     .click();
+  await page.locator('[data-settings-result]').filter({ hasText: '设置已保存' }).waitFor();
   await page.getByRole('button', { name: '同步工作台', exact: true }).click();
   await page.getByRole('button', { name: '同步上游 PR #1 →', exact: true }).click();
   for (const number of [1, 2]) {
@@ -230,13 +248,21 @@ try {
       const continuation = page.locator('.next-action [data-form="configure-continuation"]');
       await continuation.locator('[name="continuation"]').selectOption('after-each');
       await continuation.getByRole('button', { name: '保存后续处理方式', exact: true }).click();
-      for (let retry = 0; retry < 100 && (await receiver.status()).automation.continuation !== 'after-each'; retry++)
+      for (
+        let retry = 0;
+        retry < 100 && (await receiver.status()).automation.continuation !== 'after-each';
+        retry++
+      )
         await new Promise((done) => setTimeout(done, 50));
       assert.equal((await receiver.status()).automation.continuation, 'after-each');
     }
     await f.merge(delivery);
     platform.state.mrs[number - 1].state = 'merged';
-    for (let retry = 0; retry < 150 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE'; retry++)
+    for (
+      let retry = 0;
+      retry < 150 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE';
+      retry++
+    )
       await new Promise((done) => setTimeout(done, 200));
     assert.equal(platform.state.issues[0].state, number === 1 ? 'opened' : 'closed');
   }

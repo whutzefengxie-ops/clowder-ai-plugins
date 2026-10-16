@@ -21,9 +21,28 @@ export async function recoverDelivery(receiver, state, delivery) {
     event(state, delivery, 'main 尚未接受本笔；原交付继续，未重复推送或建单');
     return;
   }
-  if (!delivery.candidate || !delivery.prUrl || !delivery.checks?.passed || delivery.checks.head !== delivery.candidate)
+  if (
+    !delivery.candidate ||
+    !delivery.prUrl ||
+    !delivery.checks?.passed ||
+    delivery.checks.head !== delivery.candidate
+  )
     fail('MERGE_UNATTRIBUTABLE', 'main 已前进，但没有完整冻结候选、检查和 PR 映射，暂停');
-  await phase('merge-verify', '核验实际合入的文件树与历史', () => receiver.git.verify(delivery, heads.internal), false);
+  if (await receiver.git.isAncestor(delivery.candidate, heads.internal)) {
+    delivery.mergeObservation ??= {
+      source: 'git',
+      head: delivery.candidate,
+      url: delivery.prUrl,
+      observedAt: new Date().toISOString(),
+    };
+    await receiver.store.save(state);
+  }
+  await phase(
+    'merge-verify',
+    '核验实际合入的文件树与历史',
+    () => receiver.git.verify(delivery, heads.internal),
+    false,
+  );
   delivery.acceptedInternal = heads.internal;
   state.accepted = { upstream: delivery.target, internal: heads.internal };
   if (receiver.config.mode === 'version') {

@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +7,7 @@ import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { gitPrFixture } from './git-pr-fixtures.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await gitPrFixture();
 const folder = await fs.mkdtemp(join(tmpdir(), 'repo-sync-audit-web-'));
@@ -48,7 +48,10 @@ let denyTerminal = false;
 fs.rename = async (from, to) => {
   if (denyTerminal && /[\\/]operations[\\/][a-f0-9]{32}\.json$/.test(to)) {
     const value = JSON.parse(await fs.readFile(from, 'utf8'));
-    if (value.status === 'SUCCEEDED') throw Object.assign(new Error('private occupied file'), { code: 'EPERM' });
+    if (value.status === 'SUCCEEDED')
+      throw Object.assign(new Error('private occupied file'), {
+        code: 'EPERM',
+      });
   }
   return rename(from, to);
 };
@@ -59,9 +62,16 @@ try {
   assert.equal(startPosts, 1);
   assert.equal((await initial.status()).deliveries.length, 0);
   assert.equal(original.expectedTarget, f.u1);
-  await page.screenshot({ path: join(evidence, 'same-request-resend.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'same-request-resend.png'),
+    fullPage: true,
+  });
   denyTerminal = true;
   await page.getByRole('button', { name: '重送原请求（保持同一标识）' }).click();
+  const failedStage = page.locator('[data-stage="5"]');
+  await failedStage.waitFor();
+  assert.equal(await failedStage.evaluate((element) => element.open), false);
+  await failedStage.locator(':scope > summary').click();
   const failedRecord = page.locator('[data-step-key="execution-record"][data-step-state="failed"]');
   await failedRecord.waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor();
@@ -74,8 +84,15 @@ try {
   assert.match(await page.locator('.next-action').innerText(), /只补存原记录，不能重跑业务/);
   assert.equal((await receiver.status()).active.status, 'WAITING_APPROVAL');
   assert.equal(JSON.parse(await fs.readFile(f.resultFile)).count, 1);
-  assert.equal(await page.locator('[data-action="recover"]').count(), 0, 'pending record exposes only record repair');
+  assert.equal(
+    await page.locator('[data-action="recover"]').count(),
+    0,
+    'pending record exposes only record repair',
+  );
   await page.reload();
+  const restoredFailureStage = page.locator('[data-stage="5"]');
+  await restoredFailureStage.waitFor();
+  assert.equal(await restoredFailureStage.evaluate((element) => element.open), true);
   await failedRecord.waitFor();
   await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor();
   for (const width of [1440, 390]) {
@@ -95,7 +112,9 @@ try {
   await page.getByRole('button', { name: '撤销错误引用，返回 PR 创建步骤' }).click();
   await page.getByRole('heading', { name: '登记核对后的 PR 引用' }).waitFor({ timeout: 20000 });
   assert.equal(await page.locator('[data-action="create-pr"]').count(), 0);
-  await assert.rejects(() => receiver.recover(), { code: 'PR_REFERENCE_WITHDRAWN' });
+  await assert.rejects(() => receiver.recover(), {
+    code: 'PR_REFERENCE_WITHDRAWN',
+  });
   await page.reload();
   await page.getByRole('heading', { name: '登记核对后的 PR 引用' }).waitFor();
   assert.equal((await receiver.status()).active.prUrl, undefined);

@@ -21,7 +21,17 @@ export function gitlabApi(config, settings = config.issues, family = 'ISSUE') {
     }
     if (!response.ok) {
       await response.body?.cancel();
-      fail(`${family}_API_REJECTED`, `内部平台 API 拒绝请求（HTTP ${response.status}）；请核对权限与配置后回读原对象`);
+      try {
+        fail(
+          `${family}_API_REJECTED`,
+          `内部平台 API 拒绝请求（HTTP ${response.status}）；请核对权限与配置后回读原对象`,
+        );
+      } catch (error) {
+        error.httpStatus = response.status;
+        const retry = response.headers.get('retry-after');
+        error.retryAfterMs = /^\d+$/.test(retry ?? '') ? Math.min(3600000, Number(retry) * 1000) : 30000;
+        throw error;
+      }
     }
     const chunks = [];
     let size = 0;
@@ -31,7 +41,10 @@ export function gitlabApi(config, settings = config.issues, family = 'ISSUE') {
       chunks.push(chunk);
     }
     try {
-      return { value: JSON.parse(Buffer.concat(chunks).toString('utf8')), next: response.headers.get('x-next-page') };
+      return {
+        value: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+        next: response.headers.get('x-next-page'),
+      };
     } catch {
       fail('ISSUE_RESPONSE_INVALID', '内部 Issue API 未返回有效 JSON，未采用');
     }

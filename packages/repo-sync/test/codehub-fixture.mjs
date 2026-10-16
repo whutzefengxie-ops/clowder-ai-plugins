@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { git } from '../src/process.mjs';
+
 const lostResponse = Symbol('lost response');
 export async function codehubPlatform(f, options = {}) {
   const state = {
@@ -29,6 +30,16 @@ export async function codehubPlatform(f, options = {}) {
     const path = new URL(req.url, 'http://localhost').pathname,
       value = text ? JSON.parse(text) : null;
     state.requests.push(`${req.method} ${path}`);
+    if (
+      state.mergePending &&
+      state.failReadback &&
+      req.method === 'GET' &&
+      path.endsWith('/merge_requests')
+    ) {
+      state.failReadback = false;
+      res.statusCode = 503;
+      return res.end('{}');
+    }
     try {
       const result = await route(state, f, web, req, value, path, res, options);
       if (result === lostResponse) return res.destroy();
@@ -66,6 +77,10 @@ async function route(state, f, web, req, value, path, res, options) {
       if (value.sha !== mr.sha || state.conflicts || state.denyMerge) {
         res.statusCode = 405;
         return { message: 'merge rules rejected' };
+      }
+      if (state.deferMerge) {
+        state.mergePending = true;
+        return mr;
       }
       await f.merge({ branch: mr.source_branch, candidate: mr.sha });
       mr.state = 'merged';
@@ -115,8 +130,16 @@ async function mergeCollection(state, f, web, req, value) {
         target_branch: value.target_branch,
         state: 'opened',
         sha: (await git(f.internal, ['rev-parse', `refs/heads/${value.source_branch}`])).trim(),
-        diff_refs: { base_sha: (await git(f.internal, ['rev-parse', 'refs/heads/main'])).trim() },
+        diff_refs: {
+          base_sha: (await git(f.internal, ['rev-parse', 'refs/heads/main'])).trim(),
+        },
       };
+    mr.merge_status = 'can_be_merged';
+    mr.head_pipeline = {
+      id: iid,
+      sha: mr.sha,
+      status: state.pipelineStatus ?? 'success',
+    };
     state.mrs.push(mr);
     return mr;
   }
@@ -126,7 +149,12 @@ async function mergeCollection(state, f, web, req, value) {
 function issueCollection(state, web, req, value, res, options) {
   if (req.method === 'POST') {
     const iid = ++state.creates.issues,
-      issue = { iid, web_url: `${web}/issues/${iid}`, description: value.description, state: 'opened' };
+      issue = {
+        iid,
+        web_url: `${web}/issues/${iid}`,
+        description: value.description,
+        state: 'opened',
+      };
     state.issues.push(issue);
     return loseOnce(state, 'issue', issue);
   }

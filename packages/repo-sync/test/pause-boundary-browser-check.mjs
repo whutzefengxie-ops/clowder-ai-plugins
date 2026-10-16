@@ -10,7 +10,6 @@ import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { continuousRepositories } from './continuous-fixtures.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
-
 function gate(label) {
   let reached = false,
     release;
@@ -36,7 +35,6 @@ async function until(read, accept, message) {
   } while (Date.now() < deadline);
   assert.fail(`${message}; last status: ${value?.automation?.status ?? value?.operation?.status ?? 'unknown'}`);
 }
-
 const f = await continuousRepositories(),
   platform = await codehubPlatform(f);
 await writeFile(join(f.source, 'core.txt'), 'third direct delivery');
@@ -73,8 +71,21 @@ await mkdir(evidence, { recursive: true });
 const tokenName = 'REPO_SYNC_PAUSE_BOUNDARY_TOKEN',
   previousToken = process.env[tokenName];
 process.env[tokenName] = platform.token;
-const api = { mode: 'gitlab', apiUrl: platform.api, projectId: 'innersource/team_G/core', tokenEnv: tokenName };
-await writeFile(file, JSON.stringify({ ...f.config, internalWebUrl: platform.web, pullRequests: api, issues: api }));
+const api = {
+  mode: 'gitlab',
+  apiUrl: platform.api,
+  projectId: 'innersource/team_G/core',
+  tokenEnv: tokenName,
+};
+await writeFile(
+  file,
+  JSON.stringify({
+    ...f.config,
+    internalWebUrl: platform.web,
+    pullRequests: api,
+    issues: api,
+  }),
+);
 let connection = await createConnection(file),
   receiver = await connection.current();
 await receiver.adopt(f.u0, f.i0);
@@ -121,18 +132,20 @@ const steps = () =>
     .locator('[data-stage]')
     .evaluateAll((stages) =>
       stages.flatMap((stage) =>
-        [...stage.querySelectorAll(':scope > .stage-body > [data-attempts-stage] > .substeps > [data-step-key]')].map(
-          (step) => `${stage.dataset.stage}:${step.dataset.stepKey}`,
-        ),
+        [
+          ...stage.querySelectorAll(
+            ':scope > .stage-body > [data-attempts-stage] > .substeps > [data-step-key]',
+          ),
+        ].map((step) => `${stage.dataset.stage}:${step.dataset.stepKey}`),
       ),
     );
-async function fifthStage() {
+async function fifthStage(expectedOpen = false) {
   await page.locator('[data-stage="5"][data-stage-state="current"]').waitFor({ timeout: 30000 });
   assert.notEqual(await page.locator('[data-stage="2"]').getAttribute('data-stage-state'), 'current');
   assert.equal(await page.locator('[data-stage="2"]').evaluate((node) => node.open), false);
-  assert.equal(await page.locator('[data-stage="5"]').evaluate((node) => node.open), true);
+  assert.equal(await page.locator('[data-stage="5"]').evaluate((node) => node.open), expectedOpen);
 }
-async function paused(completed) {
+async function paused(completed, expectedStageOpen = false) {
   const state = await until(
     () => receiver.status(),
     (current) => current.automation?.status === 'PAUSED',
@@ -143,10 +156,15 @@ async function paused(completed) {
   assert.equal(state.deliveries.length, completed, 'the next delivery must not even be started');
   assert.equal(state.queue.length, 3 - completed);
   assert.equal(state.deliveries[completed - 1].status, 'COMPLETE');
+  assert.equal(await page.locator('[data-stage="5"]').evaluate((node) => node.open), expectedStageOpen);
   assert.ok(state.deliveries[completed - 1].acceptedInternal);
   assert.equal(platform.state.creates.prs, completed);
   assert.equal(platform.state.creates.issues, completed);
-  assert.equal(platform.state.issues[completed - 1].state, 'closed', 'Issue closure belongs to the completed delivery');
+  assert.equal(
+    platform.state.issues[completed - 1].state,
+    'closed',
+    'Issue closure belongs to the completed delivery',
+  );
   await page.getByRole('button', { name: '继续下一笔同步 →', exact: true }).waitFor({ timeout: 30000 });
   await new Promise((done) => setTimeout(done, 700));
   assert.equal(
@@ -175,10 +193,21 @@ try {
   const first = (await receiver.status()).active;
   assert.equal(platform.state.creates.prs, 1);
   assert.equal(platform.state.creates.issues, 1);
-  const pauseButton = page.getByRole('button', { name: '本笔完成后暂停', exact: true });
-  assert.equal(await pauseButton.isVisible(), true, 'the pause action must be visible without opening settings');
+  const pauseButton = page.getByRole('button', {
+    name: '本笔完成后暂停',
+    exact: true,
+  });
+  assert.equal(
+    await pauseButton.isVisible(),
+    true,
+    'the pause action must be visible without opening settings',
+  );
   await pauseButton.click();
-  await until(() => receiver.status(), (current) => Boolean(current.automation?.pauseRequested), 'pause intent saved');
+  await until(
+    () => receiver.status(),
+    (current) => Boolean(current.automation?.pauseRequested),
+    'pause intent saved',
+  );
   await page.reload();
   await page.getByText(/已设置：本笔完成后暂停/).waitFor();
   await page.locator('.next-action details > summary').click();
@@ -190,27 +219,40 @@ try {
     (current) => current.automation?.continuation === 'after-each',
     'save the continuing after-each policy',
   );
-  assert.equal(configured.automation.status, 'WAITING_REVIEW', 'still observe and finish the PR already in review');
+  assert.equal(
+    configured.automation.status,
+    'WAITING_REVIEW',
+    'still observe and finish the PR already in review',
+  );
   const runId = configured.automation.id;
   const firstStage = page.locator('[data-stage="1"]');
   assert.equal(await firstStage.evaluate((node) => node.open), false);
   await firstStage.locator(':scope > summary').click();
   await page.waitForTimeout(5500);
-  assert.equal(await firstStage.evaluate((node) => node.open), true, 'manual expansion survives background polling');
+  assert.equal(
+    await firstStage.evaluate((node) => node.open),
+    true,
+    'manual expansion survives background polling',
+  );
   postMerge = true;
   await merge(first, 1);
   await fetchGate.entered();
   await fifthStage();
   assert.equal(await firstStage.evaluate((node) => node.open), true);
   assert.deepEqual(await steps(), planned);
+  const mergeStage = page.locator('[data-stage="5"]');
+  await mergeStage.locator(':scope > summary').click();
   fetchGate.release();
   await verification.entered();
   await page.locator('[data-stage="5"] [data-step-key="merge-verify"][data-step-state="current"]').waitFor();
-  await fifthStage();
+  await fifthStage(true);
   assert.deepEqual(await steps(), planned, 'merge verification must use the same fixed workflow');
-  await page.screenshot({ path: join(evidence, 'merge-verification-fifth-stage.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'merge-verification-fifth-stage.png'),
+    fullPage: true,
+  });
   verification.release();
-  const boundary = await paused(1);
+  const boundary = await paused(1, true);
   assert.equal(boundary.accepted.upstream, f.u1);
   await page.reload();
   await page.getByRole('button', { name: '继续下一笔同步 →', exact: true }).waitFor();
@@ -236,6 +278,7 @@ try {
     false,
     'manual expansion must not leak from PR 1 to PR 2',
   );
+  assert.equal(await page.locator('[data-stage="5"]').evaluate((node) => node.open), false);
   const second = (await receiver.status()).active;
   assert.equal((await receiver.status()).automation.continuation, 'after-each');
   await merge(second, 2);
@@ -249,7 +292,11 @@ try {
     'explicit continue starts the direct-commit delivery',
   );
   assert.equal(platform.state.creates.prs, 3);
-  assert.equal(platform.state.creates.issues, 2, 'a direct commit without Issues must not create a fake Issue');
+  assert.equal(
+    platform.state.creates.issues,
+    2,
+    'a direct commit without Issues must not create a fake Issue',
+  );
   await merge(finalReview.active, 3);
   const final = await until(
     () => receiver.status(),
@@ -265,7 +312,12 @@ try {
     'PASS: fixed visible substeps; merge readback and verification stay in stage 5; per-delivery expansion; continuous after-each policy; Issue closure before pause; refresh/restart preserve the boundary; explicit continuation alone starts each next PR; real Git PR/Issue/direct-commit reception.',
   );
 } catch (error) {
-  await page.screenshot({ path: join(evidence, 'pause-boundary-failure.png'), fullPage: true }).catch(() => {});
+  await page
+    .screenshot({
+      path: join(evidence, 'pause-boundary-failure.png'),
+      fullPage: true,
+    })
+    .catch(() => {});
   console.error(
     'Page errors:',
     errors,
@@ -273,7 +325,11 @@ try {
     await page
       .locator('[data-stage]')
       .evaluateAll((nodes) =>
-        nodes.map((node) => ({ stage: node.dataset.stage, state: node.dataset.stageState, open: node.open })),
+        nodes.map((node) => ({
+          stage: node.dataset.stage,
+          state: node.dataset.stageState,
+          open: node.open,
+        })),
       )
       .catch(() => []),
   );

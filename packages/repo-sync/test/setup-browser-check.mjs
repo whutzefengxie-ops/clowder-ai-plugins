@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { access, mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +5,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
@@ -112,10 +112,16 @@ try {
   await page.getByRole('button', { name: '开始更新至 v2.0.0 →' }).click();
   await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).waitFor();
   await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
+  const prStage = page.locator('[data-stage="3"]');
+  if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
   await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
   const prepared = (await (await connection.current()).status()).active;
   assert.equal(prepared.checks.profile, 'git-integrity');
-  assert.equal(prepared.checks.passed, true, 'the configured integrity check must actually pass before the PR step');
+  assert.equal(
+    prepared.checks.passed,
+    true,
+    'the configured integrity check must actually pass before the PR step',
+  );
   await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
   await page.locator('[data-pr-confirm]').check();
   await page.getByRole('button', { name: '登记 PR，进入审核' }).click();

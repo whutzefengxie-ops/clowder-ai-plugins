@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +7,8 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { gitPrFixture } from './git-pr-fixtures.mjs';
+import { openHistory } from './journey-controls.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await gitPrFixture();
 const receiver = new Receiver(f.config);
@@ -26,6 +27,7 @@ page.on('pageerror', (error) => errors.push(error.message));
 await mkdir(evidence, { recursive: true });
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await openHistory(page);
   await page.locator('.record-list').waitFor({ timeout: 3000 });
   await page.getByRole('button', { name: '读取可用 tag', exact: true }).click();
   await page.locator('[name="tag"]').selectOption('v2.0.0');
@@ -39,9 +41,11 @@ try {
   const accepted = (await receiver.status()).accepted;
   const completedTasks = (await receiver.status()).deliveries[0].taskIds.slice();
   assert.equal(accepted.tag, 'v2.0.0');
+  await openHistory(page);
   await page.locator(`[data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   assert.equal(await page.locator('.record-detail [data-action]').count(), 0);
+  await page.locator('.delivery-boundary > summary').click();
   assert.ok((await page.locator('.record-detail').innerText()).includes(accepted.internal));
   assert.ok((await page.locator('.record-detail').innerText()).includes(f.u0));
   await page.getByRole('button', { name: '展开全部阶段' }).click();
@@ -56,10 +60,14 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     if (width <= 768) {
       await page.getByRole('button', { name: '返回同步记录' }).click();
+      await openHistory(page);
       await page.locator(`[data-record="${active.id}"]`).click();
     }
     if ([1440, 390].includes(width))
-      await page.screenshot({ path: join(evidence, `history-${width}.png`), fullPage: true });
+      await page.screenshot({
+        path: join(evidence, `history-${width}.png`),
+        fullPage: true,
+      });
   }
   await page.getByRole('button', { name: '展开全部阶段' }).click();
   const dimensions = await page.locator('.record-list button').evaluateAll((buttons) =>
@@ -93,13 +101,16 @@ try {
   receiver.git.checks = async (head) => {
     if (failCheck) {
       failCheck = false;
-      throw Object.assign(new Error('synthetic one-time check failure'), { code: 'COMMAND_FAILED' });
+      throw Object.assign(new Error('synthetic one-time check failure'), {
+        code: 'COMMAND_FAILED',
+      });
     }
     return originalChecks(head);
   };
   await page.getByRole('button', { name: '同步到所选版本 →' }).click();
   await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
   const failedCandidate = (await receiver.status()).active.candidate;
+  await openHistory(page);
   await page.locator(`[data-record="${active.id}"]`).click();
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
@@ -120,6 +131,7 @@ try {
   };
   await page.getByRole('button', { name: '恢复原同步 →' }).click();
   await page.waitForFunction(() => document.querySelector('[data-operation-state="RUNNING"]'));
+  await openHistory(page);
   await page.locator(`[data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   assert.equal(await page.locator('.record-list input[name="q"]').isDisabled(), false);
@@ -140,16 +152,23 @@ try {
     'one failed check and one recovery remain visible without a removed resolution action',
   );
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.next-action').scrollIntoViewIfNeeded();
   const bar = await page.locator('.next-action').boundingBox();
   assert.ok(bar.y + bar.height <= 844 && bar.y > 0);
-  await page.screenshot({ path: join(evidence, 'current-390.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'current-390.png'),
+    fullPage: true,
+  });
   assert.deepEqual(errors, []);
   console.log(
     'PASS: real Git tag/automatic PR/merge, unified nested timeline, lazy read-only history, snapshots/attempt times, reload and responsive same-page navigation.',
   );
 } catch (error) {
   console.log('Browser errors:', errors, '\nVisible page:', await page.locator('body').innerText());
-  await page.screenshot({ path: join(evidence, 'failure.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'failure.png'),
+    fullPage: true,
+  });
   throw error;
 } finally {
   releaseCheck();

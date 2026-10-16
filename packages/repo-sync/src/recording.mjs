@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { phaseStage, workflowPlanVersion } from '../web/workflow-plan.mjs';
 import { fail, safeUrl } from './config.mjs';
 import { execution } from './execution.mjs';
 
@@ -17,7 +18,7 @@ const fields = [
   'prTransport',
   'commitClosureVerified',
 ];
-const optionalFields = ['commitStrategy', 'receivingIdentity'];
+const optionalFields = ['commitStrategy', 'receivingIdentity', 'autoMergeWaitMs'];
 export function configSnapshot(config) {
   const snapshot = {};
   for (const key of [...fields, ...optionalFields])
@@ -93,12 +94,22 @@ export function recordDelivery(delivery, config, source = 'execution', mappings 
   if (context?.taskId && !delivery.taskIds.includes(context.taskId)) delivery.taskIds.push(context.taskId);
   const snapshot = configSnapshot(config);
   if (delivery.configurations.at(-1)?.snapshot.fingerprint !== snapshot.fingerprint)
-    delivery.configurations.push({ time: new Date().toISOString(), source, taskId: context?.taskId ?? null, snapshot });
-  if (source === 'start') delivery.startedAt = new Date().toISOString();
+    delivery.configurations.push({
+      time: new Date().toISOString(),
+      source,
+      taskId: context?.taskId ?? null,
+      snapshot,
+    });
+  if (source === 'start') {
+    delivery.startedAt = new Date().toISOString();
+    delivery.workflowPlanVersion = workflowPlanVersion;
+  }
   if (['COMPLETE', 'CANCELLED'].includes(delivery.status)) delivery.finishedAt ??= new Date().toISOString();
   context?.associate?.(delivery.id);
 }
 export function validateRecording(delivery) {
+  if (delivery.workflowPlanVersion !== undefined && delivery.workflowPlanVersion !== workflowPlanVersion)
+    fail('RECORD_INVALID', '同步流程计划版本不支持，保留原记录');
   if (delivery.recordSchema === undefined) return;
   if (
     delivery.recordSchema !== 1 ||
@@ -120,6 +131,17 @@ export function validateRecording(delivery) {
       fail('RECORD_INVALID', '同步历史时间无效');
 }
 export function phaseLocation(action, key, parent) {
+  if (
+    parent?.stage === 5 &&
+    !['merge-intent', 'platform-merge', 'merge-readiness', 'platform-review', 'merge-observe'].includes(key)
+  )
+    return { stage: 5, group: parent.group };
+  const planned = phaseStage(key);
+  if (
+    planned &&
+    !['source-probe', 'internal-probe', 'source-fetch', 'internal-fetch', 'object-store'].includes(key)
+  )
+    return { stage: planned, group: planned === 4 ? 'approval' : 'objects' };
   if (key === 'delivery-verify') return { stage: 5, group: 'result' };
   if (key === 'delivery-start') return { stage: 1, group: 'objects' };
   if (key === 'delivery-prepare') return { stage: 2, group: 'content' };
@@ -168,7 +190,9 @@ export function phaseLocation(action, key, parent) {
   if (key === 'issue-state') return { stage: 5, group: 'issues' };
   if (['merge-verify', 'acceptance-save', 'receipts-save', 'execution-record'].includes(key))
     return { stage: 5, group: 'result' };
-  if (['candidate-build', 'conflict-resolution', 'internal-preserve', 'file-merge', 'file-rules'].includes(key))
+  if (
+    ['candidate-build', 'conflict-resolution', 'internal-preserve', 'file-merge', 'file-rules'].includes(key)
+  )
     return { stage: 2, group: 'content' };
   if (key === 'candidate-check') return { stage: 2, group: 'checks' };
   if (key === 'ledger-save') return { stage: parent?.stage ?? stage, group: 'record' };
@@ -176,6 +200,9 @@ export function phaseLocation(action, key, parent) {
 }
 
 function validateIssueSnapshot(snapshot) {
-  if (snapshot.issueTransport !== undefined && !['manual', 'command', 'gitlab'].includes(snapshot.issueTransport))
+  if (
+    snapshot.issueTransport !== undefined &&
+    !['manual', 'command', 'gitlab'].includes(snapshot.issueTransport)
+  )
     fail('RECORD_INVALID', '历史 Issue 适配方式无效');
 }

@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +5,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { createProjectWorkspace } from '../src/projects.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const folder = await mkdtemp(join(tmpdir(), 'repo-sync-navigation-'));
 const projects = await createProjectWorkspace(join(folder, 'config.json'));
@@ -51,37 +51,39 @@ document.addEventListener('submit', e => { if(e.target.matches('[data-record-fil
 });
 try {
   await page.goto(`${base}/?project=default`);
-  await page.getByLabel('当前同步项目').waitFor();
+  await page.locator('.project-sidebar-row.selected').waitFor();
   await page.getByLabel('普通草稿', { exact: true }).fill('项目 A 的草稿');
   await page.getByLabel('尚未提交的认证', { exact: true }).fill('private-token-must-not-persist');
-  await page.getByLabel('当前同步项目').selectOption(other.id);
+  await page.locator(`.project-sidebar-list [data-project-enter="${other.id}"]`).click();
   await page.getByRole('alert').filter({ hasText: '尚未提交的 Token' }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get('project'), 'default');
   assert.equal(await page.getByLabel('当前同步项目').inputValue(), 'default');
   await page.getByRole('button', { name: '留在当前项目', exact: true }).click();
   assert.equal(await page.getByLabel('尚未提交的认证').inputValue(), 'private-token-must-not-persist');
   assert.equal(
-    await page.evaluate(() => JSON.stringify({ ...sessionStorage }).includes('private-token-must-not-persist')),
+    await page.evaluate(() =>
+      JSON.stringify({ ...sessionStorage }).includes('private-token-must-not-persist'),
+    ),
     false,
   );
   await page.getByLabel('尚未提交的认证').fill('');
   await page.evaluate(() => {
     window.failSave = true;
   });
-  await page.getByLabel('当前同步项目').selectOption(other.id);
+  await page.locator(`.project-sidebar-list [data-project-enter="${other.id}"]`).click();
   await page.getByRole('alert').filter({ hasText: '草稿保存失败' }).waitFor();
   await page.getByRole('button', { name: '留在当前项目', exact: true }).click();
   await page.evaluate(() => {
     window.failSave = false;
   });
-  await page.getByLabel('当前同步项目').selectOption(other.id);
+  await page.locator(`.project-sidebar-list [data-project-enter="${other.id}"]`).click();
   await page.waitForURL((url) => url.searchParams.get('project') === other.id);
-  await page.getByLabel('当前同步项目').waitFor();
+  await page.locator('.project-sidebar-row.selected').waitFor();
   assert.equal(await page.getByLabel('普通草稿').inputValue(), '');
   await page.getByLabel('普通草稿').fill('项目 B 的草稿');
-  await page.getByLabel('当前同步项目').selectOption('default');
+  await page.locator('.project-sidebar-list [data-project-enter="default"]').click();
   await page.waitForURL((url) => url.searchParams.get('project') === 'default');
-  await page.getByLabel('当前同步项目').waitFor();
+  await page.locator('.project-sidebar-row.selected').waitFor();
   assert.equal(await page.getByLabel('普通草稿').inputValue(), '项目 A 的草稿');
   await page.getByText('查看项目状态 · 2 个项目', { exact: true }).click();
   await page.getByRole('button', { name: '运行中', exact: true }).click();
@@ -97,9 +99,14 @@ try {
   const filtered = new URL((await dated).url());
   assert.equal(filtered.searchParams.get('q'), 'missing-tag');
   assert.equal(filtered.searchParams.get('project'), 'default');
-  await page.getByText('没有符合筛选条件的记录。可调整关键词、状态，或清除日期范围。', { exact: true }).waitFor();
+  await page
+    .getByText('没有符合筛选条件的记录。可调整关键词、状态，或清除日期范围。', {
+      exact: true,
+    })
+    .waitFor();
   const cleared = page.waitForResponse(
-    (response) => response.url().includes('/api/records?') && !new URL(response.url()).searchParams.has('from'),
+    (response) =>
+      response.url().includes('/api/records?') && !new URL(response.url()).searchParams.has('from'),
   );
   await page.getByRole('button', { name: '不限日期', exact: true }).click();
   assert.equal(new URL((await cleared).url()).searchParams.get('q'), 'missing-tag');

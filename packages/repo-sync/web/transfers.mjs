@@ -4,10 +4,19 @@ import { transferBanner, transferHeld, transferView } from './transfer-view.mjs'
 
 const limit = 128 * 1024 * 1024;
 const running = (value) =>
-  ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(value?.status) || value?.persistence?.status === 'FAILED';
+  ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(value?.status) ||
+  value?.persistence?.status === 'FAILED';
 
 export function createTransfers(snapshot, refresh) {
-  const local = { kind: 'template', busy: false, error: '', message: '', preview: null, name: '', confirmed: false };
+  const local = {
+    kind: 'template',
+    busy: false,
+    error: '',
+    message: '',
+    preview: null,
+    name: '',
+    confirmed: false,
+  };
   let root, view;
   function render(content = root, currentView = view) {
     root = content;
@@ -28,7 +37,7 @@ export function createTransfers(snapshot, refresh) {
       return;
     }
     if (transferHeld(current)) root.innerHTML = '';
-    root.insertAdjacentHTML('afterbegin', transferView(current, local));
+    root.insertAdjacentHTML(transferHeld(current) ? 'afterbegin' : 'beforeend', transferView(current, local));
     lock();
   }
   function lock() {
@@ -66,7 +75,10 @@ export function createTransfers(snapshot, refresh) {
     assertCurrent(identity);
     const response = await fetch(projectUrl(`/api/transfers/${action}`), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Repo-Sync-Token': snapshot().token },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Repo-Sync-Token': snapshot().token,
+      },
       body: raw ? input : JSON.stringify(input),
       signal: AbortSignal.timeout(180000),
     });
@@ -136,7 +148,8 @@ export function createTransfers(snapshot, refresh) {
   async function previewFile(form, identity) {
     const file = form.querySelector('[data-transfer-file]').files[0];
     if (!file) throw Error('请选择配置模板或完整迁移包。');
-    if (file.size > limit) throw Error('PACKAGE_TOO_LARGE：文件超过 128 MiB，请联系管理员使用受支持的迁移方式。');
+    if (file.size > limit)
+      throw Error('PACKAGE_TOO_LARGE：文件超过 128 MiB，请联系管理员使用受支持的迁移方式。');
     const result = await (await request('preview', file, identity, true)).json();
     assertCurrent(identity);
     local.preview = result.summary ?? result;
@@ -145,7 +158,7 @@ export function createTransfers(snapshot, refresh) {
     local.message = '文件内容已检查；尚未导入或启用。';
     local.focus = 'preview';
   }
-  async function importFile(form, identity) {
+  async function importFile(_form, identity) {
     if (!local.preview) throw Error('请先读取并检查文件。');
     local.pendingImport ??= {
       packageId: local.preview.packageId,
@@ -170,7 +183,9 @@ export function createTransfers(snapshot, refresh) {
   async function activate(identity) {
     local.focus = 'checks';
     if (!local.confirmed) throw Error('请先确认此接收分支只有当前环境继续同步。');
-    const result = await (await request('activate', { ...scope(), confirmSingleWriter: true }, identity)).json();
+    const result = await (
+      await request('activate', { ...scope(), confirmSingleWriter: true }, identity)
+    ).json();
     await refresh();
     if (result.activated === false) {
       local.confirmed = false;
@@ -180,7 +195,11 @@ export function createTransfers(snapshot, refresh) {
   }
   async function recoverRegistration(identity) {
     if (!local.recoveryConfirmed || !local.pendingImport) throw Error('请先确认旧服务及其子进程全部退出。');
-    await request('recover-registration', { projectId: pageProjectId, confirmWritersStopped: true }, identity);
+    await request(
+      'recover-registration',
+      { projectId: pageProjectId, confirmWritersStopped: true },
+      identity,
+    );
     local.recoveryRequired = false;
     local.recoveryConfirmed = false;
     local.message = '项目登记锁已恢复。请点击“重试原导入”，继续使用原包和原请求；没有重新创建 Issue 或 PR。';
@@ -255,7 +274,8 @@ export function createTransfers(snapshot, refresh) {
   document.addEventListener(
     'toggle',
     (event) => {
-      if (event.target.id === 'transfer-settings' && root?.contains(event.target)) local.open = event.target.open;
+      if (event.target.id === 'transfer-settings' && root?.contains(event.target))
+        local.open = event.target.open;
     },
     true,
   );

@@ -17,7 +17,7 @@ export function apiFields(config, esc) {
       <p>这里只填数字 ID 或项目路径，不填域名和 https://。例如 API 地址为 https://api.example/api/v4，项目路径为 team/core；程序会组合成 /api/v4/projects/team%2Fcore。</p>
     </details>
     <label>Token 提供方式<select name="issueAuthMode"><option value="session" ${auth === 'session' ? 'selected' : ''}>直接输入 Token（本次服务）</option><option value="environment" ${auth === 'environment' ? 'selected' : ''}>使用环境变量（高级 / 已有配置）</option></select></label>
-    ${value?.apiUrl ? '' : `<div data-issue-token ${auth === 'environment' ? 'hidden' : ''}><p>Token 在执行平台接口时必需；请在本次配置中提供，已有可用认证时可留空。</p>${tokenField()}</div>`}
+    ${config?.hideToken || value?.apiUrl ? '' : `<div data-issue-token ${auth === 'environment' ? 'hidden' : ''}><p>Token 在执行平台接口时必需；请在本次配置中提供，已有可用认证时可留空。</p>${tokenField()}</div>`}
     <div data-issue-environment ${auth === 'environment' ? '' : 'hidden'}><label>Token 所在环境变量名称 <small class="field-purpose">仅环境变量方式必填</small><input name="issueTokenEnv" value="${esc(value?.tokenEnv ?? '')}" placeholder="REPO_SYNC_INTERNAL_TOKEN"></label><p>直接输入方式无需设置变量名称。</p></div>
   </div>`;
 }

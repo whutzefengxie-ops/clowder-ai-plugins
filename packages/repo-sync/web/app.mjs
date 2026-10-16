@@ -1,42 +1,43 @@
-import { updateLiveWorkflow } from './live-workflow.mjs';
-import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
-import { initializeSubmissions } from './form-submission.mjs';
-import { createSetupFlow } from './setup-flow.mjs';
-import { retainView } from './view-state.mjs';
-import { previewPanel } from './preview-view.mjs';
 import { guardRenderedScope, snapshotIdentity } from './action-scope.mjs';
-import { createTransfers } from './transfers.mjs';
-import { createRecoveryNavigation, showActivity } from './recovery-navigation.mjs';
-
+import { updateShell } from './app-shell.mjs';
 import { captureDraft, configuration, restoreDraft } from './connections.mjs';
 import { baselineContent, diagnostics } from './diagnostics.mjs';
-import { rememberExpansion, restoreExpansion } from './expansion.mjs';
+import { initializeExpansion, restoreExpansion, setAllExpansion } from './expansion.mjs';
 import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
+import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
+import { configurationConfirmation, initializeSubmissions } from './form-submission.mjs';
 import { createGithubAuthentication } from './github-auth.mjs';
 import { createHistory } from './history.mjs';
 import { createIssueAuthentication, updateIssueFields } from './issue-auth.mjs';
-import { issueSettings } from './issue-settings.mjs';
+import { updateLiveWorkflow } from './live-workflow.mjs';
 import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
-import { platformSettings, serviceLabel } from './platform.mjs';
+import { serviceLabel } from './platform.mjs';
+import { previewPanel } from './preview-view.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { createProjectNavigation } from './projects.mjs';
-import { createTaskFocus, focusBaselineInput, revealSetupResult } from './setup-navigation.mjs';
+import { createRecoveryNavigation, showActivity } from './recovery-navigation.mjs';
+import { createSettingsController } from './settings-controller.mjs';
+import { createSetupFlow } from './setup-flow.mjs';
+import { createTaskFocus, focusBaselineInput } from './setup-navigation.mjs';
+import { createTransfers } from './transfers.mjs';
 import { button, esc, sha } from './ui.mjs';
+import { retainView } from './view-state.mjs';
 import { workbench } from './workbench.mjs';
-import { updateShell } from './app-shell.mjs';
 
 const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
 let snapshot;
-let view = new URL(location.href).searchParams.get('view') === 'configuration' ? 'configuration' : 'workbench';
+let view =
+  new URL(location.href).searchParams.get('view') === 'configuration' ? 'configuration' : 'workbench';
 let mobileDetail = !!new URL(location.href).searchParams.get('record');
 let availableTags = [];
 const projectNavigation = createProjectNavigation(() => snapshot, saveDraft);
 const issueAuthentication = createIssueAuthentication(() => snapshot, refresh, errorPanel);
 const githubAuthentication = createGithubAuthentication(() => snapshot, refresh);
 const transfers = createTransfers(() => snapshot, refresh);
+const projectSettings = createSettingsController(() => snapshot, refresh);
 const recovery = createRecoveryNavigation({
   snapshot: () => snapshot,
   changeView,
@@ -44,7 +45,11 @@ const recovery = createRecoveryNavigation({
 });
 const records = createHistory(() => snapshot, render);
 const focusTask = createTaskFocus();
-const setup = createSetupFlow({ snapshot: () => snapshot, render, action: (...args) => action(...args) });
+const setup = createSetupFlow({
+  snapshot: () => snapshot,
+  render,
+  action: (...args) => action(...args),
+});
 let preview = null;
 const operations = createOperations({
   snapshot: () => snapshot,
@@ -92,7 +97,7 @@ function render({ keepScroll = false } = {}) {
   document.getElementById('mode').textContent = serviceLabel(snapshot);
   content.innerHTML =
     view === 'configuration'
-      ? `${configuration(snapshot, esc, sha, button, setup.state())}${snapshot.state && snapshot.config && snapshot.connection ? `<details class="card" data-platform-options><summary>PR / Issue 平台设置（按需修改）</summary>${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}</details>` : ''}`
+      ? configuration(snapshot, esc, sha, button, setup.state())
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   transfers.render(content, view);
   updateShell(snapshot, view);
@@ -104,6 +109,7 @@ function render({ keepScroll = false } = {}) {
     content.querySelector('.record-detail')?.insertAdjacentHTML('beforeend', previewPanel(preview));
   content.querySelector('#error-slot')?.append(errorPanel);
   restoreDraft(savedDraft());
+  projectSettings.renderFeedback();
   restoreExpansion(
     content,
     snapshot,
@@ -127,9 +133,11 @@ function onTask(task) {
   if (!snapshot) return;
   snapshot.operation = task;
   const record = currentRecord(snapshot, records.get());
-  const historical = records.get().selected !== 'current' && records.get().selected !== snapshot.state?.active?.id;
+  const historical =
+    records.get().selected !== 'current' && records.get().selected !== snapshot.state?.active?.id;
   showActivity(task);
   if (historical) return;
+  if (view === 'configuration' && snapshot.state) return;
   if (!updateLiveWorkflow(content, snapshot, record, task, records.get().selected, expandedKey())) {
     const panel = content.querySelector('#operation');
     if (panel) panel.innerHTML = renderTask(task);
@@ -145,7 +153,8 @@ async function refresh({ background = false } = {}) {
   });
   const result = await response.json();
   if (response.ok && result.operation) result.operation.observedAt = new Date().toISOString();
-  if (!response.ok) throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
+  if (!response.ok)
+    throw new Error(`${result.code ?? 'STATUS_UNREADABLE'}：${result.message ?? '无法读取工作台'}`);
   if (ticket !== refreshing) return;
   if (!snapshot && result.state?.active) mobileDetail = true;
   snapshot = result;
@@ -235,11 +244,8 @@ async function navigate(element) {
     target?.querySelector('input, button, select')?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: 'start' });
   }
-  if (element.hasAttribute('data-expand-all')) {
-    const stages = [...content.querySelectorAll('[data-stage]')];
-    rememberExpansion(expandedKey(), Object.fromEntries(stages.map((stage) => [stage.dataset.stage, true])));
-    for (const stage of stages) stage.open = true;
-  }
+  if (element.hasAttribute('data-expand-all')) setAllExpansion(content, expandedKey(), true);
+  if (element.hasAttribute('data-collapse-all')) setAllExpansion(content, expandedKey(), false);
   if (element.dataset.record) {
     saveDraft();
     mobileDetail = true;
@@ -283,6 +289,7 @@ function showActionResult(kind, result) {
   }
 }
 initializeSubmissions({
+  projectSettings,
   snapshot: () => snapshot,
   action,
   issueAuthentication,
@@ -291,34 +298,11 @@ initializeSubmissions({
   setup,
   complete: (kind, result) => {
     showActionResult(kind, result);
-    showConfigurationConfirmation(kind, result);
+    configurationConfirmation(content, kind, result, snapshot);
+    saveDraft();
   },
   activate: () => changeView('workbench'),
 });
-function showConfigurationConfirmation(action, result) {
-  if (
-    !result ||
-    !['configure', 'configure-repositories', 'configure-pr', 'configure-issues', 'configure-closure'].includes(action)
-  )
-    return;
-  const confirmation = document.createElement('p');
-  confirmation.setAttribute('role', 'status');
-  confirmation.textContent = {
-    configure: '同步方式与文件规则已保存，请登记已有基线。',
-    'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
-    'configure-issues': 'Issue 自动化设置已保存。回到本笔同步继续创建或回读原对象。',
-    'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
-    'configure-closure': '关单规则确认已保存。原基线与 Issue 映射保留，可继续本笔同步。',
-  }[action];
-  const setup = ['configure', 'configure-repositories'].includes(action);
-  const form = content.querySelector(`form[data-form="${action}"]`);
-  if (!setup && form) {
-    form.after(confirmation);
-    confirmation.scrollIntoView({ block: 'nearest' });
-  } else (content.querySelector('[data-setup-current]') ?? content).prepend(confirmation);
-  revealSetupResult(action, snapshot);
-  saveDraft();
-}
 document.addEventListener('input', saveDraft);
 document.addEventListener('change', (event) => {
   if (event.target.matches('[name="mode"]')) {
@@ -328,12 +312,7 @@ document.addEventListener('change', (event) => {
   }
   saveDraft();
 });
-document.addEventListener('click', (event) => {
-  const summary = event.target.closest('[data-stage] > summary');
-  if (!summary) return;
-  const stage = summary.parentElement;
-  rememberExpansion(expandedKey(), { [stage.dataset.stage]: !stage.open });
-});
+initializeExpansion(expandedKey);
 projectNavigation
   .load()
   .then(refresh)
@@ -344,7 +323,8 @@ projectNavigation
 setInterval(() => {
   if (
     ['RUNNING', 'WAITING_REVIEW'].includes(snapshot?.state?.automation?.status) ||
-    (['synchronize', 'resume-sync'].includes(snapshot?.operation?.action) && snapshot.operation.status === 'RUNNING')
+    (['synchronize', 'resume-sync'].includes(snapshot?.operation?.action) &&
+      snapshot.operation.status === 'RUNNING')
   )
     refresh({ background: true }).catch(() => {});
 }, 5000);

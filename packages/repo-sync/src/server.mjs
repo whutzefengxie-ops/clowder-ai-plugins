@@ -15,6 +15,7 @@ import { clearIssueTokens } from './issue-auth.mjs';
 import { issueAuthRequest } from './issue-auth-http.mjs';
 import { journeyProgress } from './journey-progress.mjs';
 import { publicApi, publicPlatform } from './pr-settings.mjs';
+import { projectSettingsRequest } from './project-settings-http.mjs';
 import { recordDetail, recordList } from './records.mjs';
 import { checkProjectInput, projectRequest, serverScopes } from './server-projects.mjs';
 import { configure } from './settings.mjs';
@@ -82,6 +83,11 @@ const assets = new Map([
     'operator-journey.css',
     'task-progress.mjs',
     'step-plan.mjs',
+    'workflow-plan.mjs',
+    'settings-view.mjs',
+    'settings-controller.mjs',
+    'workbench-layout.css',
+    'workbench-viewport.css',
     'flow-stage.mjs',
     'live-workflow.mjs',
     'continuation-view.mjs',
@@ -140,7 +146,8 @@ async function executionRequest(request, response, path, context, scopes, token)
   requireToken(request, token);
   const input = await body(request);
   checkProjectInput(input, context.options.projectId);
-  if (context.tasks.busy()) fail('OPERATION_RUNNING', '此项目已有任务执行中，请处理原任务；可切换或新增其他项目');
+  if (context.tasks.busy())
+    fail('OPERATION_RUNNING', '此项目已有任务执行中，请处理原任务；可切换或新增其他项目');
   scopes.update(await post(context.receiver, context.options, token, input, response));
 }
 async function taskRequest(request, response, path, tasks, projectId) {
@@ -248,6 +255,7 @@ async function get(receiver, options, token, path, response, url = '') {
       ? {
           commitStrategy: receiver.config.commitStrategy,
           receivingIdentity: receiver.config.receivingIdentity,
+          autoMergeWaitMs: receiver.config.autoMergeWaitMs,
           sourceUrl,
           internalUrl,
           internalWebUrl,
@@ -310,6 +318,7 @@ async function workspaceSnapshot(options) {
 
 async function privateRequest(request, response, path, context, token, owner) {
   const { tasks } = context;
+  if (await projectSettingsRequest(request, response, path, context, token, owner)) return true;
   if (await transferRequest(request, response, path, context, token)) return true;
   if (await githubAuthRequest(request, response, path, context, token, owner)) return true;
   if (await issueAuthRequest(request, response, path, context, token, owner)) return true;

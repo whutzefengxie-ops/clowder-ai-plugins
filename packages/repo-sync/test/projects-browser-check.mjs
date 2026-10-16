@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +7,7 @@ import { git } from '../src/process.mjs';
 import { createProjectWorkspace } from '../src/projects.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { repositories } from './fixtures.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { inspectAndActivate } from './setup-journey-helpers.mjs';
 
 const a = await repositories(),
@@ -28,8 +28,7 @@ const projects = await createProjectWorkspace(file),
   ca = await projects.connection(),
   ra = await ca.current();
 await ra.adopt(a.u0, a.i0);
-const configBefore = await readFile(file, 'utf8'),
-  ledgerBefore = await readFile(ra.store.path, 'utf8');
+const ledgerBefore = await readFile(ra.store.path, 'utf8');
 let release;
 const gate = new Promise((done) => {
   release = done;
@@ -53,11 +52,14 @@ const evidence = process.env.REPO_SYNC_EVIDENCE || join(folder, 'evidence');
 await mkdir(evidence, { recursive: true });
 try {
   await page.goto(base);
-  await page.getByLabel('当前同步项目').waitFor();
-  await page.getByRole('button', { name: '修改项目名称' }).click();
+  await page.locator('.project-sidebar-row.selected').waitFor();
+  await page.getByRole('button', { name: '仓库设置', exact: true }).click();
   await page.getByLabel('项目名称', { exact: true }).fill('过程同步项目');
-  await page.getByRole('button', { name: '保存项目名称', exact: true }).click();
-  await page.getByRole('option', { name: /过程同步项目/ }).waitFor({ state: 'attached' });
+  await page.getByRole('button', { name: '保存设置并验证 →', exact: true }).click();
+  await page.locator('.project-sidebar-row').filter({ hasText: '过程同步项目' }).waitFor();
+  (await ca.current()).git.heads = ra.git.heads;
+  const renamedConfig = await readFile(file, 'utf8');
+  await page.getByRole('button', { name: '同步工作台', exact: true }).click();
   const initial = await (await fetch(`${base}/api/status`)).json();
   await fetch(`${base}/api/tasks?project=default`, {
     method: 'POST',
@@ -86,10 +88,13 @@ try {
   await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('README.md');
   await page.getByRole('button', { name: '过程同步项目的仓库设置', exact: true }).click();
-  await page.getByRole('heading', { name: '配置已完成', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '项目设置', exact: true }).waitFor();
   await page.getByRole('button', { name: '版本同步项目的仓库设置', exact: true }).click();
   await page.getByLabel('外部 GitHub 仓库地址').waitFor();
-  assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), 'https://github.com/demo/other.git');
+  assert.equal(
+    await page.getByLabel('外部 GitHub 仓库地址').inputValue(),
+    'https://github.com/demo/other.git',
+  );
   assert.equal(await page.getByLabel('内部保留文件 / 目录（每行一项）').inputValue(), 'README.md');
   await page.getByRole('button', { name: '保存并检查连接 →' }).click();
   await page.getByRole('heading', { name: '2 · 核验已有同步起点' }).waitFor({ timeout: 30000 });
@@ -103,6 +108,8 @@ try {
   await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   const cb = await projects.connection(id),
     rb = await cb.current();
+  const prStage = page.locator('[data-stage="3"]');
+  if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
   await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });
   await rb.linkPr('https://internal.example/other/pull/1');
   await page.reload();
@@ -112,14 +119,16 @@ try {
   const completed = (await rb.status()).deliveries[0];
   const otherTab = await browser.newPage();
   await otherTab.goto(`${base}/?project=default`);
-  await otherTab.getByLabel('当前同步项目').waitFor();
+  await otherTab.locator('.project-sidebar-row.selected').waitFor();
   assert.equal(await otherTab.getByLabel('当前同步项目').inputValue(), 'default');
   assert.equal(await page.getByLabel('当前同步项目').inputValue(), id);
   await otherTab.close();
+  await page.locator('.history-disclosure > summary').click();
   await page.locator(`[data-record="${completed.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
+  await page.locator('.delivery-boundary > summary').click();
   assert.ok((await page.locator('.record-detail').innerText()).includes(b.u2));
-  await page.getByLabel('当前同步项目').selectOption('default');
+  await page.locator('.project-sidebar-list [data-project-enter="default"]').click();
   await page.getByRole('heading', { name: '原操作需要处理', exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.has('record'), false);
   assert.equal(await page.locator(`[data-record="${completed.id}"]`).count(), 0);
@@ -130,9 +139,9 @@ try {
     if (task.status === 'SUCCEEDED') break;
     await new Promise((done) => setTimeout(done, 50));
   }
-  assert.equal(await readFile(file, 'utf8'), configBefore);
+  assert.equal(await readFile(file, 'utf8'), renamedConfig);
   assert.equal(await readFile(ra.store.path, 'utf8'), ledgerBefore);
-  await page.getByLabel('当前同步项目').selectOption(id);
+  await page.locator(`.project-sidebar-list [data-project-enter="${id}"]`).click();
   await page.getByRole('heading', { name: '当前已接收版本', exact: true }).waitFor();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1050 });
@@ -145,7 +154,11 @@ try {
   await page.setViewportSize({ width: 1440, height: 1050 });
   let lost = false;
   await page.route('**/api/projects', async (route) => {
-    if (route.request().method() === 'POST' && !lost && JSON.parse(route.request().postData()).action === 'create') {
+    if (
+      route.request().method() === 'POST' &&
+      !lost &&
+      JSON.parse(route.request().postData()).action === 'create'
+    ) {
       lost = true;
       await route.fetch();
       await route.abort();
@@ -161,6 +174,9 @@ try {
   console.log(
     'PASS: one portal creates/selects two modes, A continues in background while B completes real Git/PR reception, original bytes preserved, history isolated, lost project receipt reused, desktop/mobile.',
   );
+} catch (error) {
+  console.error(await page.locator('body').innerText());
+  throw error;
 } finally {
   release();
   await closeBrowser();

@@ -1,6 +1,6 @@
 import { actionBar } from './actionbar.mjs';
-import { attempts } from './attempts.mjs';
-import { esc, when, title } from './ui.mjs';
+import { attempts, stageSummary } from './attempts.mjs';
+import { esc, title, when } from './ui.mjs';
 
 export function automationBanner(snapshot) {
   const run = snapshot.state?.automation;
@@ -11,7 +11,7 @@ export function automationBanner(snapshot) {
     : 'Issue 搬运 → 提交与检查 → 自动创建 PR → 人工合入 → 自动核验与关单 → 下一笔';
   const labels = {
     RUNNING: '自动执行中',
-    WAITING_REVIEW: '等待你在内部平台审核合入',
+    WAITING_REVIEW: run.autoMerge ? '自动观察平台合入条件' : '等待你在内部平台审核合入',
     FAILED: '异常暂停 · 原记录可恢复',
     PAUSED: '已暂停自动继续',
     COMPLETE: '本轮自动同步完成',
@@ -20,9 +20,11 @@ export function automationBanner(snapshot) {
   const current = snapshot.state.active;
   const currentLabel = current
     ? `<p><b>当前${snapshot.journeyProgress ? `第 ${snapshot.journeyProgress.completed + 1} 笔` : '同步'} · ${esc(title(current))}</b></p>`
-    : run.restartOf && run.status === 'PAUSED' ? '<p><b>原 PR 已撤销，接受基线未变；确认后重新读取原目标并准备新的 PR。</b></p>' : run.status === 'PAUSED'
-      ? `<p><b>${run.pauseRequested?.afterDeliveryId ? '上一笔接收已结束，停在两笔之间；下一笔尚未开始。' : '本轮已暂停，尚未开始首笔交付。'}</b></p>`
-      : '';
+    : run.restartOf && run.status === 'PAUSED'
+      ? '<p><b>原 PR 已撤销，接受基线未变；确认后重新读取原目标并准备新的 PR。</b></p>'
+      : run.status === 'PAUSED'
+        ? `<p><b>${run.pauseRequested?.afterDeliveryId ? '上一笔接收已结束，停在两笔之间；下一笔尚未开始。' : '本轮已暂停，尚未开始首笔交付。'}</b></p>`
+        : '';
   const progress = snapshot.journeyProgress;
   const count = progress
     ? `<p>${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</p>`
@@ -33,7 +35,12 @@ export function automaticPolicy(snapshot, delivery) {
   const run = snapshot.state?.automation;
   if (!run || run.status === 'COMPLETE') return null;
   if (run.status === 'PAUSED' && run.restartOf && !snapshot.state.active)
-    return { stage: 1, text: '旧 PR 已关闭，Issue 与历史保留。明确继续后重新读取原目标、创建新的候选和 PR。', action: 'resume-sync', label: '重新读取目标并同步本笔 →' };
+    return {
+      stage: 1,
+      text: '旧 PR 已关闭，Issue 与历史保留。明确继续后重新读取原目标、创建新的候选和 PR。',
+      action: 'resume-sync',
+      label: '重新读取目标并同步本笔 →',
+    };
   const reference = referenceRemedy(delivery);
   if (reference) return reference;
   if (run.status === 'PAUSED' && !snapshot.state.active && run.pauseRequested)
@@ -63,9 +70,11 @@ export function automaticPolicy(snapshot, delivery) {
     return {
       stage: 4,
       text:
-        snapshot.config.mode === 'version'
-          ? '只需在内部平台审核合入，后台自动核验并保存版本结果；此模式不搬运 Issue。'
-          : `只需在内部平台审核合入。后台会自动核验、按接收条件关单，${run.pauseRequested || run.continuation === 'after-each' ? '本笔完成后暂停，确认继续才开始下一笔。' : '再处理下一笔。'}`,
+        run.autoMerge === true
+          ? `${delivery?.autoMerge?.reason ?? '正在核对平台 CI 与合入条件'}。系统观察同一 PR，确认合入后自动核验接收结果。${run.pauseRequested ? '本笔完成后暂停。' : ''}`
+          : snapshot.config.mode === 'version'
+            ? '只需在内部平台审核合入，后台自动核验并保存版本结果；此模式不搬运 Issue。'
+            : `只需在内部平台审核合入。后台会自动核验、按接收条件关单，${run.pauseRequested || run.continuation === 'after-each' ? '本笔完成后暂停，确认继续才开始下一笔。' : '再处理下一笔。'}`,
       href: delivery?.prUrl,
       label: '打开内部 PR ↗',
     };
@@ -80,7 +89,9 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
   const current =
     task?.persistence?.status === 'FAILED'
       ? 5
-      : task?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage || policy?.stage || 1;
+      : task?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage ||
+        policy?.stage ||
+        1;
   const version = snapshot.config.mode === 'version';
   const names = [
     '读取目标与真实来源集合',
@@ -99,7 +110,8 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
       const steps = task?.steps?.filter((step) => step.stage === stage) ?? [];
       const done = steps.length > 0 && steps.every((step) => step.status === 'DONE');
       const status = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
-      return `<li><details data-stage="${stage}" data-stage-state="${status}" ${stage === current ? 'open' : ''}><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
+      const detail = stageSummary(stage, null, task, false, snapshot, status);
+      return `<li><details data-stage="${stage}" data-stage-state="${status}"><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b><span data-stage-caption>${failed ? '异常待处理' : done ? '已完成' : stage === current ? '当前步骤' : '待执行'}</span><small data-stage-detail>${esc(detail)}</small></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
     })
     .join('')}</ol>${policy ? actionBar(policy, false, snapshot) : ''}`;
 }
@@ -107,7 +119,9 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
 function referenceRemedy(delivery) {
   if (
     delivery?.prReference?.withdrawn ||
-    ['GIT_PR_LINK_UNKNOWN', 'GIT_PR_RESPONSE_AMBIGUOUS', 'PR_CREATE_RESULT_UNKNOWN'].includes(delivery?.error?.code)
+    ['GIT_PR_LINK_UNKNOWN', 'GIT_PR_RESPONSE_AMBIGUOUS', 'PR_CREATE_RESULT_UNKNOWN'].includes(
+      delivery?.error?.code,
+    )
   )
     return {
       stage: 3,

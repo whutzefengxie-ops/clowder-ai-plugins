@@ -49,6 +49,7 @@ try {
   for (let index = 0; index < 2; index++) {
     await page.locator('[data-action="start"]').click();
     await page.locator('[data-stage="2"][data-stage-state="current"]').waitFor();
+    await page.locator('[data-stage="2"] > summary').click();
     if (!index) {
       await page.getByLabel('内部 Issue 编号').fill('318');
       await page.getByLabel('内部 Issue 具体链接').fill('https://codehub.example/core/issues/318');
@@ -68,6 +69,9 @@ try {
         document.addEventListener('click', repaint, true);
       });
     await page.locator('[data-action="prepare"]').click();
+    const prStage = page.locator('[data-stage="3"]');
+    await prStage.waitFor();
+    if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
     await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
     if (!index) assert.equal(await page.locator('html').getAttribute('data-prepare-repainted'), 'true');
     const before = await receiver.status();
@@ -85,6 +89,10 @@ try {
     await page.reload();
     assert.equal((await receiver.status()).accepted.internal, before.accepted.internal);
     await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).click();
+    const receiptStage = page.locator('[data-stage="5"]');
+    await receiptStage.waitFor();
+    if (!(await receiptStage.evaluate((node) => node.open)))
+      await receiptStage.locator(':scope > summary').click();
     await page.locator('[data-form="receipts"]').waitFor({ timeout: 20000 });
     if (index) {
       await page.getByRole('button', { name: '保存本笔接收记录，完成同步' }).click();
@@ -92,7 +100,10 @@ try {
       assert.match(await page.locator('#error').innerText(), /ISSUE_UPDATE_PENDING/);
       assert.equal(await page.locator('[data-step-state="failed"]').count(), 1);
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.screenshot({ path: join(evidence, '27-git-metadata-error-mobile.png'), fullPage: true });
+      await page.screenshot({
+        path: join(evidence, '27-git-metadata-error-mobile.png'),
+        fullPage: true,
+      });
       await page.setViewportSize({ width: 1440, height: 1100 });
       await page.locator('[data-form="receipts"] select').selectOption('closed');
     }
@@ -105,7 +116,10 @@ try {
     assert.equal(after.issues['issue-71'].receipts.length, index + 1);
     if (!index) {
       await page.locator('details').first().locator(':scope > summary').click();
-      await page.screenshot({ path: join(evidence, '26-git-shared-issue-u1.png'), fullPage: true });
+      await page.screenshot({
+        path: join(evidence, '26-git-shared-issue-u1.png'),
+        fullPage: true,
+      });
     }
   }
   assert.deepEqual(errors, []);
@@ -120,7 +134,10 @@ try {
       failure: error.message,
       errors,
       posted,
-      active: state?.active && { id: state.active.id, status: state.active.status },
+      active: state?.active && {
+        id: state.active.id,
+        status: state.active.status,
+      },
       forms: await page.locator('[data-form="pr"]').count(),
       stages: await page.locator('[data-stage]').evaluateAll((nodes) =>
         nodes.map((node) => ({
@@ -131,7 +148,10 @@ try {
       ),
     }),
   );
-  await page.screenshot({ path: join(evidence, 'browser-failure.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'browser-failure.png'),
+    fullPage: true,
+  });
   throw error;
 } finally {
   try {

@@ -1,16 +1,16 @@
-import { automationBanner, preDeliveryFlow } from './automation-view.mjs';
 import { nextAction } from './action-policy.mjs';
+import { automationBanner, preDeliveryFlow } from './automation-view.mjs';
 import { firstUse } from './connections.mjs';
+import { boundaryDeliveryId } from './flow-stage.mjs';
 import { githubAuthForm } from './github-auth.mjs';
 import { recordList } from './history.mjs';
+import { issueReferenceNotes } from './issue-reference-notes.mjs';
 import { sourceTargetForm } from './source-target.mjs';
 import { button, esc, sha, title, when } from './ui.mjs';
 import { tagSelector } from './version.mjs';
 import { workflow } from './workflow.mjs';
-import { boundaryDeliveryId } from './flow-stage.mjs';
-import { issueReferenceNotes } from './issue-reference-notes.mjs';
 
-export function workbench(snapshot, records, tags, mobileDetail) {
+export function workbench(snapshot, records, tags, _mobileDetail) {
   const { config, state } = snapshot;
   if (!config) return firstUse();
   if (!state)
@@ -39,14 +39,15 @@ export function workbench(snapshot, records, tags, mobileDetail) {
       : historical
         ? '<p role="status">正在读取所选记录…</p>'
         : target(snapshot, tags);
-  return `${summary}${historical ? '<p>正在查看历史；当前轮次继续由后台处理，返回当前同步后才能操作。</p>' : automationBanner(snapshot)}<p id="current-activity" role="status"></p><div class="journey-layout ${mobileDetail ? 'mobile-detail' : 'mobile-list'}">${recordList(records, state.active)}<section class="record-detail" aria-label="本笔同步详情"><button type="button" class="mobile-back" data-record-back>返回同步记录</button>${detail}</section></div>`;
+  return `${summary}${historical ? '<p>正在查看历史；当前轮次继续由后台处理，返回当前同步后才能操作。</p>' : automationBanner(snapshot)}<p id="current-activity" role="status"></p><div class="journey-layout"><details class="history-disclosure" data-persist-details="history" ${historical ? 'open' : ''}><summary>历史记录 · ${records.page?.total ?? state.deliveryCount ?? state.deliveries?.length ?? 0} 笔</summary>${recordList(records, state.active)}</details><section class="record-detail" aria-label="本笔同步详情"><button type="button" class="mobile-back" data-record-back>返回同步记录</button>${detail}</section></div>`;
 }
 function target(snapshot, tags) {
   const { state, config } = snapshot;
   const task = snapshot.operation;
   const pending =
     task &&
-    (['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status) || task.persistence?.status === 'FAILED');
+    (['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status) ||
+      task.persistence?.status === 'FAILED');
   if (snapshot.state.automation && snapshot.state.automation.status !== 'COMPLETE')
     return preDeliveryFlow(snapshot, nextAction(snapshot, null));
   if (pending)

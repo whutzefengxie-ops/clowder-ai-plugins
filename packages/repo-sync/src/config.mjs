@@ -40,6 +40,13 @@ export function objectUrl(value) {
 export function validateConfig(input) {
   const config = structuredClone(input);
   validateMode(config);
+  if (
+    config.autoMergeWaitMs !== undefined &&
+    (!Number.isInteger(config.autoMergeWaitMs) ||
+      config.autoMergeWaitMs < 1000 ||
+      config.autoMergeWaitMs > 86400000)
+  )
+    fail('INVALID_AUTO_MERGE', '自动合入等待时限需要在 1 秒至 24 小时之间');
   commitPolicy(config);
   config.sourceUrl = safeUrl(config.sourceUrl, config.allowLocal === true);
   config.internalUrl = safeUrl(config.internalUrl, config.allowLocal === true);
@@ -55,7 +62,8 @@ export function validateConfig(input) {
   }
   if (!isAbsolute(config.stateDir)) fail('INVALID_STATE_DIR', '台账目录需要绝对路径，放在核心仓之外');
   config.stateDir = resolve(config.stateDir);
-  if (config.sourceUrl === config.internalUrl) fail('SAME_REPOSITORY', '外部来源与内部接收不能使用同一个仓库地址');
+  if (config.sourceUrl === config.internalUrl)
+    fail('SAME_REPOSITORY', '外部来源与内部接收不能使用同一个仓库地址');
   if (config.commitClosureVerified !== undefined && typeof config.commitClosureVerified !== 'boolean')
     fail('INVALID_CAPABILITY', '关单验证声明必须是布尔值');
   checkStateLocation(config);
@@ -105,7 +113,10 @@ function validateTimeouts(values) {
       Object.keys(values).some((key) => !['probe', 'fetch'].includes(key)))
   )
     fail('INVALID_TIMEOUT', '超时配置只支持 probe 和 fetch');
-  for (const [name, defaultValue] of Object.entries({ probe: 20000, fetch: 600000 })) {
+  for (const [name, defaultValue] of Object.entries({
+    probe: 20000,
+    fetch: 600000,
+  })) {
     const value = values?.[name] ?? defaultValue;
     if (!Number.isInteger(value) || value < 1000 || value > 3600000)
       fail('INVALID_TIMEOUT', '连接和下载超时必须是 1000～3600000 毫秒的整数');
@@ -118,7 +129,8 @@ function normalizeCheckProfile(config) {
 }
 function validateMode(config) {
   config.mode ??= 'continuous';
-  if (!['continuous', 'version'].includes(config.mode)) fail('INVALID_MODE', '同步模式需要 continuous 或 version');
+  if (!['continuous', 'version'].includes(config.mode))
+    fail('INVALID_MODE', '同步模式需要 continuous 或 version');
   Object.assign(config, versionPolicy(config));
 }
 function checkStateLocation(config) {

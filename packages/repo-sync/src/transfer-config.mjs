@@ -19,6 +19,7 @@ const fields = [
   'issues',
   'pullRequests',
   'timeouts',
+  'autoMergeWaitMs',
   'allowLocal',
 ];
 const apiFields = ['mode', 'apiUrl', 'projectId', 'authMode', 'tokenEnv', 'timeoutMs'];
@@ -32,8 +33,14 @@ export function portableConfig(input, exported = false) {
     input.checks?.length &&
     JSON.stringify(input.checks) !== JSON.stringify([{ command: 'git', args: ['fsck', '--no-reflogs'] }])
   )
-    fail('TRANSFER_CUSTOM_COMMAND', '自定义检查命令不能自动迁移；请先使用内置 Git 完整性检查，原检查未被替换。');
-  for (const [key, value] of Object.entries({ issues: input.issues, pullRequests: input.pullRequests })) {
+    fail(
+      'TRANSFER_CUSTOM_COMMAND',
+      '自定义检查命令不能自动迁移；请先使用内置 Git 完整性检查，原检查未被替换。',
+    );
+  for (const [key, value] of Object.entries({
+    issues: input.issues,
+    pullRequests: input.pullRequests,
+  })) {
     if (value === undefined) continue;
     if (!value || typeof value !== 'object' || Array.isArray(value))
       fail('TRANSFER_CONFIG_INVALID', '平台适配设置不是有效对象。');
@@ -49,17 +56,27 @@ export function portableConfig(input, exported = false) {
     )
       fail('TRANSFER_CUSTOM_COMMAND', '自定义 Git 推送选项不能自动迁移；原设置未被弱化或执行。');
   }
-  if (input.receivingIdentity && Object.keys(input.receivingIdentity).some((key) => !['name', 'email'].includes(key)))
+  if (
+    input.receivingIdentity &&
+    Object.keys(input.receivingIdentity).some((key) => !['name', 'email'].includes(key))
+  )
     fail('TRANSFER_CONFIG_UNKNOWN', '提交身份设置含未知字段，未导出。');
   const config = Object.fromEntries(
     fields.filter((key) => input[key] !== undefined).map((key) => [key, structuredClone(input[key])]),
   );
-  const checked = validateConfig({ ...config, stateDir: resolve(process.cwd(), '.transfer-validation-state') });
+  const checked = validateConfig({
+    ...config,
+    stateDir: resolve(process.cwd(), '.transfer-validation-state'),
+  });
   if (input.bindingId !== undefined && input.bindingId !== checked.bindingId)
     fail('TRANSFER_BINDING_MISMATCH', '导出配置与原仓库绑定不一致，停止迁移。');
   return config;
 }
 
 export function transferredConfig(config, stateDir) {
-  return validateConfig({ ...portableConfig(config, true), stateDir, configurationSource: 'workbench' });
+  return validateConfig({
+    ...portableConfig(config, true),
+    stateDir,
+    configurationSource: 'workbench',
+  });
 }

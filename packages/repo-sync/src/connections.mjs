@@ -4,9 +4,15 @@ import { fail, validateConfig } from './config.mjs';
 import { githubRepository } from './github.mjs';
 import { retainGithubToken } from './github-auth.mjs';
 import { retainIssueToken } from './issue-auth.mjs';
-import { checkIssueSettings, issueConfiguration, issueInputKeys, repositoryWebFromIssue } from './issue-settings.mjs';
+import {
+  checkIssueSettings,
+  issueConfiguration,
+  issueInputKeys,
+  repositoryWebFromIssue,
+} from './issue-settings.mjs';
 import { checkFrozenPr, checkPlatformInput, prConfiguration } from './pr-settings.mjs';
 import { configurationLock, privateLocation, readPrivate, writePrivate } from './private-config.mjs';
+import { projectConfiguration } from './project-settings.mjs';
 import { recordDelivery } from './recording.mjs';
 import { configuredReceiver } from './settings.mjs';
 import { assertTransferWritable } from './transfer-state.mjs';
@@ -42,7 +48,8 @@ export async function createConnection(file, options = {}) {
       revision = saved.revision;
       loaded = true;
     }
-    editable = !receiver || (receiver.config.configurationSource === 'workbench' && !(await receiver.status()));
+    editable =
+      !receiver || (receiver.config.configurationSource === 'workbench' && !(await receiver.status()));
     return receiver;
   }
   async function save(input) {
@@ -53,14 +60,18 @@ export async function createConnection(file, options = {}) {
     if (input.expectedRevision !== revision)
       fail('CONFIGURATION_CHANGED', '配置已变化，请刷新后重新核对，未覆盖原配置');
     if (!editable)
-      fail('CONFIGURATION_READ_ONLY', '已登记基线或使用手工配置，不能在向导覆盖；另一套绑定请使用新的私有配置文件');
+      fail(
+        'CONFIGURATION_READ_ONLY',
+        '已登记基线或使用手工配置，不能在向导覆盖；另一套绑定请使用新的私有配置文件',
+      );
     const previous = receiver?.config;
     const next = repositoryConfiguration(previous, input, path);
     next.stateDir = stateDirectory(path, next.bindingId, options);
     githubRepository(next.sourceUrl);
     const candidate = await configuredReceiver(next);
     if (await candidate.status()) fail('ALREADY_ADOPTED', '此绑定已有台账，请使用原配置继续，不能覆盖');
-    if ((await readPrivate(path)).revision !== revision) fail('CONFIGURATION_CHANGED', '配置已被本地修改，请刷新核对');
+    if ((await readPrivate(path)).revision !== revision)
+      fail('CONFIGURATION_CHANGED', '配置已被本地修改，请刷新核对');
     await writePrivate(path, next);
     loaded = false;
     const configured = await current();
@@ -74,7 +85,11 @@ export async function createConnection(file, options = {}) {
     const next = validateConfig({
       ...receiver.config,
       internalWebUrl: input.internalWebUrl,
-      pullRequests: prConfiguration({ ...receiver.config, internalWebUrl: input.internalWebUrl }, input.prMode, input),
+      pullRequests: prConfiguration(
+        { ...receiver.config, internalWebUrl: input.internalWebUrl },
+        input.prMode,
+        input,
+      ),
     });
     const existing = await receiver.status();
     checkIssueSettings(existing, receiver.config, next);
@@ -101,6 +116,7 @@ export async function createConnection(file, options = {}) {
     ['configure-issues', saveIssues],
     ['configure-closure', saveClosure],
     ['configure-identity', saveIdentity],
+    ['configure-project-settings', saveProjectSettings],
   ]);
   return {
     current,
@@ -120,7 +136,8 @@ export async function createConnection(file, options = {}) {
         const bound = await current();
         if (!bound) fail('CONFIGURATION_REQUIRED', '请先保存真实仓库配置，再登记已有基线');
         verifyExecutionInput(input, bound, revision);
-        if (input.action === 'configure') fail('CONFIGURATION_READ_ONLY', '请在仓库连接向导统一修改模式与文件规则');
+        if (input.action === 'configure')
+          fail('CONFIGURATION_READ_ONLY', '请在仓库连接向导统一修改模式与文件规则');
         return dispatch(bound, input, options);
       }),
   };
@@ -132,16 +149,25 @@ export async function createConnection(file, options = {}) {
     )
       fail('INVALID_CONFIGURATION_INPUT', '文件树只接受内部保留路径，不能修改仓库或执行命令');
     await current();
-    if (!receiver || input.expectedRevision !== revision || input.expectedBinding !== receiver.config.bindingId)
+    if (
+      !receiver ||
+      input.expectedRevision !== revision ||
+      input.expectedBinding !== receiver.config.bindingId
+    )
       fail('CONFIGURATION_CHANGED', '仓库或配置已变化，请刷新后重新核对文件差异，未覆盖原配置');
     if (!editable)
       fail('CONFIGURATION_READ_ONLY', '已启用或由本地文件管理的绑定不能从文件树修改规则，原配置与台账保留');
     const previous = receiver.config;
-    const next = validateConfig({ ...previous, internalPaths: input.internalPaths, mergePaths: [] });
+    const next = validateConfig({
+      ...previous,
+      internalPaths: input.internalPaths,
+      mergePaths: [],
+    });
     next.stateDir = stateDirectory(path, next.bindingId, options);
     const candidate = await configuredReceiver(next);
     if (await candidate.status()) fail('ALREADY_ADOPTED', '所选规则已有台账，请使用原配置继续，不能覆盖');
-    if ((await readPrivate(path)).revision !== revision) fail('CONFIGURATION_CHANGED', '私有配置已被修改，请刷新核对');
+    if ((await readPrivate(path)).revision !== revision)
+      fail('CONFIGURATION_CHANGED', '私有配置已被修改，请刷新核对');
     await writePrivate(path, next);
     loaded = false;
     const configured = await current();
@@ -190,8 +216,30 @@ export async function createConnection(file, options = {}) {
     const previous = receiver.config;
     await writePrivate(
       path,
-      validateConfig({ ...previous, commitStrategy: input.commitStrategy, receivingIdentity: input.receivingIdentity }),
+      validateConfig({
+        ...previous,
+        commitStrategy: input.commitStrategy,
+        receivingIdentity: input.receivingIdentity,
+      }),
     );
+    loaded = false;
+    const configured = await current();
+    retainGithubToken(previous, configured.config);
+    retainIssueToken(previous, configured.config);
+    return configured;
+  }
+  async function saveProjectSettings(input) {
+    await current();
+    if (
+      !receiver ||
+      input.expectedRevision !== revision ||
+      input.expectedBinding !== receiver.config.bindingId
+    )
+      fail('CONFIGURATION_CHANGED', '项目或配置已变化，请刷新后重新核对，未保存陈旧设置');
+    const previous = receiver.config;
+    const state = await receiver.status();
+    const next = projectConfiguration(previous, state, input);
+    await writePrivate(path, next);
     loaded = false;
     const configured = await current();
     retainGithubToken(previous, configured.config);
@@ -207,8 +255,14 @@ export async function createConnection(file, options = {}) {
       input.confirmed !== true ||
       Object.keys(input).some((key) => !['action', 'expectedRevision', 'confirmed'].includes(key))
     )
-      fail('CLOSURE_CONFIRMATION_REQUIRED', '请在当前项目读完关单规则说明并明确确认，配置变化时需刷新重核对。');
-    const next = validateConfig({ ...receiver.config, commitClosureVerified: true });
+      fail(
+        'CLOSURE_CONFIRMATION_REQUIRED',
+        '请在当前项目读完关单规则说明并明确确认，配置变化时需刷新重核对。',
+      );
+    const next = validateConfig({
+      ...receiver.config,
+      commitClosureVerified: true,
+    });
     await writePrivate(path, next);
     loaded = false;
     const configured = await current();
@@ -237,7 +291,10 @@ function stateDirectory(path, bindingId, options) {
 }
 
 function repositoryConfiguration(previous = {}, input, path) {
-  input = { ...input, internalWebUrl: input.internalWebUrl || repositoryWebFromIssue(input.issuePageUrl) };
+  input = {
+    ...input,
+    internalWebUrl: input.internalWebUrl || repositoryWebFromIssue(input.issuePageUrl),
+  };
   return validateConfig({
     ...(previous ?? {}),
     configurationSource: 'workbench',

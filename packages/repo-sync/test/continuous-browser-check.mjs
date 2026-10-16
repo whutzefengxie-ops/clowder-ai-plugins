@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,6 +7,8 @@ import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { continuousRepositories } from './continuous-fixtures.mjs';
 import { issuePlatform } from './issue-fixtures.mjs';
+import { openHistory } from './journey-controls.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await continuousRepositories(),
   platform = await issuePlatform(f);
@@ -55,10 +56,16 @@ const sourceProvider = {
         ? prs.filter((pr) => pr.number === 1 && path.includes(pr.merge_commit_sha))
         : prs.find((pr) => path === `repos/demo/core/pulls/${pr.number}`),
   collectIssues: async (_, pr) => [
-    { ...f.plans[(pr?.number ?? 2) - 1].issues[0], relation: pr?.number === 1 ? 'related' : 'closes' },
+    {
+      ...f.plans[(pr?.number ?? 2) - 1].issues[0],
+      relation: pr?.number === 1 ? 'related' : 'closes',
+    },
   ],
 };
-const server = createReceiverServer(receiver, { sourceProvider, syncInterval: 100 });
+const server = createReceiverServer(receiver, {
+  sourceProvider,
+  syncInterval: 100,
+});
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 const { browser, close: closeBrowser } = await launchOwnedBrowser(chromium, {
   headless: true,
@@ -81,12 +88,22 @@ try {
     assert.equal(active.prUrl, `https://codehub.example/core/pull/${number}`);
     assert.equal(await page.locator('[data-stage]').count(), 5);
     assert.equal(await page.locator('[data-stage-state="done"][open]').count(), 0);
-    assert.equal(await page.locator('[data-stage="4"][open]').count(), 1);
-    if (number === 1) await page.screenshot({ path: join(evidence, 'automatic-waiting-review.png'), fullPage: true });
+    assert.equal(
+      await page.locator('[data-stage][open]').count(),
+      0,
+      'all stages start collapsed during active sync',
+    );
+    if (number === 1)
+      await page.screenshot({
+        path: join(evidence, 'automatic-waiting-review.png'),
+        fullPage: true,
+      });
     await page.getByRole('button', { name: '展开全部阶段' }).click();
     assert.ok((await page.locator('[data-stage="2"]').innerText()).includes('创建 / 复用并回读内部 Issue'));
     assert.equal(
-      await page.locator('[data-stage="3"] [data-step-key="issue-link"]').getAttribute('data-operation-state'),
+      await page
+        .locator('[data-stage="3"] [data-step-key="issue-link"]')
+        .getAttribute('data-operation-state'),
       'DONE',
     );
     const issueLink = page.locator('[data-stage="3"] [data-step-key="issue-link"]');
@@ -94,11 +111,17 @@ try {
     for (const issue of active.issues) {
       const label = `关联并回读内部 PR 与 Issue #${issue.number}`;
       const evidence = issueLink.locator('details[data-attempt]').filter({ hasText: label });
-      assert.ok(await evidence.count(), `the original Issue #${issue.number} association evidence must remain`);
+      assert.ok(
+        await evidence.count(),
+        `the original Issue #${issue.number} association evidence must remain`,
+      );
       await evidence.last().locator(':scope > summary').click();
       assert.ok((await issueLink.innerText()).includes(label));
     }
-    assert.equal(await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]), '内部默认中文版');
+    assert.equal(
+      await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]),
+      '内部默认中文版',
+    );
     if (number === 2) await platform.edit({ loseUpdate: true });
     await f.merge(active);
 
@@ -106,7 +129,10 @@ try {
       await page.getByRole('button', { name: '恢复原同步 →' }).waitFor({ timeout: 30000 });
       assert.equal((await receiver.status()).active.status, 'CODE_ACCEPTED_PENDING_METADATA');
       assert.equal(await page.locator('[data-stage="5"][data-stage-state="failed"]').count(), 1);
-      await page.screenshot({ path: join(evidence, 'continuous-recovery.png'), fullPage: true });
+      await page.screenshot({
+        path: join(evidence, 'continuous-recovery.png'),
+        fullPage: true,
+      });
       await platform.edit({ loseUpdate: false });
       await page.getByRole('button', { name: '恢复原同步 →' }).click();
     }
@@ -114,9 +140,14 @@ try {
       (index) => document.querySelectorAll('.record-list [data-record]').length >= index,
       number,
     );
-    for (let retry = 0; retry < 100 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE'; retry++)
+    for (
+      let retry = 0;
+      retry < 100 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE';
+      retry++
+    )
       await new Promise((done) => setTimeout(done, 200));
     assert.equal((await receiver.status()).deliveries.at(-1).status, 'COMPLETE');
+    await openHistory(page);
     await page.locator(`[data-record="${active.id}"]`).click();
     await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
     await page.getByRole('button', { name: '展开全部阶段' }).click();

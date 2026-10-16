@@ -53,17 +53,24 @@ const rename = fs.rename;
 let denied = false;
 fs.rename = async (from, to) => {
   if (denied && to === receiver.store.path)
-    throw Object.assign(new Error('private file and original error'), { code: 'EPERM' });
+    throw Object.assign(new Error('private file and original error'), {
+      code: 'EPERM',
+    });
   return rename(from, to);
 };
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
+  const prStage = page.locator('[data-stage="3"]');
+  if (!(await prStage.evaluate((element) => element.open))) await prStage.locator(':scope > summary').click();
   await page.getByRole('heading', { name: '先配置内部仓库网页地址', level: 3 }).waitFor();
   await page.getByRole('link', { name: '配置网页地址，继续 PR →' }).waitFor();
   assert.equal(await page.locator('[data-form="pr"]').count(), 0);
   const settings = page.locator('[data-form="configure-pr"]');
   assert.equal(await settings.getByLabel('PR 创建方式').inputValue(), 'manual');
-  await page.screenshot({ path: join(evidence, 'missing-web-origin.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'missing-web-origin.png'),
+    fullPage: true,
+  });
   await settings.getByLabel('用于确认 PR 地址的内部网页仓库').fill('https://web.codehub.example/team/core');
   await settings.getByRole('button', { name: '保存 PR 创建设置' }).click();
   await page.locator('[data-form="pr"]').waitFor();
@@ -83,7 +90,12 @@ try {
   await page.locator('#error').filter({ hasText: 'LEDGER_WRITE_FAILED' }).waitFor({ timeout: 20000 });
   assert.equal((await receiver.status()).active.prUrl, url);
   await page.reload();
-  const failedReference = page.locator('[data-stage="3"] [data-step-key="platform-pr"][data-step-state="failed"]');
+  const reopenedPrStage = page.locator('[data-stage="3"]');
+  if (!(await reopenedPrStage.evaluate((element) => element.open)))
+    await reopenedPrStage.locator(':scope > summary').click();
+  const failedReference = page.locator(
+    '[data-stage="3"] [data-step-key="platform-pr"][data-step-state="failed"]',
+  );
   await failedReference.waitFor();
   const ledgerEvidence = failedReference
     .locator('[data-attempt]')
@@ -99,7 +111,10 @@ try {
   assert.doesNotMatch(await failedReference.innerText(), /private file and original error/);
   await page.setViewportSize({ width: 390, height: 1050 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  await page.screenshot({ path: join(evidence, 'ledger-save-failed-mobile.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'ledger-save-failed-mobile.png'),
+    fullPage: true,
+  });
   denied = false;
   if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
     await page.locator('[data-stage="3"] > summary').click();
@@ -124,7 +139,10 @@ try {
   );
 } catch (error) {
   console.log('Browser errors:', errors, '\nVisible page:', await page.locator('body').innerText());
-  await page.screenshot({ path: join(evidence, 'failure.png'), fullPage: true });
+  await page.screenshot({
+    path: join(evidence, 'failure.png'),
+    fullPage: true,
+  });
   throw error;
 } finally {
   fs.rename = rename;

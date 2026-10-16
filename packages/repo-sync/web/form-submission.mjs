@@ -1,16 +1,22 @@
 import { repositoryInput } from './connections.mjs';
 import { showFormErrors } from './form-errors.mjs';
+import { revealSetupResult } from './setup-navigation.mjs';
 export function initializeSubmissions(context) {
-  const { snapshot, action, issueAuthentication, githubAuthentication, records, setup, complete, activate } = context;
+  const { snapshot, action, issueAuthentication, githubAuthentication, records, setup, complete, activate } =
+    context;
   document.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.target;
+    if (form.hasAttribute('data-settings-form')) return context.projectSettings.submit(form);
     if (form.hasAttribute('data-github-auth')) return githubAuthentication.submit(form);
     if (form.hasAttribute('data-secret-form')) return issueAuthentication.submit(form);
     // Project forms are owned by project navigation, not the synchronization executor.
     if (!form.dataset.form && !form.hasAttribute('data-record-filter')) return;
     const fields = Object.fromEntries(new FormData(form));
-    const tokens = { issueToken: fields.issueToken ?? '', githubToken: fields.githubToken ?? '' };
+    const tokens = {
+      issueToken: fields.issueToken ?? '',
+      githubToken: fields.githubToken ?? '',
+    };
     delete fields.issueToken;
     delete fields.githubToken;
     if (form.hasAttribute('data-record-filter')) return records.filter(fields);
@@ -33,14 +39,18 @@ export function initializeSubmissions(context) {
           .map((v) => v.trim())
           .filter(Boolean);
     if (input.action === 'configure-identity') {
-      input.receivingIdentity = { name: fields.commitName.trim(), email: fields.commitEmail.trim() };
+      input.receivingIdentity = {
+        name: fields.commitName.trim(),
+        email: fields.commitEmail.trim(),
+      };
       delete input.commitName;
       delete input.commitEmail;
     }
     if (input.action === 'issue') input.sourceId = form.dataset.source;
     if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
     if (input.action === 'cancel-delivery') input.confirmed = fields.confirmed === 'on';
-    if (['synchronize', 'configure-auto-merge'].includes(input.action)) input.autoMerge = fields.autoMerge === 'on';
+    if (['synchronize', 'configure-auto-merge'].includes(input.action))
+      input.autoMerge = fields.autoMerge === 'on';
     const resumeAutomaticMerge =
       input.action === 'configure-auto-merge' &&
       input.autoMerge &&
@@ -77,7 +87,10 @@ export function initializeSubmissions(context) {
       result,
       config?.prTransport === 'gitlab' || config?.issueAutomation?.mode === 'gitlab' ? tokens.issueToken : '',
     );
-    const source = await githubAuthentication.complete(result, config?.mode === 'continuous' ? tokens.githubToken : '');
+    const source = await githubAuthentication.complete(
+      result,
+      config?.mode === 'continuous' ? tokens.githubToken : '',
+    );
     if (input.action === 'configure-repositories') {
       if (issue && source) await setup.checkConnections();
       else setup.partial();
@@ -87,7 +100,11 @@ export function initializeSubmissions(context) {
     if (input.action === 'adopt' && snapshot().state) return activate();
     complete(input.action, result);
     if (resumeAutomaticMerge) {
-      await action({ action: 'resume-sync', runId: input.runId, deliveryId: input.deliveryId });
+      await action({
+        action: 'resume-sync',
+        runId: input.runId,
+        deliveryId: input.deliveryId,
+      });
       return;
     }
   });
@@ -119,7 +136,10 @@ function ordinaryFields(form, fields) {
       fields.sourceUrl?.trim() ?? '',
     )
   )
-    errors.push({ field: 'sourceUrl', message: '填写 GitHub 仓库 HTTPS 或 SSH 地址，不含凭据、查询参数或文件路径。' });
+    errors.push({
+      field: 'sourceUrl',
+      message: '填写 GitHub 仓库 HTTPS 或 SSH 地址，不含凭据、查询参数或文件路径。',
+    });
   if (!['version', 'continuous'].includes(fields.mode))
     errors.push({ field: 'mode', message: '请选择你要同步的内容。' });
   if (errors.length) {
@@ -127,4 +147,33 @@ function ordinaryFields(form, fields) {
     return false;
   }
   return true;
+}
+export function configurationConfirmation(content, action, result, snapshot) {
+  if (
+    !result ||
+    ![
+      'configure',
+      'configure-repositories',
+      'configure-pr',
+      'configure-issues',
+      'configure-closure',
+    ].includes(action)
+  )
+    return;
+  const confirmation = document.createElement('p');
+  confirmation.setAttribute('role', 'status');
+  confirmation.textContent = {
+    configure: '同步方式与文件规则已保存，请登记已有基线。',
+    'configure-pr': 'PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。',
+    'configure-issues': 'Issue 自动化设置已保存。回到本笔同步继续创建或回读原对象。',
+    'configure-repositories': '仓库配置已保存在本机。下一步：读取两侧版本并登记已有基线。',
+    'configure-closure': '关单规则确认已保存。原基线与 Issue 映射保留，可继续本笔同步。',
+  }[action];
+  const setup = ['configure', 'configure-repositories'].includes(action);
+  const form = content.querySelector(`form[data-form="${action}"]`);
+  if (!setup && form) {
+    form.after(confirmation);
+    confirmation.scrollIntoView({ block: 'nearest' });
+  } else (content.querySelector('[data-setup-current]') ?? content).prepend(confirmation);
+  revealSetupResult(action, snapshot);
 }

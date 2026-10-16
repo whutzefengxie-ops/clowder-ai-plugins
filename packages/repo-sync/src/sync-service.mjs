@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { autoMergeDelivery } from './auto-merge.mjs';
 import { safeError } from './execution.mjs';
 import { transferState } from './transfer-state.mjs';
 
@@ -12,6 +13,7 @@ export class SyncService {
   }
   async tick() {
     if (this.stopped || this.job) return;
+    if (Date.now() < (this.retryAt ?? 0)) return;
     this.job = this.observe();
     try {
       await this.job;
@@ -32,6 +34,43 @@ export class SyncService {
     if (!run || !['RUNNING', 'WAITING_REVIEW'].includes(run.status)) return;
     const task = await scope.tasks.latest();
     if (blockedTask(task)) return;
+    if (
+      run.status === 'WAITING_REVIEW' &&
+      state.active &&
+      (run.autoMerge === true ||
+        (state.active.autoMerge?.requestedAt &&
+          !state.active.autoMerge.requestRejected &&
+          state.active.autoMerge.status !== 'MERGED'))
+    ) {
+      if (Date.parse(state.active.autoMerge?.nextCheckAt) > Date.now()) return;
+      try {
+        const result = await autoMergeDelivery(receiver, {
+          observeOnly: true,
+          expected: {
+            runId: run.id,
+            deliveryId: state.active.id,
+            head: state.active.candidate,
+          },
+        });
+        this.lastCheckedAt = new Date().toISOString();
+        this.error = null;
+        this.readErrors = 0;
+        this.retryAt = 0;
+        if (!['ready', 'merged', 'blocked'].includes(result.kind)) return;
+      } catch (error) {
+        this.error = safeError(error);
+        this.readErrors = (this.readErrors ?? 0) + 1;
+        this.retryAt = Date.now() + (error.retryAfterMs ?? 10000 * this.readErrors);
+        if ([401, 403].includes(error.httpStatus) || this.readErrors >= 3) {
+          await receiver.change((saved) => {
+            if (saved.automation.id !== run.id || receiver.active(saved)?.id !== state.active.id) return;
+            saved.automation.status = 'FAILED';
+            saved.automation.error = safeError(error);
+          });
+        }
+        return;
+      }
+    }
     if (run.status === 'WAITING_REVIEW' && state.active && !state.active.acceptedInternal) {
       try {
         const head = await receiver.git.remoteBranch(receiver.config.targetBranch, {
@@ -59,7 +98,10 @@ export class SyncService {
     });
   }
   status() {
-    return { lastCheckedAt: this.lastCheckedAt ?? null, error: this.error ?? null };
+    return {
+      lastCheckedAt: this.lastCheckedAt ?? null,
+      error: this.error ?? null,
+    };
   }
   async close() {
     this.stopped = true;
@@ -70,5 +112,8 @@ export class SyncService {
 }
 
 function blockedTask(task) {
-  return ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task?.status) || task?.persistence?.status === 'FAILED';
+  return (
+    ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task?.status) ||
+    task?.persistence?.status === 'FAILED'
+  );
 }

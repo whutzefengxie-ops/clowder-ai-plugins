@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,12 +7,13 @@ import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { gitPrFixture } from './git-pr-fixtures.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await gitPrFixture();
 const folder = await mkdtemp(join(tmpdir(), 'repo-sync-git-pr-web-'));
 const configFile = join(folder, 'config.json');
-await writeFile(configFile, JSON.stringify({ ...f.config, pullRequests: undefined }));
-const receiver = new Receiver({ ...f.config, pullRequests: undefined });
+await writeFile(configFile, JSON.stringify(f.config));
+const receiver = new Receiver(f.config);
 await receiver.adopt(f.u0, f.i0);
 await receiver.selectTag('v2.0.0');
 await receiver.start();
@@ -32,10 +32,10 @@ await mkdir(evidence, { recursive: true });
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByRole('button', { name: '仓库设置', exact: true }).click();
-  await page.getByText('PR / Issue 平台设置（按需修改）', { exact: true }).click();
-  await page.locator('#platform-settings').getByLabel('PR 创建方式').selectOption('git');
-  await page.getByRole('button', { name: '保存 PR 创建设置' }).click();
-  await page.getByText('PR 创建设置已保存，原基线与台账保留。回到工作台继续同步。').waitFor();
+  await page.locator('[data-settings-form]').waitFor();
+  assert.equal(await page.getByLabel('PR 创建方式').inputValue(), 'git');
+  await page.getByRole('button', { name: '保存设置并验证 →' }).click();
+  await page.locator('[data-settings-result]').filter({ hasText: '设置已保存' }).waitFor();
   assert.equal((await connection.current()).config.pullRequests.mode, 'git');
   assert.equal((await (await connection.current()).status()).initial.upstream, f.u0);
   await page.getByRole('button', { name: '同步工作台', exact: true }).click();
@@ -61,7 +61,10 @@ try {
     assert.ok(geometry.gap >= 11, `buttons need visible separation: ${geometry.gap}`);
     assert.equal(geometry.overflow, false);
     assert.notEqual(geometry.primary, geometry.secondary);
-    await page.screenshot({ path: join(evidence, `automatic-pr-${width}.png`), fullPage: true });
+    await page.screenshot({
+      path: join(evidence, `automatic-pr-${width}.png`),
+      fullPage: true,
+    });
   }
   const automatic = await connection.current();
   await f.merge((await automatic.status()).active);

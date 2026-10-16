@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +7,7 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { configuredReceiver } from '../src/settings.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
@@ -52,6 +52,9 @@ try {
   await receiver.selectTag('v3.0.0');
   await receiver.start();
   await serve(receiver, async (page) => {
+    const reviewStage = page.locator('[data-stage="2"]');
+    if (!(await reviewStage.evaluate((element) => element.open)))
+      await reviewStage.locator(':scope > summary').click();
     const tree = page.locator('[data-file-tree]').first();
     assert.equal(await tree.isVisible(), false);
     await page.getByText(/上游文件变化（/).click();
@@ -61,6 +64,9 @@ try {
     assert.equal(await tree.locator('.file-row').count(), 1);
     await page.screenshot({ path: join(evidence, 'file-tree.png') });
     await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
+    const prStage = page.locator('[data-stage="3"]');
+    if (!(await prStage.evaluate((element) => element.open)))
+      await prStage.locator(':scope > summary').click();
     await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });
     const candidate = (await receiver.status()).active.candidate;
     await page.getByLabel('内部 PR 具体链接').fill('https://elsewhere.example/core/pull/1');

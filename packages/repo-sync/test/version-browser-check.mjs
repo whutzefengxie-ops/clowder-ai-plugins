@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -8,6 +7,8 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { configuredReceiver } from '../src/settings.mjs';
+import { openHistory } from './journey-controls.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
@@ -77,17 +78,22 @@ try {
         font: Number.parseFloat(getComputedStyle(element).fontSize),
       }));
       assert.ok(size.height >= 48 && size.font >= 16, 'tag selector needs a readable 48px control');
-      assert.ok(size.width >= Math.min(480, size.formWidth - 2), 'tag selector must use the available form width');
+      assert.ok(
+        size.width >= Math.min(480, size.formWidth - 2),
+        'tag selector must use the available form width',
+      );
       await page.screenshot({
         path: join(evidence, 'tag-selector-desktop.png'),
         fullPage: true,
       });
       await page.setViewportSize({ width: 390, height: 844 });
-      if (!(await selector.isVisible())) await page.locator('[data-record="current"]').click();
+      if (!(await selector.isVisible())) {
+        await openHistory(page);
+        await page.locator('[data-record="current"]').click();
+      }
       const mobileSize = await selector.boundingBox();
       assert.ok(mobileSize.width >= 250 && mobileSize.height >= 48);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-      await selector.scrollIntoViewIfNeeded();
       await page.screenshot({
         path: join(evidence, 'tag-selector-mobile.png'),
         fullPage: true,
@@ -106,6 +112,8 @@ try {
         });
         await page.setViewportSize({ width: 1440, height: 1100 });
       }
+      const prStage = page.locator('[data-stage="3"]');
+      if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
       await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
       assert.equal(await page.locator('[data-form="issue"]').count(), 0);
       assert.equal(await page.locator('[data-form="receipts"]').count(), 0);
