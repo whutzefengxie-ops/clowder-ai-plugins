@@ -41,7 +41,7 @@ export class SyncService {
         if (this.stopped) return;
         this.lastCheckedAt = new Date().toISOString();
         this.error = null;
-        if (head === state.active.base.internal) return;
+        if (head === state.active.base.internal && run.autoMerge !== true) return;
       } catch (error) {
         this.error = safeError(error);
         return;

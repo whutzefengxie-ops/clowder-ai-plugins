@@ -31,7 +31,7 @@ export function updateLiveWorkflow(content, snapshot, record, task, selected, ke
   }
   const footer = content.querySelector('.next-action');
   if (footer && footer.dataset.policy !== JSON.stringify(policy)) {
-    footer.outerHTML = actionBar(policy, false);
+    footer.outerHTML = actionBar(policy, false, snapshot);
     content.querySelector('.next-action').dataset.policy = JSON.stringify(policy);
   }
   const errorSlot = content.querySelector('#error-slot');

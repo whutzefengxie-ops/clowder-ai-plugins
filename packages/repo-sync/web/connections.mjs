@@ -47,6 +47,7 @@ export function captureDraft() {
             element.name &&
             element.type !== 'password' &&
             element.name !== 'issueToken' &&
+            element.name !== 'confirmed' &&
             !['expectedRevision', 'previousUrl', 'deliveryId', 'runId'].includes(element.name),
         )
         .map((element) => ({

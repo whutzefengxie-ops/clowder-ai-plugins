@@ -39,6 +39,13 @@ export function initializeSubmissions(context) {
     }
     if (input.action === 'issue') input.sourceId = form.dataset.source;
     if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
+    if (input.action === 'cancel-delivery') input.confirmed = fields.confirmed === 'on';
+    if (['synchronize', 'configure-auto-merge'].includes(input.action)) input.autoMerge = fields.autoMerge === 'on';
+    const resumeAutomaticMerge =
+      input.action === 'configure-auto-merge' &&
+      input.autoMerge &&
+      snapshot().state?.automation?.status === 'WAITING_REVIEW' &&
+      snapshot().state?.active?.status === 'WAITING_APPROVAL';
     if (input.action === 'receipts')
       input = {
         action: 'receipts',
@@ -79,6 +86,10 @@ export function initializeSubmissions(context) {
     if (input.action === 'inspect-baseline') return setup.acceptReport(result);
     if (input.action === 'adopt' && snapshot().state) return activate();
     complete(input.action, result);
+    if (resumeAutomaticMerge) {
+      await action({ action: 'resume-sync', runId: input.runId, deliveryId: input.deliveryId });
+      return;
+    }
   });
   document.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-preview-sync]');

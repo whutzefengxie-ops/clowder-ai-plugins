@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { command, git } from '../src/process.mjs';
 
 export async function repositories() {
@@ -22,7 +22,7 @@ export async function repositories() {
   const u0 = await commit('initial');
   await mkdir(internal);
   await git(internal, ['init', '--bare', '-b', 'main']);
-  await command('git', ['clone', internal, review]);
+  await command('git', ['clone', relative(process.cwd(), internal), review]);
   await git(review, ['config', 'user.name', 'Synthetic Review']);
   await git(review, ['config', 'user.email', 'review@example.invalid']);
   await writeFile(join(review, 'core.txt'), 'initial');

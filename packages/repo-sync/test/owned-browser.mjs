@@ -37,8 +37,18 @@ export async function launchOwnedBrowser(browserType, options = {}) {
     close() {
       closing ??= (async () => {
         releaseExitedPipes();
-        await traceLifecycle('owned-browser-server-kill', () => server.kill());
-        await traceLifecycle('owned-browser-client-close', () => browser.close());
+        try {
+          await traceLifecycle('owned-browser-client-close', () => browser.close());
+        } finally {
+          releaseExitedPipes();
+          try {
+            await traceLifecycle('owned-browser-server-close', () => server.close());
+          } finally {
+            releaseExitedPipes();
+            if (child.exitCode === null && child.signalCode === null)
+              await traceLifecycle('owned-browser-server-kill', () => server.kill());
+          }
+        }
         if (child.exitCode === null && child.signalCode === null)
           throw new Error('Owned test browser cleanup returned before its process exited');
       })();

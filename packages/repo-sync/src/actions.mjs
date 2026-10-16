@@ -3,6 +3,8 @@ import { baselineFile } from './baseline.mjs';
 import { fail } from './config.mjs';
 import { discover } from './github.mjs';
 import { inspectBaseline, previewSync } from './journey-preview.mjs';
+import { cancelDelivery } from './cancel-delivery.mjs';
+import { inspectDeliverySource } from './inspect-delivery-source.mjs';
 
 export async function dispatch(receiver, input, options = {}) {
   if (
@@ -17,6 +19,8 @@ export async function dispatch(receiver, input, options = {}) {
       'recover',
       'receipts',
       'cancel-version',
+      'cancel-delivery',
+      'inspect-delivery-source',
     ].includes(input.action) &&
     (await receiver.status())?.active?.id !== input.deliveryId
   )
@@ -28,6 +32,7 @@ export async function dispatch(receiver, input, options = {}) {
     'resume-sync': () => synchronize(receiver, input, options),
     'pause-sync': () => synchronize(receiver, input, options),
     'configure-continuation': () => synchronize(receiver, input, options),
+    'configure-auto-merge': () => synchronize(receiver, input, options),
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () =>
@@ -52,6 +57,8 @@ export async function dispatch(receiver, input, options = {}) {
     tags: () => receiver.tags(),
     'select-tag': () => receiver.selectTag(input.tag),
     'cancel-version': () => receiver.cancelVersion(),
+    'cancel-delivery': () => cancelDelivery(receiver, input),
+    'inspect-delivery-source': () => inspectDeliverySource(receiver),
     'baseline-file': () => receiver.store.locked(() => baselineFile(receiver, input)),
   };
   if (!Object.hasOwn(actions, input.action)) fail('UNKNOWN_ACTION', '未知操作');

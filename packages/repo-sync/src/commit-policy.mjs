@@ -1,6 +1,7 @@
 import { fail } from './config.mjs';
 import { preservedTree } from './preserved-tree.mjs';
 import { git, gitEnvironment } from './process.mjs';
+import { verifyDevelopmentHistory } from './development-history.mjs';
 
 export function commitPolicy(config) {
   const strategy = config.commitStrategy ?? 'preserve';
@@ -22,6 +23,8 @@ export function mappedCommit(state, source) {
   for (const delivery of [...state.deliveries].reverse()) {
     const mapped = delivery.commitMappings?.find((item) => item.source === source);
     if (mapped) return mapped.internal;
+    const development = delivery.developmentMappings?.find((item) => item.source === source);
+    if (development) return development.internal;
   }
   return source === state.initial?.upstream ? state.initial.internal : source;
 }
@@ -39,7 +42,8 @@ export async function buildCandidate(receiver, state, delivery) {
   if (!(await receiver.git.isAncestor(delivery.base.upstream, delivery.target)))
     fail('SOURCE_REWRITTEN', '目标不包含已接受上游历史');
   await receiver.git.checkContent(delivery.target);
-  const sources = (
+  const replay = delivery.source.developmentReplay;
+  const sources = replay ? await verifyDevelopmentHistory(receiver, delivery) : (
     await git(receiver.git.directory, [
       'rev-list',
       '--reverse',
@@ -80,11 +84,13 @@ export async function buildCandidate(receiver, state, delivery) {
     mappings.push({ source, internal });
     lookup.set(source, internal);
   }
-  const head = lookup.get(delivery.target);
+  const head = lookup.get(replay?.head ?? delivery.target);
   if (!head || !(await receiver.git.isAncestor(delivery.base.internal, head)))
     fail('COMMIT_MAPPING_MISSING', '重写候选未包含当前内部基线，暂停；未推送。');
   await git(receiver.git.directory, ['update-ref', `refs/sync/deliveries/${delivery.id}`, head]);
-  return { head, mappings };
+  return replay
+    ? { head, mappings: [{ source: delivery.target, internal: head }], developmentMappings: mappings }
+    : { head, mappings };
 }
 
 async function translateParent(receiver, state, delivery, lookup, parent) {

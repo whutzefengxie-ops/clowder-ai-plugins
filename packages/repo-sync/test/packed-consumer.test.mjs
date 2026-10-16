@@ -90,11 +90,12 @@ test('packed plugin installs in a fresh consumer and launches exact stdio and we
     const result = await client.callTool({ name: 'repo_sync_open_workbench', arguments: {} });
     assert.equal(result.isError, undefined, result.content[0].text);
     const { url } = JSON.parse(result.content[0].text);
-    assert.match(await (await fetch(url)).text(), /Git 接收工作台/);
+    assert.match(await (await fetch(url)).text(), /同步工作台/);
     assert.equal((await fetch(new URL('/version.mjs', url))).status, 200);
     assert.equal((await fetch(new URL('/connections.mjs', url))).status, 200);
     assert.equal((await fetch(new URL('/operations.mjs', url))).status, 200);
     assert.equal((await fetch(new URL('/operation-view.mjs', url))).status, 200);
+    assert.equal((await fetch(new URL('/app-shell.mjs', url))).status, 200);
     const firstUse = await (await fetch(new URL('/api/status', url))).json();
     assert.equal(firstUse.config, null);
     assert.equal(firstUse.service, 'production');

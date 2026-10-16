@@ -33,6 +33,7 @@ export async function assertTransferWritable(config) {
 export function pauseTransferredRun(state) {
   if (!state?.automation || state.automation.status === 'COMPLETE') return;
   state.automation.status = 'PAUSED';
+  if (state.automation.autoMerge !== undefined) state.automation.autoMerge = false;
   state.automation.updatedAt = new Date().toISOString();
   state.automation.pauseRequested = {
     afterDeliveryId: state.activeId ?? null,

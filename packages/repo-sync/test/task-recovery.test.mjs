@@ -68,16 +68,21 @@ test('cancelled download records cancellation and never continues to baseline re
     requestId: 'd'.repeat(32),
     expectedBinding: receiver.config.bindingId,
   });
-  for (let i = 0; i < 200; i++) {
-    if ((await tasks.latest()).steps.some((step) => step.progress)) break;
-    await new Promise((done) => setTimeout(done, 10));
+  try {
+    for (let i = 0; i < 200; i++) {
+      if ((await tasks.latest()).steps.some((step) => step.progress)) break;
+      await new Promise((done) => setTimeout(done, 10));
+    }
+    assert.ok((await tasks.latest()).steps.some((step) => step.progress?.percent === 40));
+    assert.equal((await tasks.cancel(first.id)).status, 'CANCELLING');
+    const result = await settled(tasks);
+    assert.equal(result.status, 'CANCELLED');
+    assert.equal(result.steps.filter((step) => step.status === 'FAILED').length, 1, 'later steps stay pending');
+    assert.equal(registered, false);
+  } finally {
+    if (tasks.busy() && tasks.context?.cancellable) await tasks.cancel(first.id).catch(() => {});
+    await tasks.job;
   }
-  assert.ok((await tasks.latest()).steps.some((step) => step.progress?.percent === 40));
-  assert.equal((await tasks.cancel(first.id)).status, 'CANCELLING');
-  const result = await settled(tasks);
-  assert.equal(result.status, 'CANCELLED');
-  assert.equal(result.steps.filter((step) => step.status === 'FAILED').length, 1, 'later steps stay pending');
-  assert.equal(registered, false);
 });
 test('task status and cancellation do not widen MCP data or allow changed request parameters', async () => {
   const receiver = { config: {} };

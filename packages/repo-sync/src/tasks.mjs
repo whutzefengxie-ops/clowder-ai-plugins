@@ -310,7 +310,13 @@ export class Tasks {
     return publicTask(this.value, true);
   }
   async close() {
-    if (this.busy() && this.context?.cancellable) await this.cancel(this.value.id);
+    if (this.busy() && this.context?.cancellable) {
+      try {
+        await this.cancel(this.value.id);
+      } catch (error) {
+        if (error.code !== 'CANCEL_NOT_ALLOWED') throw error;
+      }
+    }
     await this.job;
     if (this.persistencePending) await this.retryPersistence(this.value.id);
   }

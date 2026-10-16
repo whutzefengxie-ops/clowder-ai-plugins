@@ -27,8 +27,11 @@ test('project overview filters local state and only offers navigation, including
   };
   const html = projectView({ workspace, filter: 'attention', overviewOpen: true }, 'default');
   assert.match(html, /data-project-filter="attention"[^>]*aria-pressed="true"/);
-  assert.match(html, /data-project-enter="waiting"/);
-  assert.doesNotMatch(html, /data-project-enter="default"|data-project-enter="ready"/);
+  const cards = /<div class="project-cards">([\s\S]*?)<\/details>/.exec(html)?.[1] ?? '';
+  assert.match(cards, /data-project-enter="waiting"/);
+  assert.doesNotMatch(cards, /data-project-enter="default"|data-project-enter="ready"/);
+  assert.match(html, /data-project-enter="default"/);
+  assert.match(html, /data-project-enter="ready"/);
   assert.match(html, /最后接收.*v1/);
   assert.match(html, /最后观察/);
   assert.doesNotMatch(html, /data-action=|已是最新|实时健康/);

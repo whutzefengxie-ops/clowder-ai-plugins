@@ -118,6 +118,29 @@ test('two workbench instances cannot admit two business jobs for the same bindin
   }
 });
 
+test('shutdown waits when a task becomes non-cancellable at the cancellation boundary', async () => {
+  let release;
+  const gate = new Promise((done) => {
+    release = done;
+  });
+  const f = await fixture(async () => gate);
+  try {
+    await f.tasks.start({ action: 'heads', requestId: '9'.repeat(32), expectedBinding: f.receiver.config.bindingId });
+    const cancel = f.tasks.cancel.bind(f.tasks);
+    f.tasks.cancel = async (id) => {
+      f.tasks.context.cancellable = false;
+      return cancel(id);
+    };
+    const closing = f.tasks.close();
+    release();
+    await assert.doesNotReject(closing);
+    assert.equal((await f.tasks.latest()).status, 'SUCCEEDED');
+  } finally {
+    release();
+    await f.tasks.job;
+  }
+});
+
 test('terminal business stays visibly running until its final execution record is saved', async (t) => {
   let release;
   let started;

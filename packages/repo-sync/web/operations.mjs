@@ -26,6 +26,9 @@ const longActions = new Set([
   'sync-issues',
   'receipts',
   'cancel-version',
+  'cancel-delivery',
+  'inspect-delivery-source',
+  'configure-auto-merge',
 ]);
 const active = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
 const blocked = (task) => active.has(task?.status) || task?.persistence?.status === 'FAILED';

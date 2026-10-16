@@ -5,6 +5,8 @@ import { confirmGitPr, planGitPr } from './git-pr.mjs';
 import { associateIssues, ensureIssues } from './issue-lifecycle.mjs';
 import { event } from './store.mjs';
 import { sourceStillValid } from './version.mjs';
+import { git } from './process.mjs';
+import { verifyDevelopmentHistory } from './development-history.mjs';
 
 async function resumePublished(receiver, state, delivery) {
   if (!['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status) || delivery.error) return false;
@@ -25,6 +27,7 @@ async function resumePublished(receiver, state, delivery) {
 }
 export async function prepareDelivery(receiver, state) {
   const delivery = receiver.requireActive(state);
+  if (delivery.source.developmentReplay && !delivery.candidate) await verifyDevelopmentHistory(receiver, delivery);
   if (receiver.config.issues && delivery.status === 'ISSUES_REQUIRED' && !delivery.candidate)
     await ensureIssues(receiver, state, delivery);
   if (delivery.commitPolicy && JSON.stringify(delivery.commitPolicy) !== JSON.stringify(commitPolicy(receiver.config)))
@@ -41,6 +44,8 @@ export async function prepareDelivery(receiver, state) {
     );
     delivery.candidate = result.head;
     if (result.mappings) delivery.commitMappings = result.mappings;
+    if (result.developmentMappings) delivery.developmentMappings = result.developmentMappings;
+    delivery.internalCommitCount = Number(await git(receiver.git.directory, ['rev-list', '--count', result.head, `^${delivery.base.internal}`]));
   }
   await receiver.store.save(state);
   delivery.checks = await phase(

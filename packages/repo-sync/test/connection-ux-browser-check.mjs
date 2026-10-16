@@ -61,6 +61,7 @@ const base = `http://127.0.0.1:${server.address().port}`,
 page.on('pageerror', (e) => errors.push(e.message));
 const evidence = process.env.REPO_SYNC_EVIDENCE || join(folder, 'evidence');
 await mkdir(evidence, { recursive: true });
+const saveConfiguration = () => page.getByRole('button', { name: '保存并检查连接 →', exact: true }).click();
 try {
   await page.goto(`${base}/?view=configuration`);
   await page.getByText('✓ 1 · 仓库信息已保存', { exact: true }).click();
@@ -78,7 +79,7 @@ try {
   await form.getByLabel('Token 提供方式').selectOption('environment');
   await form.getByLabel('API 项目 ID / 路径').fill('https://web.example/team/core');
   const originalConfig = await readFile(file, 'utf8');
-  await form.getByRole('button', { name: '保存并检查连接 →' }).click();
+  await saveConfiguration();
   await form.locator('[data-field-error]').first().waitFor({ timeout: 5000 });
   assert.equal(await form.locator('[aria-invalid="true"]').count(), 3);
   assert.equal(await page.locator('form[data-form="configure-pr"] [aria-invalid="true"]').count(), 0);
@@ -97,7 +98,7 @@ try {
   await form.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
   await form.getByLabel('API 项目 ID / 路径').fill('https://web.example/team/core');
   await form.getByText('高级接口设置（可选：覆盖自动推断）', { exact: true }).click();
-  await form.getByRole('button', { name: '保存并检查连接 →' }).click();
+  await saveConfiguration();
   await form.locator('[data-field-error="issueProjectId"]').waitFor();
   assert.equal(await form.getByLabel('API 项目 ID / 路径').isVisible(), true);
   assert.equal(await page.evaluate(() => document.activeElement?.name), 'issueProjectId');
@@ -122,7 +123,7 @@ try {
   });
   await form.getByLabel('内部平台 API 地址').fill('');
   await form.getByLabel('API 项目 ID / 路径').fill('');
-  await form.getByRole('button', { name: '保存并检查连接 →' }).click();
+  await saveConfiguration();
   await page.locator('[data-connection-checks]').filter({ hasText: '× 内部平台' }).waitFor({ timeout: 30000 });
   assert.equal(
     await page.locator('input[type="password"]').evaluateAll((fields) => fields.every((field) => field.value === '')),
@@ -143,7 +144,7 @@ try {
     page.waitForResponse(
       (response) => response.url().includes('/api/action') && response.request().method() === 'POST',
     ),
-    form.getByRole('button', { name: '保存并检查连接 →' }).click(),
+    saveConfiguration(),
   ]);
   assert.equal(saved.status(), 200);
   await saved.finished();
@@ -212,11 +213,27 @@ try {
   await page.getByRole('button', { name: '同步工作台', exact: true }).click();
   await page.getByRole('button', { name: '同步上游 PR #1 →', exact: true }).click();
   for (const number of [1, 2]) {
+    if (number > 1) {
+      await page.getByRole('button', { name: '继续下一笔同步 →', exact: true }).waitFor({ timeout: 30000 });
+      const boundary = await receiver.status();
+      assert.equal(boundary.active ?? null, null, 'the next PR stays uncreated at the configured boundary');
+      assert.equal(platform.state.creates.prs, 1, 'only the first PR exists before explicit continuation');
+      await page.getByRole('button', { name: '继续下一笔同步 →', exact: true }).click();
+    }
     await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
     const delivery = (await receiver.status()).active;
     assert.equal(delivery.prUrl, `${platform.web}/merge_requests/${number}`);
     assert.equal(platform.state.creates.issues, 1);
     assert.equal(platform.state.creates.prs, number);
+    if (number === 1) {
+      await page.locator('.next-action details > summary').click();
+      const continuation = page.locator('.next-action [data-form="configure-continuation"]');
+      await continuation.locator('[name="continuation"]').selectOption('after-each');
+      await continuation.getByRole('button', { name: '保存后续处理方式', exact: true }).click();
+      for (let retry = 0; retry < 100 && (await receiver.status()).automation.continuation !== 'after-each'; retry++)
+        await new Promise((done) => setTimeout(done, 50));
+      assert.equal((await receiver.status()).automation.continuation, 'after-each');
+    }
     await f.merge(delivery);
     platform.state.mrs[number - 1].state = 'merged';
     for (let retry = 0; retry < 150 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE'; retry++)

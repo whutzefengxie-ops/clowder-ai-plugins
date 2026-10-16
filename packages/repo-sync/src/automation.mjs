@@ -2,6 +2,7 @@ import { fail } from './config.mjs';
 import { armBoundary, boundaryReached, configureContinuation, continuationModes, startNext } from './continuation.mjs';
 import { execution, phase, safeError } from './execution.mjs';
 import { discover } from './github.mjs';
+import { autoMergeDelivery, configureAutoMerge } from './auto-merge.mjs';
 
 export function validateAutomation(value) {
   if (value === undefined) return;
@@ -9,6 +10,7 @@ export function validateAutomation(value) {
     !value ||
     !/^[a-f0-9]{32}$/.test(value.id ?? '') ||
     !['RUNNING', 'WAITING_REVIEW', 'FAILED', 'PAUSED', 'COMPLETE'].includes(value.status) ||
+    (value.autoMerge !== undefined && typeof value.autoMerge !== 'boolean') ||
     !Number.isFinite(Date.parse(value.startedAt)) ||
     !value.selection ||
     !['latest', 'tag', 'commit', 'queue'].includes(value.selection.kind) ||
@@ -26,7 +28,12 @@ export function validateAutomation(value) {
 }
 export async function synchronize(receiver, input, options = {}) {
   const state = await receiver.read();
+  if (state && receiver.active(state)?.cancellation?.status === 'REQUESTED')
+    fail('CANCELLATION_PENDING', '原 PR 撤销尚未完成，请继续回读原撤销结果，不恢复普通同步。');
   validateRequest(state, input);
+  if (input.autoMerge === true && receiver.config.pullRequests?.mode !== 'gitlab')
+    fail('AUTO_MERGE_UNSUPPORTED', '当前平台创建方式没有合入 API，未开始任何新交付。');
+  if (input.action === 'configure-auto-merge') return configureAutoMerge(receiver, input);
   if (input.action === 'configure-continuation') return configureContinuation(receiver, input);
   if (input.action === 'pause-sync') return pause(receiver, input.runId);
   if (reuseRun(state, input)) return state;
@@ -53,6 +60,7 @@ export async function synchronize(receiver, input, options = {}) {
 function validateRequest(state, input) {
   if (
     (input.observeOnly !== undefined && typeof input.observeOnly !== 'boolean') ||
+    (input.autoMerge !== undefined && typeof input.autoMerge !== 'boolean') ||
     (input.continuation !== undefined && !continuationModes.has(input.continuation))
   )
     fail('INVALID_CONTINUATION', '继续方式无效，请重新核对原同步轮次。');
@@ -113,6 +121,7 @@ function register(receiver, input, id) {
             startedAt: new Date().toISOString(),
             startingDeliveryId: active?.id ?? null,
             continuation: input.continuation ?? 'automatic',
+            autoMerge: input.autoMerge === true,
             selection: input.targetKind
               ? { kind: input.targetKind, value: input.targetValue }
               : { kind: saved.queue.length || active ? 'queue' : 'latest' },
@@ -143,8 +152,13 @@ async function advance(receiver) {
       await phase('delivery-verify', '保存原交付的接收结果', () => receiver.receipts([]), false);
   }
   state = await receiver.status();
+  releaseTerminalDelivery(state);
   if (boundaryReached(receiver, state)) return;
-  if (state.active?.status === 'WAITING_APPROVAL') return;
+  if (state.active?.status === 'WAITING_APPROVAL') {
+    await completeAutomaticMerge(receiver);
+    releaseTerminalDelivery(await receiver.status());
+    return;
+  }
   if (!state.active && state.queue.length) {
     const context = execution();
     if (context) {
@@ -163,6 +177,28 @@ async function advance(receiver) {
   if (state.active.issues.length && !receiver.config.issues)
     fail('ISSUE_AUTOMATION_REQUIRED', '请在仓库设置配置内部 Issue 自动创建与关单，然后恢复原轮次。');
   await phase('delivery-prepare', '准备当前交付与内部 PR', () => receiver.prepare(), false);
+  await completeAutomaticMerge(receiver);
+  releaseTerminalDelivery(await receiver.status());
+}
+function releaseTerminalDelivery(state) {
+  const context = execution();
+  const boundDelivery = state.deliveries.find(({ id }) => id === context?.deliveryId);
+  if (
+    boundDelivery &&
+    state.activeId === boundDelivery.id &&
+    ['COMPLETE', 'CANCELLED'].includes(boundDelivery.status)
+  ) {
+    context.associate?.(null);
+    context.deliveryId = null;
+  }
+}
+async function completeAutomaticMerge(receiver) {
+  const state = await receiver.status();
+  if (state.automation?.autoMerge !== true || state.active?.status !== 'WAITING_APPROVAL') return;
+  await autoMergeDelivery(receiver);
+  await phase('delivery-verify', '核验平台自动合入的 Git、Issue 与接收结果', () => receiver.recover(), false);
+  const current = await receiver.status();
+  if (current.active?.status === 'CODE_ACCEPTED_PENDING_METADATA' && !current.active.issues.length) await receiver.receipts([]);
 }
 function finish(receiver) {
   return receiver.change((saved) => {

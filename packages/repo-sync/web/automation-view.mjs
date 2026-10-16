@@ -1,7 +1,6 @@
 import { actionBar } from './actionbar.mjs';
 import { attempts } from './attempts.mjs';
 import { esc, when, title } from './ui.mjs';
-import { continuationControls } from './continuation-view.mjs';
 
 export function automationBanner(snapshot) {
   const run = snapshot.state?.automation;
@@ -21,18 +20,20 @@ export function automationBanner(snapshot) {
   const current = snapshot.state.active;
   const currentLabel = current
     ? `<p><b>当前${snapshot.journeyProgress ? `第 ${snapshot.journeyProgress.completed + 1} 笔` : '同步'} · ${esc(title(current))}</b></p>`
-    : run.status === 'PAUSED'
+    : run.restartOf && run.status === 'PAUSED' ? '<p><b>原 PR 已撤销，接受基线未变；确认后重新读取原目标并准备新的 PR。</b></p>' : run.status === 'PAUSED'
       ? `<p><b>${run.pauseRequested?.afterDeliveryId ? '上一笔接收已结束，停在两笔之间；下一笔尚未开始。' : '本轮已暂停，尚未开始首笔交付。'}</b></p>`
       : '';
   const progress = snapshot.journeyProgress;
   const count = progress
     ? `<p>${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</p>`
     : '';
-  return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3>${currentLabel}<p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${count}${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}${continuationControls(snapshot)}</section>`;
+  return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3>${currentLabel}<p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${count}${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}</section>`;
 }
 export function automaticPolicy(snapshot, delivery) {
   const run = snapshot.state?.automation;
   if (!run || run.status === 'COMPLETE') return null;
+  if (run.status === 'PAUSED' && run.restartOf && !snapshot.state.active)
+    return { stage: 1, text: '旧 PR 已关闭，Issue 与历史保留。明确继续后重新读取原目标、创建新的候选和 PR。', action: 'resume-sync', label: '重新读取目标并同步本笔 →' };
   const reference = referenceRemedy(delivery);
   if (reference) return reference;
   if (run.status === 'PAUSED' && !snapshot.state.active && run.pauseRequested)
@@ -100,7 +101,7 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
       const status = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
       return `<li><details data-stage="${stage}" data-stage-state="${status}" ${stage === current ? 'open' : ''}><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
     })
-    .join('')}</ol>${policy ? actionBar(policy, false) : ''}`;
+    .join('')}</ol>${policy ? actionBar(policy, false, snapshot) : ''}`;
 }
 
 function referenceRemedy(delivery) {

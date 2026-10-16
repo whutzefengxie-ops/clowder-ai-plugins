@@ -9,6 +9,8 @@ export async function codehubPlatform(f, options = {}) {
       denied: false,
       links: 0,
       closes: 0,
+      prCloses: 0,
+      merges: 0,
       requests: [],
       errors: [],
       lost: options.lost,
@@ -56,16 +58,31 @@ async function route(state, f, web, req, value, path, res, options) {
     res.statusCode = 405;
     return { message: 'Method Not Allowed' };
   }
-  const mrMatch = /\/merge_requests\/(\d+)$/.exec(path),
+  const mrMatch = /\/merge_requests\/(\d+)(?:\/merge)?$/.exec(path),
     issueMatch = /\/issues\/(\d+)$/.exec(path);
   if (mrMatch) {
     const mr = state.mrs.find((item) => String(item.iid) === mrMatch[1]);
+    if (path.endsWith('/merge')) {
+      if (value.sha !== mr.sha || state.conflicts || state.denyMerge) {
+        res.statusCode = 405;
+        return { message: 'merge rules rejected' };
+      }
+      await f.merge({ branch: mr.source_branch, candidate: mr.sha });
+      mr.state = 'merged';
+      state.merges++;
+      return loseOnce(state, 'merge', mr);
+    }
     if (req.method === 'PUT') {
+      if (value.state_event === 'close') {
+        mr.state = 'closed';
+        state.prCloses++;
+        return loseOnce(state, 'pr-close', mr);
+      }
       mr.description = value.description;
       state.links++;
       return loseOnce(state, 'link', mr);
     }
-    return mr;
+    return { ...mr, has_conflicts: state.conflicts ?? false };
   }
   if (issueMatch) {
     const issue = state.issues.find((item) => String(item.iid) === issueMatch[1]);

@@ -4,6 +4,7 @@ import { phaseLocation } from '../src/recording.mjs';
 import { taskInput } from '../src/task-store.mjs';
 import { attempts } from '../web/attempts.mjs';
 import { automaticPolicy, automationBanner } from '../web/automation-view.mjs';
+import { preDeliveryFlow } from '../web/automation-view.mjs';
 import { workflow } from '../web/workflow.mjs';
 import { sourceTargetForm } from '../web/source-target.mjs';
 import { esc, sha } from '../web/ui.mjs';
@@ -120,7 +121,10 @@ test('paused between deliveries stays at completed verification and has an expli
   assert.equal(policy.stage, 5);
   assert.equal(policy.action, 'resume-sync');
   assert.match(policy.label, /继续下一笔/);
-  assert.match(automationBanner(paused), /name="continuation"/);
+  assert.doesNotMatch(automationBanner(paused), /name="continuation"/);
+  const flow = preDeliveryFlow(paused, policy);
+  assert.match(flow, /name="continuation"/);
+  assert.match(flow, /data-action="resume-sync"/);
   assert.match(sourceTargetForm(snapshot.state, [], esc, sha), /name="continuation"/);
 });
 test('task admission accepts and validates the restricted continuation controls', () => {

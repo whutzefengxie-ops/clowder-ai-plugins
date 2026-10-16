@@ -29,17 +29,22 @@ function fixture({ exits = true, connectFails = false } = {}) {
     })),
   ];
   let disconnected = false,
-    killed = false;
+    closed = false,
+    killed = false,
+    clientCreated = false;
   const server = {
     process: () => child,
     wsEndpoint: () => 'ws://test.invalid/browser',
     async close() {
+      closed = true;
       if (!exits) return;
       child.exitCode = 0;
       child.emit('exit', 0, null);
       await pipesClosed;
     },
     async kill() {
+      if (clientCreated)
+        assert.equal(disconnected, true, 'the client must disconnect before the owned browser process is killed');
       killed = true;
       if (exits) {
         child.signalCode = 'SIGKILL';
@@ -57,12 +62,14 @@ function fixture({ exits = true, connectFails = false } = {}) {
     destroyed,
     debugPipes,
     isDisconnected: () => disconnected,
+    wasClosed: () => closed,
     wasKilled: () => killed,
     type: {
       launchServer: async () => server,
       connect: async (endpoint) => {
         assert.equal(endpoint, server.wsEndpoint());
         if (connectFails) throw new Error('fixture connect failure');
+        clientCreated = true;
         return browser;
       },
     },
@@ -77,6 +84,7 @@ test('owned browser releases inherited pipes only after confirmed process exit a
   assert.equal(f.destroyed.size, 3);
   assert.equal(f.debugPipes.size, 2, 'Chromium remote-debugging fd3/fd4 are public child stdio streams too');
   assert.equal(f.isDisconnected(), true);
+  assert.equal(f.wasClosed(), true, 'graceful server close should be preferred');
   await owner.close();
 });
 

@@ -14,7 +14,14 @@ export async function activateBaseline(page, receiver) {
   if (receiver) assert.equal(await receiver.status(), null, 'confirmation cannot adopt before explicit activation');
   await page.getByRole('button', { name: '启用并进入同步工作台 →', exact: true }).click();
   await page.locator('[data-form="adopt"]').waitFor({ state: 'hidden', timeout: 30000 });
-  if (receiver) assert.ok(await receiver.status(), 'explicit activation must register a durable baseline');
+  if (receiver) {
+    let state;
+    for (let attempt = 0; attempt < 300 && !state; attempt++) {
+      state = await receiver.status();
+      if (!state) await new Promise((done) => setTimeout(done, 100));
+    }
+    assert.ok(state, 'explicit activation must register a durable baseline');
+  }
 }
 
 export async function inspectAndActivate(page, upstream, internal, receiver) {

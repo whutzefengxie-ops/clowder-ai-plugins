@@ -13,6 +13,7 @@ export const taskActions = new Set([
   'resume-sync',
   'pause-sync',
   'configure-continuation',
+  'configure-auto-merge',
   'heads',
   'adopt',
   'discover',
@@ -29,6 +30,8 @@ export const taskActions = new Set([
   'receipts',
   'resolve',
   'cancel-version',
+  'cancel-delivery',
+  'inspect-delivery-source',
 ]);
 const keys = new Set([
   'runId',
@@ -56,8 +59,12 @@ const keys = new Set([
   'path',
   'choice',
   'content',
+  'confirmed',
+  'autoMerge',
 ]);
 export function taskInput(input) {
+  if (input?.autoMerge !== undefined && (!['synchronize', 'configure-auto-merge'].includes(input.action) || typeof input.autoMerge !== 'boolean'))
+    fail('INVALID_AUTO_MERGE', '自动合入必须是本轮明确选择的布尔值。');
   if (
     input?.continuation !== undefined &&
     (!['synchronize', 'configure-continuation'].includes(input.action) ||
@@ -116,6 +123,9 @@ export function taskPlan(action) {
     issue: [['issue-mapping', '登记 / 纠正 Issue 来源映射']],
     resolve: [['conflict-resolution', '保存当前交付的冲突处理']],
     'cancel-version': [['version-cancel', '撤销当前未发布版本交付']],
+    'cancel-delivery': [['cancel-intent', '保存撤销意图'], ['cancel-pr', '关闭原 PR 并回读']],
+    'configure-auto-merge': [['merge-policy', '保存本轮自动合入选择']],
+      'inspect-delivery-source': [['pr-history', '读取原 PR 开发提交清单']],
   };
   return (plans[action] ?? fetch).map(([key, label]) => ({
     id: key,

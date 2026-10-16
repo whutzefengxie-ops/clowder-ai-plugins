@@ -35,13 +35,14 @@ export function createProjectNavigation(snapshot, saveDraft) {
       pageProjectId,
     );
   }
-  function go(id, newlyCreated = false) {
+  function go(id, newlyCreated = false, nextView = 'workbench') {
     const saved = saveDraft();
     const secret = [...document.querySelectorAll('input[type="password"]')].some((field) => field.value);
     if (saved === false || secret) {
       navigation = {
         id,
         newlyCreated,
+        nextView,
         message:
           saved === false
             ? '普通配置草稿保存失败，切换会丢失尚未保存的输入。请留在当前项目处理，或明确放弃后切换；已保存的配置和后台任务保留。'
@@ -51,13 +52,15 @@ export function createProjectNavigation(snapshot, saveDraft) {
       panel.querySelector('[data-project-stay]')?.focus();
       return;
     }
-    visit(id, newlyCreated);
+    visit(id, newlyCreated, nextView);
   }
-  function visit(id, newlyCreated) {
+  function visit(id, newlyCreated, nextView = 'workbench') {
     const url = new URL(location.href);
     url.searchParams.set('project', id);
     url.searchParams.delete('record');
     if (newlyCreated) url.searchParams.set('view', 'configuration');
+    else if (nextView === 'configuration') url.searchParams.set('view', 'configuration');
+    else url.searchParams.delete('view');
     location.assign(url.href);
   }
   async function send(input) {
@@ -103,6 +106,8 @@ export function createProjectNavigation(snapshot, saveDraft) {
     const project = event.target.closest('[data-project-enter]'),
       filtering = event.target.closest('[data-project-filter]');
     if (project) return go(project.dataset.projectEnter);
+    const settings = event.target.closest('[data-project-settings]');
+    if (settings) return go(settings.dataset.projectSettings, false, 'configuration');
     if (filtering) {
       filter = filtering.dataset.projectFilter;
       overviewOpen = true;
@@ -116,7 +121,7 @@ export function createProjectNavigation(snapshot, saveDraft) {
       return;
     }
     if (event.target.closest('[data-project-leave]') && navigation)
-      return visit(navigation.id, navigation.newlyCreated);
+      return visit(navigation.id, navigation.newlyCreated, navigation.nextView);
     if (event.target.closest('[data-project-create]')) {
       editor = 'create';
       error = '';

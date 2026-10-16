@@ -91,6 +91,8 @@ export function requiredCommits(files) {
       item.acceptedInternal,
       ...(item.commits ?? []),
       ...(item.commitMappings ?? []).flatMap((mapping) => [mapping.source, mapping.internal]),
+      ...(item.source?.developmentReplay?.commits ?? []),
+      ...(item.developmentMappings ?? []).flatMap((mapping) => [mapping.source, mapping.internal]),
     );
   }
   return [...new Set(values.filter((value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value)))];

@@ -154,6 +154,7 @@ export class GitReceiver {
       delivery.base.internal,
       delivery.candidate,
       ...(delivery.commitMappings ?? []).map((item) => item.internal),
+      ...(delivery.developmentMappings ?? []).map((item) => item.internal),
     ]) {
       if (!(await this.isAncestor(sha, actual))) fail('HISTORY_REWRITTEN', '来源、上一内部版本或冻结候选未完整接受');
     }

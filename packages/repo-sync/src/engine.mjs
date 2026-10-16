@@ -126,7 +126,7 @@ export class Receiver {
       await sourceStillValid(this, plan, heads);
       const id = createHash('sha256')
         .update(
-          `${state.bindingId}:${plan.source.id}:${plan.target}${this.config.mode === 'version' ? `:${state.accepted.internal}:${state.deliveries.length}` : ''}`,
+          `${state.bindingId}:${plan.source.id}:${plan.target}${this.config.mode === 'version' ? `:${state.accepted.internal}:${state.deliveries.length}` : retrySuffix(state, plan)}`,
         )
         .digest('hex')
         .slice(0, 24);
@@ -139,8 +139,10 @@ export class Receiver {
         candidate: null,
         commitPolicy: commitPolicy(this.config),
         issueResults: {},
+        ...(retrySource(state, plan) ? { supersedes: retrySource(state, plan).id } : {}),
       };
       recordDelivery(delivery, this.config, 'start');
+      if (delivery.commitPolicy.strategy !== 'rewrite') delete delivery.source.developmentReplay;
       if (this.config.mode === 'continuous') delivery.preview = await continuousPreview(this, delivery);
       delivery.commits = (
         await git(this.git.directory, [
@@ -150,8 +152,12 @@ export class Receiver {
           `${delivery.base.upstream}..${delivery.target}`,
         ])
       ).split('\n');
+      delivery.commitDetails = [];
+      for (const source of delivery.source.developmentReplay?.commits ?? delivery.commits)
+        delivery.commitDetails.push({ sha: source, subject: await git(this.git.directory, ['show', '-s', '--format=%s', source]) });
       state.deliveries.push(delivery);
       state.activeId = id;
+      if (state.automation) delete state.automation.restartOf;
       event(
         state,
         delivery,
@@ -179,6 +185,8 @@ export class Receiver {
   requireActive(state) {
     const active = this.active(state);
     if (!active) fail('NO_ACTIVE_DELIVERY', '没有未完成交付');
+    if (active.cancellation?.status === 'REQUESTED')
+      fail('CANCELLATION_PENDING', '原 PR 撤销结果待回读，请继续完成撤销；不能恢复普通同步或创建新对象。');
     return active;
   }
   prepare() {
@@ -280,6 +288,13 @@ export class Receiver {
   cancelVersion() {
     return phase('version-cancel', '撤销未发布交付并保留历史', () => cancelVersion(this));
   }
+}
+function retrySource(state, plan) {
+  return state.deliveries.findLast((d) => d.source.id === plan.source.id && d.target === plan.target && d.status === 'CANCELLED');
+}
+function retrySuffix(state, plan) {
+  const previous = retrySource(state, plan);
+  return previous ? `:retry:${state.deliveries.filter((d) => d.source.id === plan.source.id && d.target === plan.target).length}` : '';
 }
 function recordFailure(delivery, error, preserveError) {
   if (preserveError && delivery.error) return;

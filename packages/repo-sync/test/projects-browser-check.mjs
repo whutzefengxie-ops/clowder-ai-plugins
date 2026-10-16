@@ -85,9 +85,9 @@ try {
   await page.locator('[data-policy] > summary').click();
   await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('README.md');
-  await page.getByLabel('当前同步项目').selectOption('default');
+  await page.getByRole('button', { name: '过程同步项目的仓库设置', exact: true }).click();
   await page.getByRole('heading', { name: '配置已完成', exact: true }).waitFor();
-  await page.getByLabel('当前同步项目').selectOption(id);
+  await page.getByRole('button', { name: '版本同步项目的仓库设置', exact: true }).click();
   await page.getByLabel('外部 GitHub 仓库地址').waitFor();
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), 'https://github.com/demo/other.git');
   assert.equal(await page.getByLabel('内部保留文件 / 目录（每行一项）').inputValue(), 'README.md');

@@ -25,6 +25,7 @@ import { createProjectNavigation } from './projects.mjs';
 import { createTaskFocus, focusBaselineInput, revealSetupResult } from './setup-navigation.mjs';
 import { button, esc, sha } from './ui.mjs';
 import { workbench } from './workbench.mjs';
+import { updateShell } from './app-shell.mjs';
 
 const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
@@ -94,6 +95,7 @@ function render({ keepScroll = false } = {}) {
       ? `${configuration(snapshot, esc, sha, button, setup.state())}${snapshot.state && snapshot.config && snapshot.connection ? `<details class="card" data-platform-options><summary>PR / Issue 平台设置（按需修改）</summary>${platformSettings(snapshot, esc)}${issueSettings(snapshot, esc)}</details>` : ''}`
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
   transfers.render(content, view);
+  updateShell(snapshot, view);
   recovery.mount(content, view);
   content.dataset.binding = snapshot.config?.bindingId ?? 'setup';
   content.dataset.revision = snapshot.connection?.revision ?? '';

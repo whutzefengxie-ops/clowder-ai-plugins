@@ -8,6 +8,7 @@ import { git } from './process.mjs';
 import { attachIssueRequirements } from './requirements.mjs';
 import { sourceTarget } from './source-target.mjs';
 import { assertTransferWritable } from './transfer-state.mjs';
+import { developmentHistory } from './development-history.mjs';
 
 export { groupLandings } from './github-landings.mjs';
 export function githubRepository(url) {
@@ -64,6 +65,7 @@ async function discoverLocked(receiver, selection, provider) {
     for (const group of groups) {
       const { pr, source } = await landingSource(receiver, provider, repo, repository, group);
       const introduced = (await git(receiver.git.directory, ['rev-list', `${base}..${group.target}`])).split('\n');
+      if (pr) Object.assign(source, await developmentHistory(receiver, provider, repo, pr, introduced, base));
       const messages = [];
       for (const sha of introduced)
         messages.push(await git(receiver.git.directory, ['show', '-s', '--format=%B', sha]));

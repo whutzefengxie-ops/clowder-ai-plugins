@@ -1,6 +1,7 @@
 import { actionBar } from './actionbar.mjs';
 import { attempts } from './attempts.mjs';
 import { facts } from './stage-facts.mjs';
+import { deliveryOverview } from './delivery-overview.mjs';
 export { attempts, actionBar };
 
 import { nextAction } from './action-policy.mjs';
@@ -23,11 +24,11 @@ export function workflow(snapshot, record, historical) {
   const current = currentStage(delivery, policy, historical);
   const failure = stageFailure(snapshot, record, delivery, historical);
   const failedStage = failure?.stage ?? 0;
-  return `<div class="detail-head"><span class="badge">${historical ? '历史记录 · 只读' : '当前同步'}</span><h2>${esc(title(delivery))} · ${esc(labels[delivery.status] ?? delivery.status)}</h2><p>同步标识 ${esc(delivery.id)}<br>开始 ${when(delivery.startedAt)} · 结束 ${when(delivery.finishedAt)}</p><p>外部 ${sha(delivery.base.upstream)} → ${sha(delivery.target)}<br>内部 ${sha(delivery.base.internal)} → ${sha(delivery.acceptedInternal ?? '待接受')}</p>${historical ? '<button type="button" data-record="current">返回当前同步</button>' : ''}<button type="button" data-expand-all>展开全部阶段</button></div>${record?.legacy ? '<p class="record-gap">此为旧记录：未记录的时间、配置或任务关联保持“未记录”，不会用当前配置补齐。</p>' : ''}${record?.missingTasks.length ? `<p class="record-gap bad">× ${record.missingTasks.length} 份关联执行记录缺失。业务结果保留，不能补造时间线。</p>` : ''}<ol class="journey-flow">${names
+  return `${deliveryOverview(snapshot, record, delivery, historical)}<div class="detail-head"><span class="badge">${historical ? '历史记录 · 只读' : '当前同步'}</span><h2>${esc(title(delivery))} · ${esc(labels[delivery.status] ?? delivery.status)}</h2><p>同步标识 ${esc(delivery.id)}<br>开始 ${when(delivery.startedAt)} · 结束 ${when(delivery.finishedAt)}</p><p>外部 ${sha(delivery.base.upstream)} → ${sha(delivery.target)}<br>内部 ${sha(delivery.base.internal)} → ${sha(delivery.acceptedInternal ?? '待接受')}</p>${historical ? '<button type="button" data-record="current">返回当前同步</button>' : ''}<button type="button" data-expand-all>展开全部阶段</button></div>${record?.legacy ? '<p class="record-gap">此为旧记录：未记录的时间、配置或任务关联保持“未记录”，不会用当前配置补齐。</p>' : ''}${record?.missingTasks.length ? `<p class="record-gap bad">× ${record.missingTasks.length} 份关联执行记录缺失。业务结果保留，不能补造时间线。</p>` : ''}<ol class="journey-flow">${names
     .map((name, index) =>
       stageView(index + 1, name, snapshot, record, delivery, historical, policy, current, failedStage, failure),
     )
-    .join('')}</ol>${actionBar(policy, historical)}`;
+    .join('')}</ol>${actionBar(policy, historical, snapshot)}`;
 }
 function stageForm(stage, delivery, snapshot) {
   if (stage === 2 && delivery.status === 'CODE_PREPARE_REQUIRED')

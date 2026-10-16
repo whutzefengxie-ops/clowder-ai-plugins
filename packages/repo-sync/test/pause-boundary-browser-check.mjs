@@ -175,6 +175,7 @@ try {
   const first = (await receiver.status()).active;
   assert.equal(platform.state.creates.prs, 1);
   assert.equal(platform.state.creates.issues, 1);
+  await page.locator('.next-action details > summary').click();
   const continuation = page.locator('form[data-form="configure-continuation"]');
   await continuation.locator('[name="continuation"]').selectOption('after-each');
   await continuation.getByRole('button').click();

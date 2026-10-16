@@ -56,6 +56,7 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
     if (!pending || view !== 'configuration') return;
     const current = snapshot(),
       same = matches(current);
+    const cancel = current.state?.active?.cancellation?.status === 'REQUESTED';
     const auth =
       pending.kind === 'platform'
         ? (current.config?.platformApi?.authentication ?? current.config?.issueAutomation?.authentication)
@@ -70,7 +71,7 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
     const panel = document.createElement('section');
     panel.className = 'card';
     panel.id = 'recovery-return';
-    panel.innerHTML = `<h3>处理后回到原同步</h3><p>${same ? '当前 PR、Issue、已完成步骤和同步进度均保留。' : '原同步状态已变化；不会恢复另一笔交付，请回到工作台核对。'}</p><div data-recovery-auth></div><p data-recovery-feedback role="status">${message}</p>${pending.kind === 'connection' && !held ? '<p>核对下方仓库和平台设置。网络或证书修复在本机完成；不要关闭证书校验。修复 Git 登录后可以重新只读检查两侧连接，再返回原步骤。</p><button type="button" data-action="heads">重新检查两侧 Git 连接</button>' : ''}<div class="task-actions">${pending.runId && ['platform', 'github'].includes(pending.kind) ? `<button type="button" data-recovery-resume ${ready ? '' : 'disabled data-preserve-disabled'}>继续原同步 →</button>` : ''}<button type="button" data-recovery-return>返回原步骤 →</button></div>`;
+    panel.innerHTML = `<h3>处理后回到原同步</h3><p>${same ? '当前 PR、Issue、已完成步骤和同步进度均保留。' : '原同步状态已变化；不会恢复另一笔交付，请回到工作台核对。'}</p><div data-recovery-auth></div><p data-recovery-feedback role="status">${message}</p>${pending.kind === 'connection' && !held ? '<p>核对下方仓库和平台设置。网络或证书修复在本机完成；不要关闭证书校验。修复 Git 登录后可以重新只读检查两侧连接，再返回原步骤。</p><button type="button" data-action="heads">重新检查两侧 Git 连接</button>' : ''}<div class="task-actions">${pending.runId && ['platform', 'github'].includes(pending.kind) ? `<button type="button" data-recovery-resume ${ready ? '' : 'disabled data-preserve-disabled'}>${cancel ? '继续原 PR 撤销 →' : '继续原同步 →'}</button>` : ''}<button type="button" data-recovery-return>返回原步骤 →</button></div>`;
     content.prepend(panel);
     if (pending.kind === 'platform' && !content.querySelector('#issue-auth'))
       panel.querySelector('[data-recovery-auth]').innerHTML = authenticationForm(current.config ?? {});
@@ -121,7 +122,9 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
       runId = pending.runId;
     if (!pending.provided || !runId || ['IMPORTED', 'EXPORTED'].includes(current.transfer?.status)) return;
     changeView('workbench');
-    await action({ action: 'resume-sync', runId, deliveryId: pending.deliveryId });
+    await action(current.state?.active?.cancellation?.status === 'REQUESTED'
+      ? { action: 'cancel-delivery', confirmed: true, deliveryId: pending.deliveryId, previousUrl: current.state.active.prUrl ?? '' }
+      : { action: 'resume-sync', runId, deliveryId: pending.deliveryId });
   });
   document.addEventListener('repo-sync-auth-provided', (event) => {
     if (!pending || event.detail?.kind !== pending.kind || !matches(snapshot())) return;

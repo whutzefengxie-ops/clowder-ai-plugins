@@ -122,7 +122,7 @@ try {
     await form.getByText('姓名与邮箱（重写模式必填；保留模式用于接收节点）', { exact: true }).click();
   await form.getByLabel('内部 Git 姓名').fill('Internal Receiver');
   await form.getByLabel('内部 Git 邮箱').fill('receiver@example.invalid');
-  await form.getByRole('button', { name: '保存并检查连接 →', exact: true }).click();
+  await page.getByRole('button', { name: '保存并检查连接 →', exact: true }).click();
   await page.getByRole('heading', { name: '2 · 核验已有同步起点', exact: true }).waitFor({ timeout: 30000 });
   assert.ok(sourceChecks >= 2, 'initial configuration must verify the provided GitHub credential');
   assert.equal(platform.state.creates.issues + platform.state.creates.prs, 0, 'read checks cannot create objects');

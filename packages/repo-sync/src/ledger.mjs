@@ -3,6 +3,7 @@ import { commitPolicy } from './commit-policy.mjs';
 import { fail } from './config.mjs';
 import { assertIssueLedger } from './issue-ledger.mjs';
 import { validateRecording } from './recording.mjs';
+import { validateDevelopmentReplay } from './development-history.mjs';
 
 const sha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const pair = (value) => value && sha(value.upstream) && sha(value.internal);
@@ -53,6 +54,26 @@ function assertDelivery(delivery, identities, statuses) {
   )
     fail('LEDGER_INVALID', '交付身份、状态或冻结基线无效，暂停；不可跳过原交付或重建台账');
   validateRecording(delivery);
+  if (delivery.cancellation && (!['REQUESTED', 'MERGED', 'COMPLETE'].includes(delivery.cancellation.status) ||
+      !Number.isFinite(Date.parse(delivery.cancellation.requestedAt)) ||
+      (delivery.cancellation.status === 'COMPLETE' && delivery.status !== 'CANCELLED')))
+    fail('LEDGER_INVALID', '原 PR 撤销记录不完整，保留原任务与对象。');
+  if (delivery.supersedes !== undefined && !/^[a-f0-9]{24}$/.test(delivery.supersedes))
+    fail('LEDGER_INVALID', '重试交付的历史来源无效。');
+  if (delivery.internalCommitCount !== undefined && (!Number.isSafeInteger(delivery.internalCommitCount) || delivery.internalCommitCount < 1))
+    fail('LEDGER_INVALID', '内部候选提交数量无效。');
+  if (delivery.source?.developmentReplay) validateDevelopmentReplay(delivery.source.developmentReplay);
+  if (delivery.developmentMappings !== undefined) {
+    const sources = delivery.source?.developmentReplay?.commits;
+    if (!Array.isArray(sources) || !Array.isArray(delivery.developmentMappings) ||
+        delivery.developmentMappings.length !== sources.length ||
+        new Set(delivery.developmentMappings.map((m) => m.source)).size !== sources.length ||
+        new Set(delivery.developmentMappings.map((m) => m.internal)).size !== sources.length ||
+        delivery.developmentMappings.some((m) => !sha(m.source) || !sha(m.internal) || !sources.includes(m.source)))
+      fail('COMMIT_MAPPING_INVALID', '开发提交的内外 SHA 映射不完整，保留原交付。');
+  }
+  if (delivery.candidate && delivery.source?.developmentReplay && !delivery.developmentMappings)
+    fail('COMMIT_MAPPING_INVALID', '已重放候选缺少逐条开发提交映射，不能发布或接受。');
   if (delivery.commitPolicy)
     commitPolicy({ commitStrategy: delivery.commitPolicy.strategy, receivingIdentity: delivery.commitPolicy.identity });
   if (

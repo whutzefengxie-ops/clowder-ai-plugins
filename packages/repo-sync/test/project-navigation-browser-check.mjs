@@ -87,7 +87,7 @@ try {
   await page.getByRole('button', { name: '运行中', exact: true }).click();
   await page.getByText('没有符合当前状态的项目。可选择“全部”查看。', { exact: true }).waitFor();
   await page.getByRole('button', { name: '需要处理', exact: true }).click();
-  assert.equal(await page.locator('[data-project-enter]').count(), 2);
+  assert.equal(await page.locator('.project-overview .project-cards [data-project-enter]').count(), 2);
   assert.equal(await page.locator('.project-overview [data-action]').count(), 0);
   await page.getByLabel('搜索记录').fill('missing-tag');
   const dated = page.waitForResponse(

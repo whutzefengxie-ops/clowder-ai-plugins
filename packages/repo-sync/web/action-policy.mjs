@@ -4,7 +4,7 @@ import { stageOf } from './ui.mjs';
 export function nextAction(snapshot, delivery, historical = false) {
   if (historical) return { stage: 0, text: '此记录只读，可展开各阶段查看当时信息。' };
   const policy =
-    taskPolicy(snapshot, delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
+    taskPolicy(snapshot, delivery) ?? cancellationPolicy(delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
   const task = snapshot.operation;
   const owns = ownsTask(task, delivery) || task?.deliveryIds?.includes(delivery?.id);
   const failed =
@@ -14,6 +14,9 @@ export function nextAction(snapshot, delivery, historical = false) {
       (step) => step.status === 'FAILED' && (!step.deliveryId || !delivery || step.deliveryId === delivery.id),
     );
   return failed?.stage && task.persistence?.status !== 'FAILED' ? { ...policy, stage: failed.stage } : policy;
+}
+function cancellationPolicy(delivery) {
+  return delivery?.cancellation?.status === 'REQUESTED' ? { stage: 4, text: '原 PR 撤销结果待回读；当前轮次已暂停，不会继续创建对象。', anchor: 'cancel-delivery-form', label: '回读并完成原 PR 撤销 →' } : null;
 }
 function taskPolicy(snapshot, delivery) {
   const task = snapshot.operation;
