@@ -69,7 +69,9 @@ async function discoverLocked(receiver, selection, provider) {
       const messages = [];
       for (const sha of introduced)
         messages.push(await git(receiver.git.directory, ['show', '-s', '--format=%B', sha]));
-      const issues = await provider.collectIssues(repo, pr, introduced, messages);
+      const issueReferenceNotes = [];
+      const issues = await provider.collectIssues(repo, pr, introduced, messages, issueReferenceNotes);
+      if (issueReferenceNotes.length) source.issueReferenceNotes = issueReferenceNotes;
       plans.push({
         target: group.target,
         syncTarget: target,

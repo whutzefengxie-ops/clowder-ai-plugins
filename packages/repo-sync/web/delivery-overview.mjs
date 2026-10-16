@@ -1,4 +1,5 @@
 import { esc, sha } from './ui.mjs';
+import { issueReferenceNotes } from './issue-reference-notes.mjs';
 
 export function deliveryOverview(snapshot, record, d, historical) {
   const version = d.mode === 'version';
@@ -12,6 +13,7 @@ export function deliveryOverview(snapshot, record, d, historical) {
     <dl class="delivery-metrics"><div><dt>PR 开发提交</dt><dd>${version ? '不重放' : d.source.kind === 'commit' ? '无上游 PR' : development ?? '未记录'}</dd></div><div><dt>${version ? '上游范围提交' : 'main 落地提交'}</dt><dd>${d.commits?.length ?? '未记录'}</dd></div><div><dt>内部候选提交</dt><dd>${internal ?? (d.candidate ? '未记录' : '待生成')}</dd></div><div><dt>关联 Issue</dt><dd>${d.issues?.length ?? 0}</dd></div></dl>
     ${d.source.developmentReplay ? `<p class="delivery-note">已展开上游 squash：${development} 条 PR 开发提交 → 内部逐条重放；main 的 ${d.commits.length} 条落点单独记录接受对应。</p>` : oldSquash ? '<p class="record-gap">此候选沿用上游压缩后的 main 历史，未展开原 PR 开发提交。需要逐条重放时，先放弃未合入的旧 PR，再重新同步。</p>' : ''}
     ${d.supersedes ? `<p>本笔替代已撤销同步 <code>${esc(d.supersedes)}</code>；旧 PR 和历史保留。</p>` : ''}
+    ${issueReferenceNotes(d.source)}
     <div class="delivery-objects"><section><h4>关联 Issue（${d.issues?.length ?? 0}）</h4>${list((d.issues ?? []).map((issue) => issueRow(issue, snapshot, d, historical)), 4, '查看其余关联 Issue') || `<p>${version ? '版本模式不搬运 Issue。' : '本笔未关联 Issue。'}</p>`}</section>
     <section><h4>${d.source.developmentReplay ? '逐条开发提交与内部 SHA' : '本笔提交与内部 SHA'}（${rows.length}）</h4>${list(rows.map((source) => {
       const detail = d.commitDetails?.find((item) => item.sha === source);
@@ -26,7 +28,7 @@ export function deliveryOverview(snapshot, record, d, historical) {
 function issueRow(issue, snapshot, d, historical) {
   const mapping = d.issueMappings?.[issue.sourceId] ?? (!historical ? snapshot.state?.issues?.[issue.sourceId] : null);
   const result = d.issueResults?.[issue.sourceId];
-  return `<li><b>${link(issue.url, `#${issue.number} ${issue.title ?? '标题未记录'}`)}</b><p>${issue.relation === 'closes' ? '全部接收条件满足后关闭' : '普通关联，保留状态'} · ${mapping ? link(mapping.url, `内部 #${mapping.internalId}`) : '内部 Issue 待创建 / 未记录'}${result ? ` · ${esc(result.state)}` : ''}</p></li>`;
+  return `<li><b>${link(issue.url, `#${issue.number} ${issue.title ?? '标题未记录'}`)}</b><p>${issue.relation === 'closes' ? '上游有 PR 关闭事件：内部 PR 合入核验后关闭' : '上游仅引用 / 关联，保持内部 Issue 打开；如需随 PR 关闭，请在上游使用 closes、fixes 或 resolves'} · ${mapping ? link(mapping.url, `内部 #${mapping.internalId}`) : '内部 Issue 待创建 / 未记录'}${result ? ` · ${esc(result.state)}` : ''}</p></li>`;
 }
 function list(rows, shown, label) {
   if (!rows.length) return '';

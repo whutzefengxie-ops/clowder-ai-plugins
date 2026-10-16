@@ -108,6 +108,7 @@ function rejectResponse(response) {
     fail(
       'GITHUB_REPOSITORY_UNAVAILABLE',
       'GitHub 仓库或对象不可读取。请核对来源地址及私有仓库读取权限；这不代表代码仓不存在。',
+      { httpStatus: 404 },
     );
   fail('GITHUB_API_UNAVAILABLE', `GitHub API 返回 HTTP ${response.status}。请核对网络与服务后重试；原记录保留。`);
 }

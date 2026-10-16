@@ -19,7 +19,7 @@ export async function closedEvents(id) {
 export function issueReferences(texts, repo) {
   const refs = new Map();
   for (const text of texts) {
-    for (const match of text.matchAll(/(?:^|[\s(:,[])(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/g))
+    for (const match of text.matchAll(/(?:^|[\s(:,[/])(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/g))
       refs.set(`${match[1] ?? repo}#${match[2]}`, { repo: match[1] ?? repo, number: Number(match[2]) });
     for (const match of text.matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)\b/g))
       refs.set(`${match[1]}#${match[2]}`, { repo: match[1], number: Number(match[2]) });
@@ -32,12 +32,21 @@ export function closureEvidence(events, prId, introduced) {
     (event) => (typeof prId === 'string' && event.closer?.id === prId) || introduced.includes(event.closer?.oid),
   );
 }
-export async function collectIssues(repo, pr, introduced, messages) {
+export async function collectIssues(repo, pr, introduced, messages, notes = []) {
   const candidates = pr ? await closingIssues(repo, pr.number) : [];
   const byUrl = new Map(candidates.map((issue) => [issue.url, { issue, repo: issue.repository.nameWithOwner }]));
   // Mentions identify candidates only; actual ClosedEvent provenance decides closing.
   for (const reference of issueReferences([pr?.body ?? '', ...messages], repo)) {
-    const issue = await api(`repos/${reference.repo}/issues/${reference.number}`);
+    const url = `https://github.com/${reference.repo}/issues/${reference.number}`;
+    if (byUrl.has(url)) continue;
+    let issue;
+    try {
+      issue = await api(`repos/${reference.repo}/issues/${reference.number}`);
+    } catch (error) {
+      if (error.code !== 'GITHUB_REPOSITORY_UNAVAILABLE' || error.details?.httpStatus !== 404) throw error;
+      notes.push({ ...reference, url, status: 'unresolved', reason: 'not-found-or-not-visible' });
+      continue;
+    }
     if (!issue.pull_request)
       byUrl.set(issue.html_url, { issue: { ...issue, id: issue.node_id, url: issue.html_url }, repo: reference.repo });
   }

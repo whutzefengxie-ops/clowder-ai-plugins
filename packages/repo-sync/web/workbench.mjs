@@ -8,6 +8,7 @@ import { button, esc, sha, title, when } from './ui.mjs';
 import { tagSelector } from './version.mjs';
 import { workflow } from './workflow.mjs';
 import { boundaryDeliveryId } from './flow-stage.mjs';
+import { issueReferenceNotes } from './issue-reference-notes.mjs';
 
 export function workbench(snapshot, records, tags, mobileDetail) {
   const { config, state } = snapshot;
@@ -58,7 +59,7 @@ function target(snapshot, tags) {
     return `${accepted}${tagSelector(tags, esc, sha, config.prTransport !== 'manual')}<div id="operation"></div><div id="error-slot"></div>`;
   const next = state.queue[0];
   const heading = targetHeading(state, config, next);
-  return `${accepted}${config.mode === 'continuous' ? `${githubAuthForm(snapshot, { open: !snapshot.sourceAuthentication?.available })}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
+  return `${accepted}${config.mode === 'continuous' ? `${githubAuthForm(snapshot, { open: !snapshot.sourceAuthentication?.available })}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
 }
 
 function repositorySummary(config, state) {

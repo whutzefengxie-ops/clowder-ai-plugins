@@ -175,6 +175,12 @@ try {
   const first = (await receiver.status()).active;
   assert.equal(platform.state.creates.prs, 1);
   assert.equal(platform.state.creates.issues, 1);
+  const pauseButton = page.getByRole('button', { name: '本笔完成后暂停', exact: true });
+  assert.equal(await pauseButton.isVisible(), true, 'the pause action must be visible without opening settings');
+  await pauseButton.click();
+  await until(() => receiver.status(), (current) => Boolean(current.automation?.pauseRequested), 'pause intent saved');
+  await page.reload();
+  await page.getByText(/已设置：本笔完成后暂停/).waitFor();
   await page.locator('.next-action details > summary').click();
   const continuation = page.locator('form[data-form="configure-continuation"]');
   await continuation.locator('[name="continuation"]').selectOption('after-each');

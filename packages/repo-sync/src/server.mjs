@@ -53,6 +53,7 @@ const assets = new Map([
     'journey.css',
     'source-target.mjs',
     'issue-settings.mjs',
+    'issue-reference-notes.mjs',
     'projects.mjs',
     'projects.css',
     'project-scope.mjs',

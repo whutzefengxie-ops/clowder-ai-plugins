@@ -12,7 +12,10 @@ function control(p, primary) {
 }
 export function actionBar(policy, historical, snapshot = {}) {
   if (historical) return '';
-  return `<footer class="next-action" aria-label="当前操作区"><h2>当前需要你操作</h2><p role="status">${esc(policy.text)}</p><div class="task-actions">${control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}</div>${autoMergeControls(snapshot)}<details><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></footer>`;
+  const run = snapshot.state?.automation;
+  const pause = run && ['RUNNING', 'WAITING_REVIEW'].includes(run.status) && !run.pauseRequested;
+  const pauseStatus = run?.pauseRequested ? '<p role="status">已设置：本笔完成后暂停，下一笔不会自动开始。</p>' : '';
+  return `<footer class="next-action" aria-label="当前操作区"><h2>当前需要你操作</h2><p role="status">${esc(policy.text)}</p>${pauseStatus}<div class="task-actions">${control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div>${autoMergeControls(snapshot)}<details><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></footer>`;
 }
 function autoMergeControls(snapshot) {
   const run = snapshot.state?.automation;
