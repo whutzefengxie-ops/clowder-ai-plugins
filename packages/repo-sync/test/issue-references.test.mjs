@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectIssues } from '../src/github-issues.mjs';
+import { collectIssues, issueReferences } from '../src/github-issues.mjs';
 
 const pageInfo = { hasNextPage: false, endCursor: null };
 const sourceIssue = {
@@ -32,6 +32,26 @@ function fixture(t, { status = 404, authoritative = false, events = [], issueNum
   return calls;
 }
 const pr = { number: 1, node_id: 'pr-1', body: 'Refs #71' };
+
+test('priority item numbers are not mistaken for Issue references', () => {
+  assert.deepEqual(issueReferences([
+    'P1 #1', 'Priority P2: #28', 'priority: P3 - #44', '[P1] #19',
+  ], 'demo/core'), []);
+  assert.deepEqual(issueReferences(['P1 #1, but Refs #28 and #35', 'Refs #1', '#28'], 'demo/core'), [
+    { repo: 'demo/core', number: 28 },
+    { repo: 'demo/core', number: 35 },
+    { repo: 'demo/core', number: 1 },
+  ]);
+});
+
+test('priority labels do not trigger Issue API lookups during collection', async (t) => {
+  const calls = fixture(t);
+  const notes = [];
+  const issues = await collectIssues('demo/core', null, [], ['P1 #1', 'Priority P2: #28'], notes);
+  assert.deepEqual(issues, []);
+  assert.deepEqual(notes, []);
+  assert.deepEqual(calls, []);
+});
 
 test('unresolved text references do not block valid Issues and retain an explicit diagnostic', async (t) => {
   fixture(t);

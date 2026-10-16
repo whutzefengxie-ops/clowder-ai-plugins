@@ -19,8 +19,14 @@ export async function closedEvents(id) {
 export function issueReferences(texts, repo) {
   const refs = new Map();
   for (const text of texts) {
-    for (const match of text.matchAll(/(?:^|[\s(:,[/])(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/g))
+    const priorityHashPositions = new Set(
+      [...text.matchAll(/\b(?:priority\s*[:=]?\s*)?\[?P\d+\]?\s*(?:[:\-–]\s*)?#\d+/gi)]
+        .map((match) => match.index + match[0].lastIndexOf('#')),
+    );
+    for (const match of text.matchAll(/(?:^|[\s(:,[/])(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/g)) {
+      if (priorityHashPositions.has(match.index + match[0].lastIndexOf('#'))) continue;
       refs.set(`${match[1] ?? repo}#${match[2]}`, { repo: match[1] ?? repo, number: Number(match[2]) });
+    }
     for (const match of text.matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)\b/g))
       refs.set(`${match[1]}#${match[2]}`, { repo: match[1], number: Number(match[2]) });
   }
