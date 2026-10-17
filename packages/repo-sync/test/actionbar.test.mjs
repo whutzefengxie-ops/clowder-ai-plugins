@@ -11,8 +11,11 @@ test('pause-after-current-delivery is a primary visible workbench action while a
   });
   const pauseAt = html.indexOf('data-action="pause-sync"');
   assert.notEqual(pauseAt, -1);
-  assert.ok(pauseAt < html.indexOf('<details>'), 'pause is outside the collapsed cadence settings');
+  assert.ok(pauseAt < html.indexOf('<details'), 'pause is outside the collapsed cadence settings');
   assert.match(html, /本笔完成后暂停/);
+  assert.match(html, /class="next-action now"/);
+  assert.match(html, /轮到你了/);
+  assert.match(html, /data-persist-details="continuation"/);
   assert.equal((html.match(/data-action="pause-sync"/g) ?? []).length, 1);
 });
 

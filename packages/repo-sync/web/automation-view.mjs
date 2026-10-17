@@ -92,11 +92,11 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
   const current = preDeliveryPresentation(0, task, policy).current;
   const version = snapshot.config.mode === 'version';
   const names = [
-    '读取目标与真实来源集合',
-    version ? '保留内部文件、构造候选与检查' : '创建 Issue、构造候选与检查',
-    '发布候选并自动创建 PR',
-    '人工审核合入',
-    version ? '自动核验与保存版本' : '自动核验、关单与保存映射',
+    '确认同步范围',
+    '准备代码与 Issue',
+    '发布分支与创建 PR',
+    '平台审核与合入',
+    '核验与登记接收',
   ];
   return `${policy?.outcome === 'cancelled' ? `<p class="cancelled-notice">上一笔已撤销，未合入；接受基线未变。<button type="button" data-record="${esc(snapshot.state.automation.restartOf)}">查看已撤销记录</button></p>` : ''}${panorama(snapshot, null, false)}<section class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
     .map((name, index) => {
