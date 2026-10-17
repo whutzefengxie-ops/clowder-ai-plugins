@@ -114,3 +114,66 @@
   max-width: 100%;
   white-space: normal;
 }
+
+.connection-auth {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  margin-top: 18px;
+  scroll-margin-top: 16px;
+}
+.connection-auth > summary {
+  font-size: 16px;
+  font-weight: 700;
+}
+.auth-channels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.auth-channels > div {
+  padding: 12px;
+  background: #fcfaf7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.auth-channels dt {
+  font-weight: 700;
+}
+.auth-channels dd {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+#content .flow-phase-heading b {
+  font-size: 13px;
+}
+#content .flow-phase-summary,
+#content .round-items small {
+  font-size: 13px;
+  line-height: 1.5;
+}
+#content .flow-phase[data-flow-state="cancelled"],
+#content .flow-phase[data-flow-state="skipped"] {
+  border-color: var(--line);
+  background: #f5f3f0;
+}
+.short-sha {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+#content .short-sha button {
+  min-height: 30px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.short-sha [data-copy-feedback]:empty {
+  display: none;
+}
+@media (max-width: 700px) {
+  .auth-channels {
+    grid-template-columns: 1fr;
+  }
+}

@@ -150,6 +150,22 @@ try {
   let form = page.locator('[data-form="cancel-delivery"]');
   await form.getByRole('button').click();
   assert.equal(platform.state.prCloses, 0, 'confirmation is required');
+  await form.getByRole('checkbox').check();
+  await form.getByRole('checkbox').blur();
+  for (let i = 0; i < 3; i++) {
+    await page.waitForResponse((response) => response.url().includes('/api/status') && response.ok());
+    assert.equal(await form.getByRole('checkbox').isChecked(), true, 'polling must preserve same-PR consent');
+  }
+  await page.reload();
+  for (const selector of ['.delivery-more', '.delivery-cancel'])
+    if (!(await page.locator(selector).evaluate((node) => node.open)))
+      await page.locator(`${selector} > summary`).click();
+  form = page.locator('[data-form="cancel-delivery"]');
+  assert.equal(
+    await form.getByRole('checkbox').isChecked(),
+    false,
+    'refresh requires explicit confirmation again',
+  );
   platform.state.lost = 'pr-close';
   await form.getByRole('checkbox').check();
   await form.getByRole('button').click();
@@ -172,6 +188,21 @@ try {
   assert.equal(platform.state.creates.prs, 1);
   assert.equal(state.accepted.upstream, f.u2);
   await page.reload();
+  await page.getByRole('button', { name: '重新读取目标并同步本笔 →', exact: true }).waitFor();
+  assert.notEqual(await page.locator('[data-flow-stage="4"]').getAttribute('data-flow-state'), 'done');
+  await page.locator('.cancelled-notice [data-record]').click();
+  await page.waitForFunction(
+    () => document.querySelector('[data-flow-stage="4"]')?.dataset.flowState === 'cancelled',
+  );
+  await page.locator('[data-flow-stage-select="4"]').click();
+  assert.equal(
+    await page
+      .locator('[data-stage="4"] [data-step-key="merge-observe"]')
+      .getAttribute('data-operation-state'),
+    'SKIPPED',
+  );
+  await openHistory(page);
+  await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   await page.getByRole('button', { name: '重新读取目标并同步本笔 →', exact: true }).click();
   state = await waitState(
     (s) => s.active?.status === 'WAITING_APPROVAL' && s.automation?.status === 'WAITING_REVIEW',
@@ -225,6 +256,7 @@ try {
     0,
     'history cannot close a live PR',
   );
+  assert.equal(await page.locator('[data-flow-stage="4"]').getAttribute('data-flow-state'), 'cancelled');
   assert.equal(platform.state.closes, 1);
   assert.equal(platform.state.issues[1].state, 'opened');
   assert.deepEqual(errors, []);

@@ -57,7 +57,7 @@ try {
       await page.goto(base);
       await page.getByRole('button', { name: '配置同步基线 →' }).click();
       await page.getByText('✓ 1 · 仓库信息已保存', { exact: true }).click();
-      await page.locator('[data-mode-card="version"]').check();
+      await page.getByLabel('同步模式', { exact: true }).selectOption('version');
       await page.getByText('手动填写路径（高级）', { exact: true }).click();
       await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('internal-docs/\nOWNED.md\nREADME.md');
       assert.equal(await page.locator('[name="mergePaths"]').count(), 0);

@@ -39,6 +39,7 @@ export function automaticPolicy(snapshot, delivery) {
   if (run.status === 'PAUSED' && run.restartOf && !snapshot.state.active)
     return {
       stage: 1,
+      outcome: 'cancelled',
       text: '旧 PR 已关闭，Issue 与历史保留。明确继续后重新读取原目标、创建新的候选和 PR。',
       action: 'resume-sync',
       label: '重新读取目标并同步本笔 →',
@@ -97,13 +98,15 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
     '人工审核合入',
     version ? '自动核验与保存版本' : '自动核验、关单与保存映射',
   ];
-  return `${panorama(snapshot, null, false)}<section class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
+  return `${policy?.outcome === 'cancelled' ? `<p class="cancelled-notice">上一笔已撤销，未合入；接受基线未变。<button type="button" data-record="${esc(snapshot.state.automation.restartOf)}">查看已撤销记录</button></p>` : ''}${panorama(snapshot, null, false)}<section class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
     .map((name, index) => {
       const stage = index + 1;
       const presentation = preDeliveryPresentation(stage, task, policy);
-      const status = presentation.state, failed = status === 'failed', done = status === 'done';
+      const status = presentation.state,
+        failed = status === 'failed',
+        done = status === 'done';
       const detail = stageSummary(stage, null, task, false, snapshot, status);
-      return `<li><details data-stage="${stage}" data-stage-state="${status}"><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b><span data-stage-caption>${failed ? '异常待处理' : done ? '已完成' : stage === current ? '当前步骤' : '待执行'}</span><small data-stage-detail>${esc(detail)}</small></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
+      return `<li><details data-stage="${stage}" data-stage-state="${status}"><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${presentation.mark}</span><b>${stage} · ${name}</b><span data-stage-caption>${presentation.caption}</span><small data-stage-detail>${esc(detail)}</small></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
     })
     .join('')}</ol></section>${policy ? actionBar(policy, false, snapshot) : ''}`;
 }

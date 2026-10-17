@@ -72,6 +72,9 @@ export function initializeSubmissions(context) {
       const field = form.elements.namedItem(name);
       if (field) field.value = '';
     }
+    // Consume explicit consent before an async redraw; failed operations require a fresh confirmation.
+    for (const field of form.querySelectorAll('input[name="confirmed"], input[data-confirmation-key]'))
+      field.checked = false;
     const result = await action(input, form);
     if (!result) {
       if (snapshot().config?.bindingId === binding && snapshot().connection?.revision === revision)
@@ -107,6 +110,47 @@ export function initializeSubmissions(context) {
       });
       return;
     }
+  });
+  document.addEventListener(
+    'invalid',
+    (event) => {
+      for (let e = event.target.parentElement; e; e = e.parentElement)
+        if (e.tagName === 'DETAILS') e.open = true;
+    },
+    true,
+  );
+  document.addEventListener('click', (event) => {
+    const copy = event.target.closest('[data-copy-sha]');
+    if (copy && /^[a-f0-9]{40,64}$/i.test(copy.dataset.copySha)) {
+      const feedback = copy.parentElement.querySelector('[data-copy-feedback]');
+      navigator.clipboard.writeText(copy.dataset.copySha).then(
+        () => {
+          feedback.textContent = '已复制';
+        },
+        () => {
+          feedback.textContent = `复制失败：${copy.dataset.copySha}`;
+        },
+      );
+      return;
+    }
+    const next = event.target.closest('[data-next-auth]');
+    if (!next) return;
+    const form = next.closest('form');
+    const fields = [...form.querySelectorAll('[data-repository] input[required], input[name="mode"]')];
+    const invalid = fields.find((e) => !e.checkValidity());
+    if (invalid) {
+      invalid.reportValidity();
+      return;
+    }
+    const panel = form.querySelector('[data-connection-auth]');
+    if (!panel.open) panel.querySelector(':scope > summary').click();
+    panel.scrollIntoView({ block: 'start' });
+    panel.querySelector('input:not([type="hidden"]), select')?.focus({ preventScroll: true });
+  });
+  document.addEventListener('input', (event) => {
+    if (event.target.name !== 'url') return;
+    const consent = event.target.form?.querySelector('[data-pr-confirm]');
+    if (consent) consent.checked = false;
   });
   document.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-preview-sync]');

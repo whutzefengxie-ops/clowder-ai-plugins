@@ -2,6 +2,7 @@ export { businessStep, plannedSteps } from './workflow-plan.mjs';
 
 export function projectStep(group) {
   const actual = group.entries.filter(({ step }) => step.startedAt || step.status !== 'PENDING');
+  if (group.terminalStatus) return { status: group.terminalStatus, latest: actual.at(-1) ?? null, actual };
   if (!actual.length) return { status: group.proof ? 'DONE' : group.status, latest: null, actual };
   const lastTask = actual.at(-1).task;
   const entries = actual.filter((entry) => entry.task.id === lastTask.id);
@@ -22,6 +23,6 @@ export function projectStep(group) {
   const failed = [...latestEvidence.values()].findLast((entry) => entry.step.status === 'FAILED');
   const running = states.findLast((entry) => entry.step.status === 'RUNNING');
   const latest = failed || running || states.at(-1);
-  const status = latest.step.status === 'DONE' ? group.completionStatus ?? 'DONE' : latest.step.status;
+  const status = latest.step.status === 'DONE' ? (group.completionStatus ?? 'DONE') : latest.step.status;
   return { actual, latest, status };
 }

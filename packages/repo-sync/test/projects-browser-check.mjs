@@ -83,6 +83,8 @@ try {
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://github.com/demo/other.git');
   await page.getByLabel('内部 Git 仓库地址', { exact: true }).fill('git@internal.example:team/other.git');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://internal.example/other');
+  if (!(await page.locator('[data-connection-auth]').evaluate((node) => node.open)))
+    await page.locator('[data-connection-auth] > summary').click();
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
   await page.locator('[data-mode-card="version"]').check();
   await page.locator('[data-policy] > summary').click();
@@ -110,7 +112,8 @@ try {
   const cb = await projects.connection(id),
     rb = await cb.current();
   const prStage = page.locator('[data-stage="3"]');
-  if (!(await prStage.evaluate((node) => node.open))) await openStage(page, await prStage.getAttribute('data-stage'));
+  if (!(await prStage.evaluate((node) => node.open)))
+    await openStage(page, await prStage.getAttribute('data-stage'));
   await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });
   await rb.linkPr('https://internal.example/other/pull/1');
   await page.reload();

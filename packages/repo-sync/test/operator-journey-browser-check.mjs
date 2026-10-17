@@ -38,6 +38,9 @@ try {
   await page.locator('[data-mode-card="continuous"]').click();
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://github.com/invalid');
   await page.getByLabel('内部 Git 仓库地址').fill('git@codehub.example:team/core.git');
+  assert.equal(await page.locator('[data-connection-auth]').evaluate((node) => node.open), false);
+  await page.screenshot({ path: join(evidence, 'first-setup-addresses.png'), fullPage: true });
+  await page.locator('[data-next-auth]').click();
   await page.locator('[name="githubToken"]').fill('SYNTHETIC_NOT_A_REAL_TOKEN');
   await page.getByRole('button', { name: '保存并检查连接 →', exact: true }).click();
   assert.equal(await page.locator('[name="sourceUrl"]').getAttribute('aria-invalid'), 'true');

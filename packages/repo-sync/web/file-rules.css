@@ -95,3 +95,43 @@
     padding-left: 12px;
   }
 }
+
+.baseline-review-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.4fr);
+  gap: 20px;
+  align-items: start;
+}
+.baseline-selection,
+.baseline-viewer {
+  min-width: 0;
+}
+.baseline-viewer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  position: sticky;
+  top: 16px;
+}
+.baseline-viewer pre {
+  max-height: 420px;
+  overflow: auto;
+}
+@media (max-width: 900px) {
+  .baseline-review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .baseline-viewer {
+    position: static;
+  }
+}
+
+/* The review tree occupies one narrow column; inherited-rule help must not squeeze names. */
+.baseline-selection .file-row:has(.file-choice) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.baseline-selection .file-row > span { width: 100%; }
+.baseline-selection .file-row > button { align-self: flex-start; }
+.baseline-selection .file-tree { max-height: 480px; overflow: auto; }

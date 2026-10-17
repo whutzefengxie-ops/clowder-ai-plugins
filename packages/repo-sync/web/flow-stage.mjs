@@ -18,6 +18,13 @@ export function automaticMergeActive(delivery, run) {
   );
 }
 export function stagePresentation(stage, delivery, current, failedStage = 0, run) {
+  if (delivery?.status === 'CANCELLED' && stage !== failedStage)
+    return {
+      state: stage === 4 ? 'cancelled' : 'skipped',
+      mark: '—',
+      tone: '',
+      caption: stage === 4 ? '已撤销 · 未合入' : stage === 5 ? '未登记接收' : '本笔已终止',
+    };
   const failed = stage === failedStage;
   const merged = Boolean(delivery?.mergeObservation || delivery?.acceptedInternal);
   const done = delivery?.status === 'COMPLETE' || (stage === 4 && merged) || (stage < current && stage !== 4);
@@ -59,6 +66,17 @@ export function currentStage(delivery, policy, historical = false) {
 }
 
 export function preDeliveryPresentation(stage, task, policy) {
+  if (
+    task?.persistence?.status !== 'FAILED' &&
+    (policy?.outcome === 'cancelled' || (task?.action === 'cancel-delivery' && task.status === 'SUCCEEDED'))
+  )
+    return {
+      current: 1,
+      state: stage === 1 ? 'current' : 'skipped',
+      mark: stage === 1 ? '○' : '—',
+      caption: stage === 1 ? '等待明确重试' : stage === 4 ? '原 PR 已撤销 · 未合入' : '未执行',
+      tone: '',
+    };
   const current =
     task?.persistence?.status === 'FAILED'
       ? 5
@@ -68,7 +86,7 @@ export function preDeliveryPresentation(stage, task, policy) {
     (['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status) ||
       task?.persistence?.status === 'FAILED');
   const steps = task?.steps?.filter((s) => s.stage === stage) ?? [];
-  const done = steps.length > 0 && steps.every((s) => s.status === 'DONE');
+  const done = stage < 4 && steps.length > 0 && steps.every((s) => s.status === 'DONE');
   const state = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
   return {
     current,

@@ -58,6 +58,8 @@ try {
   await page.getByLabel('内部 Git 仓库地址').fill('git@codehub.example:team/core.git');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');
   await page.getByLabel('外部交付分支').fill('releases');
+  if (!(await page.locator('[data-connection-auth]').evaluate((node) => node.open)))
+    await page.locator('[data-connection-auth] > summary').click();
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
   await page.locator('[data-policy] > summary').click();
   await page.getByText('手动填写路径（高级）', { exact: true }).click();

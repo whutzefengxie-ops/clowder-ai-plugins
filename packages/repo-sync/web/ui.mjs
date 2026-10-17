@@ -4,6 +4,10 @@ export const esc = (value) =>
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   );
 export const sha = (value) => `<code title="${esc(value)}">${esc(value ?? '未记录')}</code>`;
+export const shortSha = (value) =>
+  /^[a-f0-9]{40,64}$/i.test(value ?? '')
+    ? `<span class="short-sha"><code title="${esc(value)}">${esc(value.slice(0, 12))}</code><button type="button" data-copy-sha="${esc(value)}" aria-label="复制完整 commit ID ${esc(value)}">复制</button><small data-copy-feedback role="status"></small></span>`
+    : sha(value);
 export const when = (value) =>
   value ? esc(new Date(value).toLocaleString('zh-CN', { hour12: false, timeZoneName: 'short' })) : '未记录';
 export const button = (action, label) =>
@@ -38,8 +42,10 @@ export const stageOf = (delivery) =>
   })[delivery?.status] ?? 1;
 
 export function completionTime(delivery, record) {
-  return delivery.finishedAt ?? record?.events?.findLast((e) =>
-    e.deliveryId === delivery.id && e.stage === 'COMPLETE')?.time;
+  return (
+    delivery.finishedAt ??
+    record?.events?.findLast((e) => e.deliveryId === delivery.id && e.stage === 'COMPLETE')?.time
+  );
 }
 export function completionProof(key, delivery, record) {
   if (delivery?.status !== 'COMPLETE') return null;

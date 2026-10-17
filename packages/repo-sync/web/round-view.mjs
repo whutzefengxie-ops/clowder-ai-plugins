@@ -1,4 +1,4 @@
-import { esc, sha } from './ui.mjs';
+import { esc, shortSha } from './ui.mjs';
 
 const labels = { all: '全部', complete: '已完成', current: '同步中', pending: '未同步', cancelled: '已撤销' };
 export function roundView(round, error = '') {
@@ -7,7 +7,7 @@ export function roundView(round, error = '') {
   if (!round) return '<p role="status">正在读取本轮目标与逐笔进展…</p>';
   const c = round.counts,
     kind = { commit: 'commit', tag: 'tag', latest: '最新分支', queue: '已冻结清单' }[round.selection?.kind];
-  return `<div class="round-heading"><h2>本轮同步进度 <span>${c.complete} / ${round.total ?? '待确定'} 笔已完成</span></h2><p data-round-current>${round.current ? `当前：${esc(sourceTitle(round.current))}` : round.status === 'COMPLETE' ? '本轮已全部接收' : '当前没有正在同步的交付'}</p></div><div class="round-target">目标 ${esc(kind)} · <code>${esc(round.selection?.value ?? round.target ?? '来源扫描后确定')}</code><span>同步中 ${c.current} · 未同步 ${c.pending} · 已撤销 ${c.cancelled}</span></div><div class="round-filter" role="group" aria-label="本轮进度筛选">${Object.entries(
+  return `<div class="round-heading"><h2>本轮同步进度 <span>${c.complete} / ${round.total ?? '待确定'} 笔已完成</span></h2><p data-round-current>${round.current ? `当前：${esc(sourceTitle(round.current))}` : round.status === 'COMPLETE' ? '本轮已全部接收' : '当前没有正在同步的交付'}</p></div><div class="round-target">目标 ${esc(kind)} · ${shortSha(round.selection?.value ?? round.target ?? '来源扫描后确定')}<span>同步中 ${c.current} · 未同步 ${c.pending} · 已撤销 ${c.cancelled}</span></div><div class="round-filter" role="group" aria-label="本轮进度筛选">${Object.entries(
     labels,
   )
     .map(
@@ -28,5 +28,5 @@ function link(url, label) {
     : esc(label);
 }
 function rowView(row) {
-  return `<li data-round-target="${esc(row.target)}" data-round-status="${row.status}"><div><b>${link(row.source.url, sourceTitle(row))}</b><small>外部 ${sha(row.target)}${row.internal ? ` → 内部 ${sha(row.internal)}` : ''} · Issue ${row.issueCount} · 提交 ${row.commitCount ?? '待核对'}</small></div><span>${labels[row.status]}${row.lastAttempt ? ' · 等待重新同步' : ''}</span>${row.deliveryId ? `<button type="button" data-record="${esc(row.deliveryId)}">${row.status === 'current' ? '查看当前流程' : '查看同步记录'}</button>` : '<span>按顺序接收</span>'}${row.prUrl ? link(row.prUrl, '内部 PR') : ''}</li>`;
+  return `<li data-round-target="${esc(row.target)}" data-round-status="${row.status}"><div><b>${link(row.source.url, sourceTitle(row))}</b><small>外部 ${shortSha(row.target)}${row.internal ? ` → 内部 ${shortSha(row.internal)}` : ''} · Issue ${row.issueCount} · 提交 ${row.commitCount ?? '待核对'}</small></div><span>${labels[row.status]}${row.lastAttempt ? ' · 等待重新同步' : ''}</span>${row.deliveryId ? `<button type="button" data-record="${esc(row.deliveryId)}">${row.status === 'current' ? '查看当前流程' : '查看同步记录'}</button>` : '<span>按顺序接收</span>'}${row.prUrl ? link(row.prUrl, '内部 PR') : ''}</li>`;
 }

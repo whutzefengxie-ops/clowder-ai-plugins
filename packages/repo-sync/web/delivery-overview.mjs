@@ -1,5 +1,5 @@
 import { issueReferenceNotes } from './issue-reference-notes.mjs';
-import { esc, sha } from './ui.mjs';
+import { esc, shortSha } from './ui.mjs';
 
 export function deliveryOverview(snapshot, _record, d, historical) {
   const version = d.mode === 'version';
@@ -43,7 +43,7 @@ function rowsForCommits(d, rows, mappings) {
     .map((source) => {
       const detail = d.commitDetails?.find((item) => item.sha === source);
       const mapped = mappings.find((item) => item.source === source);
-      return `<li><b>${esc(detail?.subject ?? '提交标题未记录')}</b><p>外部 ${sha(source)}<br>内部 ${mapped ? sha(mapped.internal) : d.commitPolicy?.strategy === 'rewrite' ? '待重写 / 未记录' : sha(source)}</p></li>`;
+      return `<li><b>${esc(detail?.subject ?? '提交标题未记录')}</b><p>外部 ${shortSha(source)}<br>内部 ${mapped ? shortSha(mapped.internal) : d.commitPolicy?.strategy === 'rewrite' ? '待重写 / 未记录' : shortSha(source)}</p></li>`;
     })
     .join('')}</ul>`;
 }
@@ -54,5 +54,5 @@ function link(url, text) {
 }
 function cancellationForm(d, historical) {
   if (historical || d.acceptedInternal || ['COMPLETE', 'CANCELLED'].includes(d.status)) return '';
-  return `<details class="delivery-cancel" ${d.cancellation?.status === 'REQUESTED' ? 'open' : ''}><summary>放弃本笔并重新同步</summary><p>关闭未合入的旧 PR，保留 Issue、候选分支和历史，接受基线不变。本轮会暂停；明确继续后重新读取原目标并创建新 PR，不会强推旧分支或回退 main。</p><form id="cancel-delivery-form" data-form="cancel-delivery"><input type="hidden" name="deliveryId" value="${esc(d.id)}"><input type="hidden" name="previousUrl" value="${esc(d.prUrl ?? '')}"><label><input type="checkbox" name="confirmed" required>我确认关闭旧 PR，并保留原 Issue 与历史</label><button type="submit">${d.cancellation?.status === 'REQUESTED' ? '回读并完成原 PR 撤销' : '关闭旧 PR 并撤销本笔'}</button></form></details>`;
+  return `<details class="delivery-cancel" ${d.cancellation?.status === 'REQUESTED' ? 'open' : ''}><summary>放弃本笔并重新同步</summary><p>关闭未合入的旧 PR，保留 Issue、候选分支和历史，接受基线不变。本轮会暂停；明确继续后重新读取原目标并创建新 PR，不会强推旧分支或回退 main。</p><form id="cancel-delivery-form" data-form="cancel-delivery" data-edit-baseline="${esc(JSON.stringify([d.id, d.prUrl, d.candidate, d.status, d.cancellation?.requestedAt]))}"><input type="hidden" name="deliveryId" value="${esc(d.id)}"><input type="hidden" name="previousUrl" value="${esc(d.prUrl ?? '')}"><label><input type="checkbox" name="confirmed" required>我确认关闭旧 PR，并保留原 Issue 与历史</label><small>勾选仅保留在本页；刷新或 PR 变化后需要重新确认。</small><button type="submit">${d.cancellation?.status === 'REQUESTED' ? '回读并完成原 PR 撤销' : '关闭旧 PR 并撤销本笔'}</button></form></details>`;
 }

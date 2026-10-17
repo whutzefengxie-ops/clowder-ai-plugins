@@ -15,7 +15,10 @@ test('connection groups source branch with source and target branch with target,
       target.includes('name="internalWebUrl"'),
   );
   assert.ok(html.includes('name="commitClosureVerified"'));
-  assert.ok(source.includes('name="githubToken"'));
+  assert.ok(html.includes('data-connection-auth'));
+  assert.ok(html.includes('name="githubToken"'));
+  assert.ok(html.indexOf('data-connection-auth') < html.indexOf('name="githubToken"'));
+  assert.ok(html.includes('data-next-auth'));
   assert.ok(html.includes('name="commitStrategy"'));
 });
 
@@ -32,6 +35,7 @@ test('password inputs never enter the browser configuration draft', () => {
   const fields = [
     { name: 'sourceUrl', value: 'https://github.com/demo/core.git', type: 'url' },
     { name: 'issueToken', value: 'PRIVATE_DRAFT_SECRET', type: 'password' },
+    { name: 'confirmed', value: 'on', type: 'checkbox', checked: true },
   ];
   globalThis.document = {
     querySelectorAll: () => [
@@ -44,6 +48,7 @@ test('password inputs never enter the browser configuration draft', () => {
   };
   try {
     assert.equal(JSON.stringify(captureDraft()).includes('PRIVATE_DRAFT_SECRET'), false);
+    assert.equal(JSON.stringify(captureDraft()).includes('confirmed'), false, 'action consent cannot be restored from browser storage');
   } finally {
     globalThis.document = previous;
   }

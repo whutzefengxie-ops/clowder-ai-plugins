@@ -51,6 +51,19 @@ try {
       'selected path must match the loaded content after the request repaint',
     );
   }
+  const fileName = panel.locator('.file-row > span[title="internal-docs/guide.md"]');
+  assert.ok((await fileName.boundingBox()).width >= 100, 'nested file names must remain readable beside inherited-rule explanations');
+  await page.screenshot({ path: join(root, 'baseline-two-column-1366.png'), fullPage: true });
+  const tree = await panel.locator('.baseline-selection').boundingBox();
+  const viewer = await panel.locator('.baseline-viewer').boundingBox();
+  assert.ok(viewer.x > tree.x + tree.width, 'desktop tree and selected content share one review row');
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: join(root, 'baseline-vertical-390.png'), fullPage: true });
+  const mobileTree = await panel.locator('.baseline-selection').boundingBox();
+  const mobileViewer = await panel.locator('.baseline-viewer').boundingBox();
+  assert.ok(mobileViewer.y >= mobileTree.y + mobileTree.height, 'mobile review remains vertical');
+  await page.setViewportSize({ width: 1366, height: 768 });
   let release, entered;
   const held = new Promise((done) => {
     release = done;
@@ -86,6 +99,16 @@ try {
   await page.locator('[name="tag"]').selectOption('v2.0.0');
   await page.getByRole('button', { name: '同步到所选版本 →', exact: true }).click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
+  await page.locator('[data-persist-details="commits"] > summary').click();
+  const copy = page.locator('[data-copy-sha]').first();
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await copy.click();
+  await page.getByText('已复制', { exact: true }).waitFor();
+  assert.equal(
+    await page.evaluate(() => navigator.clipboard.readText()),
+    await copy.getAttribute('data-copy-sha'),
+  );
+  await page.locator('[data-persist-details="commits"] > summary').click();
   await page.locator('.delivery-more > summary').click();
   await page.locator('.delivery-cancel > summary').click();
   for (const width of [1280, 1366, 1440, 390]) {

@@ -37,7 +37,8 @@ globalThis.fetch = async (input, options) => {
     sourceChecks++;
     if (url.pathname === '/repos/demo/core')
       return Response.json({ full_name: 'demo/core', node_id: 'fixture-repository' });
-    if (url.pathname === '/graphql') return Response.json({ data: { viewer: { login: 'synthetic-reader' } } });
+    if (url.pathname === '/graphql')
+      return Response.json({ data: { viewer: { login: 'synthetic-reader' } } });
     throw Error(`Unexpected synthetic GitHub request: ${url.pathname}`);
   }
   if (url.origin === 'https://codehub.example' && url.pathname.startsWith('/api/v4/'))
@@ -84,7 +85,8 @@ const evidence = process.env.REPO_SYNC_EVIDENCE || join(folder, 'evidence');
 await mkdir(evidence, { recursive: true });
 async function noPersistedTokens(receiver) {
   const files =
-    (await readFile(file, 'utf8')) + (receiver ? await readFile(receiver.store.path, 'utf8').catch(() => '') : '');
+    (await readFile(file, 'utf8')) +
+    (receiver ? await readFile(receiver.store.path, 'utf8').catch(() => '') : '');
   const storage = await page.evaluate(() =>
     JSON.stringify({ session: { ...sessionStorage }, local: { ...localStorage } }),
   );
@@ -108,9 +110,13 @@ try {
   const form = page.locator('[data-form="configure-repositories"]');
   await form.getByLabel('外部 GitHub 仓库地址').fill('https://github.com/demo/core.git');
   await form.getByLabel('外部交付分支').fill('releases');
-  await form.getByLabel('GitHub 读取 Token（开发过程模式需要）').fill(sourceToken);
-  await form.getByLabel('内部 Git 仓库地址', { exact: true }).fill('git@codehub.example:innersource/team_G/core.git');
+  await form
+    .getByLabel('内部 Git 仓库地址', { exact: true })
+    .fill('git@codehub.example:innersource/team_G/core.git');
   await form.getByLabel('内部仓库网页地址（登记对象前必填）').fill(platform.web);
+  await form.locator('[data-next-auth]').click();
+  await form.getByLabel('GitHub 读取 Token（开发过程模式需要）').fill(sourceToken);
+
   await form.getByLabel('PR 创建方式', { exact: true }).selectOption('gitlab');
   await form.getByLabel('Issue 创建与关单方式').selectOption('gitlab');
   await form.getByLabel('内部 Issue 网页链接').fill(`${platform.web}/issues`);
@@ -126,7 +132,11 @@ try {
   await page.getByRole('button', { name: '保存并检查连接 →', exact: true }).click();
   await page.getByRole('heading', { name: '2 · 核验已有同步起点', exact: true }).waitFor({ timeout: 30000 });
   assert.ok(sourceChecks >= 2, 'initial configuration must verify the provided GitHub credential');
-  assert.equal(platform.state.creates.issues + platform.state.creates.prs, 0, 'read checks cannot create objects');
+  assert.equal(
+    platform.state.creates.issues + platform.state.creates.prs,
+    0,
+    'read checks cannot create objects',
+  );
   assert.equal(await page.getByLabel('内部当前接收位置').inputValue(), f.i0);
   let receiver = await connection.current();
   await noPersistedTokens(receiver);
@@ -151,7 +161,9 @@ try {
         state.active?.prUrl === `${platform.web}/merge_requests/${number}` &&
         state.automation.status === 'WAITING_REVIEW',
     );
-    await page.locator(`.next-action a[href="${platform.web}/merge_requests/${number}"]`).waitFor({ timeout: 30000 });
+    await page
+      .locator(`.next-action a[href="${platform.web}/merge_requests/${number}"]`)
+      .waitFor({ timeout: 30000 });
     const active = (await receiver.status()).active;
     assert.equal(active.source.kind, number === 1 ? 'pr' : 'commit');
     assert.equal(await page.locator('.primary:visible').count(), 1);
@@ -171,14 +183,22 @@ try {
       '--format=%an <%ae>|%cn <%ce>',
       active.commitMappings[0].internal,
     ]);
-    assert.equal(identity, 'Internal Receiver <receiver@example.invalid>|Internal Receiver <receiver@example.invalid>');
-    assert.equal(await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]), '内部默认中文版');
+    assert.equal(
+      identity,
+      'Internal Receiver <receiver@example.invalid>|Internal Receiver <receiver@example.invalid>',
+    );
+    assert.equal(
+      await git(receiver.git.directory, ['show', `${active.candidate}:README.md`]),
+      '内部默认中文版',
+    );
     assert.equal(
       await git(receiver.git.directory, ['show', `${active.candidate}:README.en.md`]),
       'Internal English documentation',
     );
     assert.equal(
-      (await git(receiver.git.directory, ['ls-tree', '--name-only', active.candidate])).includes('README.cn.md'),
+      (await git(receiver.git.directory, ['ls-tree', '--name-only', active.candidate])).includes(
+        'README.cn.md',
+      ),
       false,
     );
     if (number === 2)
@@ -206,7 +226,12 @@ try {
   );
 } catch (error) {
   console.error(error);
-  console.error('Process journey page errors:', errors, '\nVisible page:', await page.locator('body').innerText());
+  console.error(
+    'Process journey page errors:',
+    errors,
+    '\nVisible page:',
+    await page.locator('body').innerText(),
+  );
   await page
     .screenshot({ path: join(evidence, 'process-setup-failure.png'), fullPage: true, timeout: 5000 })
     .catch(() => {});

@@ -41,6 +41,11 @@ export function attempts(stage, record, operation, historical, snapshot = {}) {
 }
 
 export function stageSummary(stage, record, operation, historical, snapshot = {}, stageState = 'pending') {
+  const cancelled =
+    (record?.delivery ?? snapshot.state?.active)?.status === 'CANCELLED' ||
+    (!(record?.delivery ?? snapshot.state?.active) && snapshot.state?.automation?.restartOf);
+  if (cancelled && stage === 4) return '原 PR 已关闭，未合入；撤销回执按需展开';
+  if (cancelled && stage === 5) return '未登记接收，接受基线保持不变';
   const groups = [...stageGroups(stage, record, operation, historical, snapshot).values()];
   if (historical) return '历史执行详情按需展开';
   const delivery = record?.delivery ?? snapshot.state?.active;
@@ -75,6 +80,7 @@ export function stageSummary(stage, record, operation, historical, snapshot = {}
 export function stageGroups(stage, record, operation, historical, snapshot) {
   const delivery = record?.delivery ?? snapshot.state?.active;
   const tasks = selectedTasks(record, operation, historical, delivery?.id);
+  const cancelled = delivery?.status === 'CANCELLED' || (!delivery && snapshot.state?.automation?.restartOf);
   const version = (delivery?.mode ?? snapshot.config?.mode) === 'version';
   const groups = new Map(
     plannedSteps(stage, version).map(([key, label]) => [
@@ -100,7 +106,12 @@ export function stageGroups(stage, record, operation, historical, snapshot) {
         visited.add(parent.id);
         parent = byId.get(parent.parentId);
       }
-      const key = businessStep(stage, step.key ?? step.id, groups, parent?.key);
+      const key =
+        task.action === 'cancel-delivery'
+          ? 'cancellation'
+          : businessStep(stage, step.key ?? step.id, groups, parent?.key);
+      if (key === 'cancellation' && !groups.has(key))
+        groups.set(key, { key, label: '撤销原 PR（不代表合入）', status: 'PENDING', entries: [] });
       groups.get(key)?.entries.push({ task, step });
     }
   }
@@ -140,7 +151,19 @@ export function stageGroups(stage, record, operation, historical, snapshot) {
     for (const group of groups.values())
       if (['merge-verify', 'issue-state', 'acceptance-save'].includes(group.key))
         group.completionStatus = group.status === 'SKIPPED' ? 'SKIPPED' : 'PENDING';
-  if (stage === 5) for (const group of groups.values()) group.proof = completionProof(group.key, delivery, record);
+  if (cancelled && [4, 5].includes(stage)) {
+    for (const group of groups.values())
+      if (!['cancellation', 'execution-record'].includes(group.key)) group.terminalStatus = 'SKIPPED';
+    if (stage === 4 && !groups.has('platform-review'))
+      groups.set('platform-review', {
+        key: 'platform-review',
+        label: '内部平台合入',
+        status: 'SKIPPED',
+        entries: [],
+      });
+  }
+  if (stage === 5)
+    for (const group of groups.values()) group.proof = completionProof(group.key, delivery, record);
   addUnscopedFailure(groups, tasks, stage, delivery);
   return groups;
 }

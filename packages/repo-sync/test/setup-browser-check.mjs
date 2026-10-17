@@ -59,6 +59,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.locator('[data-mode-card="continuous"]').check();
   assert.equal(await page.locator('[name="commitClosureVerified"]').count(), 1);
+  await page.locator('[data-connection-auth] > summary').click();
   assert.ok(await page.getByLabel('Issue 创建与关单方式').isVisible());
   await page.locator('[data-mode-card="version"]').check();
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), '');
@@ -114,7 +115,8 @@ try {
   await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).waitFor();
   await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
   const prStage = page.locator('[data-stage="3"]');
-  if (!(await prStage.evaluate((node) => node.open))) await openStage(page, await prStage.getAttribute('data-stage'));
+  if (!(await prStage.evaluate((node) => node.open)))
+    await openStage(page, await prStage.getAttribute('data-stage'));
   await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
   const prepared = (await (await connection.current()).status()).active;
   assert.equal(prepared.checks.profile, 'git-integrity');

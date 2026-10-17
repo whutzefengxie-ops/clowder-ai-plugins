@@ -19,10 +19,28 @@ export function repairButton(error, context = {}) {
     : '';
 }
 
+export function recoveryDisposition(pending, current) {
+  const run = current.state?.automation;
+  if (!pending?.runId || pending.bindingId !== current.config?.bindingId || run?.id !== pending.runId)
+    return null;
+  if (current.state?.active) return null;
+  if (
+    run.status === 'COMPLETE' ||
+    (run.status === 'PAUSED' &&
+      pending.deliveryId &&
+      run.pauseRequested?.afterDeliveryId === pending.deliveryId)
+  )
+    return 'completed';
+  if (run.status === 'PAUSED' && pending.deliveryId && run.restartOf === pending.deliveryId)
+    return 'cancelled';
+  return null;
+}
+
 export function createRecoveryNavigation({ snapshot, changeView, action }) {
   const pageProjectId = new URL(location.href).searchParams.get('project') ?? 'default';
   const key = `repo-sync-repair:${pageProjectId}`;
-  let pending = read();
+  let pending = read(),
+    retired = null;
   function read() {
     try {
       const value = JSON.parse(sessionStorage.getItem(key));
@@ -53,6 +71,25 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
   }
   function mount(content, view) {
     content.querySelector('#recovery-return')?.remove();
+    content.querySelector('#recovery-retired')?.remove();
+    const disposition = recoveryDisposition(pending, snapshot());
+    if (disposition) {
+      retired = disposition;
+      pending = null;
+      try {
+        sessionStorage.removeItem(key);
+      } catch {}
+    }
+    if (view === 'configuration' && retired) {
+      const notice = document.createElement('p');
+      notice.id = 'recovery-retired';
+      notice.setAttribute('role', 'status');
+      notice.textContent =
+        retired === 'completed'
+          ? '原同步已完成，恢复提示已清理。'
+          : '原同步已撤销，恢复提示已清理；可回工作台查看记录。';
+      content.prepend(notice);
+    }
     if (!pending || view !== 'configuration') return;
     const current = snapshot(),
       same = matches(current);
@@ -98,6 +135,7 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
     if (repair) {
       const current = snapshot();
       if (!current?.config) return;
+      retired = null;
       pending = {
         schema: 1,
         kind: repair.dataset.repair,
@@ -107,7 +145,8 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
         provided: false,
       };
       // A historic failure can open authentication, but must never resume the live delivery on its behalf.
-      if (repair.dataset.repairDelivery && repair.dataset.repairDelivery !== pending.deliveryId) pending.runId = null;
+      if (repair.dataset.repairDelivery && repair.dataset.repairDelivery !== pending.deliveryId)
+        pending.runId = null;
       save();
       changeView('configuration');
       focus();
@@ -122,9 +161,16 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
       runId = pending.runId;
     if (!pending.provided || !runId || ['IMPORTED', 'EXPORTED'].includes(current.transfer?.status)) return;
     changeView('workbench');
-    await action(current.state?.active?.cancellation?.status === 'REQUESTED'
-      ? { action: 'cancel-delivery', confirmed: true, deliveryId: pending.deliveryId, previousUrl: current.state.active.prUrl ?? '' }
-      : { action: 'resume-sync', runId, deliveryId: pending.deliveryId });
+    await action(
+      current.state?.active?.cancellation?.status === 'REQUESTED'
+        ? {
+            action: 'cancel-delivery',
+            confirmed: true,
+            deliveryId: pending.deliveryId,
+            previousUrl: current.state.active.prUrl ?? '',
+          }
+        : { action: 'resume-sync', runId, deliveryId: pending.deliveryId },
+    );
   });
   document.addEventListener('repo-sync-auth-provided', (event) => {
     if (!pending || event.detail?.kind !== pending.kind || !matches(snapshot())) return;

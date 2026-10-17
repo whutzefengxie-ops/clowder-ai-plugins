@@ -101,7 +101,8 @@ const server = createServer(async (request, response) => {
       assert.equal(value.expectedRevision, current.connection.revision);
       assert.equal(value.projectId, 'default');
       requests.push({ path, scope: value.expectedRevision, hasToken: Boolean(value.token) });
-      if (path === '/api/issue-auth') current.config.platformApi.authentication.available = Boolean(value.token);
+      if (path === '/api/issue-auth')
+        current.config.platformApi.authentication.available = Boolean(value.token);
       else {
         assert.equal(value.expectedBinding, current.config.bindingId);
         current.sourceAuthentication.available = Boolean(value.token);
@@ -158,9 +159,12 @@ try {
     assert.equal(await resume.isDisabled(), true);
     const auth = kind === 'platform' ? '#issue-auth' : '#github-source-auth';
     await page.locator(`${auth} input[type="password"]`).waitFor({ state: 'visible' });
-    if (kind === 'platform') assert.equal(await page.locator('#issue-auth .credential-scope').isVisible(), true);
+    if (kind === 'platform')
+      assert.equal(await page.locator('#issue-auth .credential-scope').isVisible(), true);
     assert.equal(
-      await page.locator(`${auth} input[type="password"]`).evaluate((field) => document.activeElement === field),
+      await page
+        .locator(`${auth} input[type="password"]`)
+        .evaluate((field) => document.activeElement === field),
       true,
     );
     await page.reload();
@@ -240,6 +244,26 @@ try {
     await page.locator('[data-recovery-resume]').isDisabled(),
     true,
     'providing GitHub credentials must not satisfy an internal-platform repair',
+  );
+  await reset('ISSUE_AUTH_REQUIRED');
+  await page.locator('[data-repair="platform"]').click();
+  current.state.active = null;
+  current.state.automation.status = 'COMPLETE';
+  await page.evaluate(() => window.refreshRepairFixture());
+  assert.equal(
+    await page.locator('[data-recovery-resume]').count(),
+    0,
+    'completed run cannot retain a resume button',
+  );
+  assert.equal(
+    await page.evaluate(() => JSON.parse(sessionStorage.getItem('repo-sync-repair:default'))),
+    null,
+  );
+  await page.reload();
+  assert.equal(
+    await page.locator('#recovery-return').count(),
+    0,
+    'retired context stays retired after refresh',
   );
   assert.equal(
     actions.some((item) => item.action === 'synchronize'),

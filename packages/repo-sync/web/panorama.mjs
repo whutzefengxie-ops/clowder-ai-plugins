@@ -27,7 +27,7 @@ const labels = {
   SKIPPED: '不适用',
 };
 export function panorama(snapshot, record, historical) {
-  return `<section class="flow-canvas" data-flow-canvas aria-label="五阶段同步流程全景"><div class="flow-canvas-heading"><h2>本笔同步流程</h2><p>五阶段预先展示；展开子步骤后点击节点，在同页查看业务结果。技术执行记录仅用于诊断。</p><div class="flow-legend">✓ 完成 · ◌ 执行 · ◷ 自动等待 · ! 人工 · × 异常</div></div><div class="panorama-grid">${cards(snapshot, record, historical)}</div></section>`;
+  return `<section class="flow-canvas" data-flow-canvas aria-label="五阶段同步流程全景"><div class="flow-canvas-heading"><h2>本笔同步流程</h2><p>点击阶段或子步骤，同页查看结果；执行详情用于排障。</p><div class="flow-legend">✓ 完成 · ◌ 执行 · ◷ 自动等待 · ! 人工 · × 异常</div></div><div class="panorama-grid">${cards(snapshot, record, historical)}</div></section>`;
 }
 function cards(snapshot, record, historical) {
   const delivery = record?.delivery ?? snapshot.state?.active;
@@ -97,9 +97,12 @@ export function updatePanorama(content, snapshot, record, historical, key) {
   if (canvas) {
     const left = canvas.scrollLeft;
     const focused = document.activeElement?.dataset?.flowNode;
-    const open = new Set([...canvas.querySelectorAll('[data-persist-details][open]')].map((e) => e.dataset.persistDetails));
+    const open = new Set(
+      [...canvas.querySelectorAll('[data-persist-details][open]')].map((e) => e.dataset.persistDetails),
+    );
     canvas.innerHTML = cards(snapshot, record, historical);
-    for (const panel of canvas.querySelectorAll('[data-persist-details]')) panel.open = open.has(panel.dataset.persistDetails);
+    for (const panel of canvas.querySelectorAll('[data-persist-details]'))
+      panel.open = open.has(panel.dataset.persistDetails);
     canvas.scrollLeft = left;
     if (focused)
       [...canvas.querySelectorAll('[data-flow-node]')]
