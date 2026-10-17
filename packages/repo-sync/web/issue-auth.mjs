@@ -72,15 +72,25 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
     }
   }
   document.addEventListener('click', async (event) => {
-    const check = event.target.closest('[data-issue-check]'),
+    const provide = event.target.closest('[data-auth-provide="issue"]'),
+      check = event.target.closest('[data-issue-check]'),
       clear = event.target.closest('[data-issue-clear]');
-    if (!check && !clear) return;
+    if (!provide && !check && !clear) return;
     try {
-      if (clear) {
+      if (provide) {
+        const panel = provide.closest('[data-auth-panel="issue"]');
+        const field = panel?.querySelector('[name="issueToken"]');
+        const value = field?.value ?? '';
+        if (field) field.value = '';
+        if (!value) throw Error('请先输入内部平台 Token；空值不会覆盖已有认证。');
+        await set(value);
+        feedback('✓ Token 已保存到本次服务。请点击旁边的只读验证按钮确认接口权限。');
+      } else if (clear) {
         await set('');
         feedback('已清除本次输入；环境变量认证若存在仍保留。');
       } else {
         const result = await request('/api/issue-check', {});
+        await refresh();
         feedback(
           `项目 API 只读核验通过；没有创建或修改 Issue / PR。${result.defaultBranch ? `平台默认分支 ${result.defaultBranch}；当前合入分支 ${snapshot().config.targetBranch}，请核对选择。` : ''}`,
         );
@@ -134,6 +144,11 @@ export function updateIssueFields(form) {
   if (selection) selection.hidden = version;
   const api = form.querySelector('[data-issue-api]');
   if (api) api.hidden = form.elements.namedItem('prMode')?.value !== 'gitlab' && (version || mode !== 'gitlab');
+  const platformAuth = form.querySelector('[data-platform-auth]');
+  if (platformAuth)
+    platformAuth.hidden = form.elements.namedItem('prMode')?.value !== 'gitlab' && mode !== 'gitlab';
+  const manualPlatformNote = form.querySelector('[data-manual-platform-note]');
+  if (manualPlatformNote) manualPlatformNote.hidden = !platformAuth?.hidden;
   const direct = form.querySelector('[data-issue-token]'),
     environment = form.querySelector('[data-issue-environment]');
   if (direct) direct.hidden = auth === 'environment';

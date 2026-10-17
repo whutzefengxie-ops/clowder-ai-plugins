@@ -1,7 +1,7 @@
 import { fail } from './config.mjs';
 import { api, graphql, withGithub } from './gh-api.mjs';
 import { githubRepository } from './github.mjs';
-import { setGithubToken } from './github-auth.mjs';
+import { markGithubVerified, setGithubToken } from './github-auth.mjs';
 import { body, requireToken, send } from './http.mjs';
 import { configurationLock } from './private-config.mjs';
 import { checkProjectInput } from './server-projects.mjs';
@@ -37,7 +37,11 @@ export async function githubAuthRequest(request, response, path, context, token,
         fail('METADATA_INCOMPLETE', 'GitHub API 响应与来源仓库不一致，未采用。');
       await graphql('query{viewer{login}}', {});
     });
-    send(response, 200, { verified: true, scope: 'repository-read-only' });
+    send(response, 200, {
+      authentication: markGithubVerified(receiver.config),
+      verified: true,
+      scope: 'repository-read-only',
+    });
   });
   return true;
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, appendFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -141,6 +141,14 @@ try {
   await page.locator('.auto-merge-choice [name="autoMerge"]').check();
   await page.getByRole('button', { name: '保存自动合入选择', exact: true }).click();
   await until(async () => (await receiver.status()).active?.autoMerge?.status === 'WAITING');
+  await until(async () => {
+    try {
+      await access(receiver.store.lockPath);
+      return false;
+    } catch (error) {
+      return error.code === 'ENOENT';
+    }
+  });
   const mr = platform.state.mrs[0];
   mr.merge_status = 'unchecked';
   mr.head_pipeline.status = 'success';
@@ -153,6 +161,14 @@ try {
   assert.equal(platform.state.merges, 1);
   assert.equal(platform.state.creates.prs, 1);
   platform.state.pipelineStatus = 'pending';
+  await until(async () => {
+    try {
+      await access(receiver.store.lockPath);
+      return false;
+    } catch (error) {
+      return error.code === 'ENOENT';
+    }
+  });
   await page.locator('[data-round-status="complete"] [data-record]').click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();

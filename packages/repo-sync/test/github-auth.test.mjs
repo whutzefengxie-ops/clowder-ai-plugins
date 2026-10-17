@@ -5,7 +5,13 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { createConnection } from '../src/connections.mjs';
 import { api, withGithub } from '../src/gh-api.mjs';
-import { clearGithubTokens, githubAuthentication, retainGithubToken, setGithubToken } from '../src/github-auth.mjs';
+import {
+  clearGithubTokens,
+  githubAuthentication,
+  markGithubVerified,
+  retainGithubToken,
+  setGithubToken,
+} from '../src/github-auth.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { repositories } from './fixtures.mjs';
 
@@ -97,4 +103,16 @@ test('parallel source queries keep project tokens separate and rule-only migrati
   assert.notEqual(githubAuthentication(different).source, 'session');
   clearGithubTokens(owner);
   assert.notEqual(githubAuthentication(migrated).source, 'session');
+});
+
+test('source auth exposes verification state without exposing the token', () => {
+  const config = { stateDir: 'G:/synthetic/repo-sync', bindingId: 'verification' };
+  const owner = Symbol();
+  clearGithubTokens(owner);
+  setGithubToken(config, 'SYNTHETIC_VERIFY_TOKEN', owner);
+  assert.equal(githubAuthentication(config).available, true);
+  assert.equal(githubAuthentication(config).verified, false);
+  markGithubVerified(config);
+  assert.equal(githubAuthentication(config).verified, true);
+  clearGithubTokens(owner);
 });

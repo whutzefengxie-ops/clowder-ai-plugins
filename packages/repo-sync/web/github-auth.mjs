@@ -49,16 +49,27 @@ export function createGithubAuthentication(snapshot, refresh) {
     }
   }
   document.addEventListener('click', async (event) => {
-    const clear = event.target.closest('[data-github-clear]'),
+    const provide = event.target.closest('[data-auth-provide="github"]'),
+      clear = event.target.closest('[data-github-clear]'),
       check = event.target.closest('[data-github-check]');
-    if (!clear && !check) return;
+    if (!provide && !clear && !check) return;
     try {
-      if (clear) {
+      if (provide) {
+        const panel = provide.closest('[data-auth-panel="github"]');
+        const field = panel?.querySelector('[name="githubToken"]');
+        const token = field?.value ?? '';
+        if (field) field.value = '';
+        if (!token) throw Error('请先输入 GitHub 读取 Token；空值不会覆盖已有认证。');
+        await request('/api/github-auth', { token });
+        await refresh();
+        feedback('✓ Token 已保存到本次服务。请点击旁边的只读验证按钮确认来源读取权限。');
+      } else if (clear) {
         await request('/api/github-auth', { token: '' });
         await refresh();
         feedback('已清除本次输入；启动环境中的令牌若存在仍可使用。');
       } else {
         await request('/api/github-check', {});
+        await refresh();
         feedback(
           'GitHub 仓库与令牌只读核验通过；完整 PR / Issue 关联权限将在实际读取时继续核验，尚未创建或修改任何对象。',
         );

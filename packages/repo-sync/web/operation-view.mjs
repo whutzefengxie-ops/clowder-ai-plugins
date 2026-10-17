@@ -77,7 +77,7 @@ export function renderTask(task) {
 }
 function githubRecovery(task) {
   return /^GITHUB_(AUTH|ACCESS|RATE)/.test(task.error?.code ?? '')
-    ? '<button type="button" data-reveal="github-source-auth">配置 GitHub 读取认证</button><p>提供令牌后回到目标版本，重新读取 PR 清单。原同步记录保留。</p>'
+    ? '<button type="button" data-view="configuration" data-auth-focus="github">配置 GitHub 读取认证</button><p>提供令牌后回到目标版本，重新读取 PR 清单。原同步记录保留。</p>'
     : '';
 }
 function targetRecovery(task) {

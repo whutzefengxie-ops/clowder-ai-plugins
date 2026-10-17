@@ -289,6 +289,14 @@ body[data-view="workbench"] .app-shell main {
   }
   .record-detail:has([data-flow-canvas]) > .next-action {
     display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    width: auto;
+    max-height: 45vh;
+    overflow-y: auto;
   }
   .record-detail:has([data-flow-canvas]) > .delivery-overview {
     display: block;

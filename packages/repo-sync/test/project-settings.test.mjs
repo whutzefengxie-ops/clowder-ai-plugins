@@ -10,6 +10,9 @@ import { enabledSettings } from '../web/settings-view.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { repositories } from './fixtures.mjs';
 
+globalThis.location = new URL('http://localhost/');
+const { workbench } = await import('../web/workbench.mjs');
+
 test('unified settings preserve binding, reject stale/frozen changes and keep Token out of files and tasks', async (t) => {
   const f = await repositories(),
     p = await codehubPlatform(f);
@@ -102,4 +105,79 @@ test('enabled configuration contains one save form, frozen values and no task wi
   assert.equal((html.match(/<form /g) ?? []).length, 1);
   assert.equal((html.match(/name="issueToken"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /id="operation"|配置已完成|flow setup|Git 推送时自动创建 PR/);
+});
+
+test('settings explain round lock and keep auth actions beside their inputs', () => {
+  const html = enabledSettings({
+    config: { ...{
+      bindingId: 'a', mode: 'continuous', prTransport: 'gitlab',
+      sourceUrl: 'https://github.com/demo/core', internalUrl: 'git@example:core',
+      sourceBranch: 'main', targetBranch: 'main', internalWebUrl: 'https://codehub.example/core',
+    } },
+    connection: { revision: 'r' }, sourceAuthentication: { available: false, verified: false },
+    state: { initial: { upstream: 'a', internal: 'b' }, accepted: { upstream: 'a', internal: 'b' },
+      active: null, queue: [{ target: 'queued' }], automation: { status: 'PAUSED' } },
+  });
+  assert.match(html, /本轮还有 1 笔待处理/);
+  assert.match(html, /data-auth-provide="issue"/);
+  assert.match(html, /data-auth-verify="github"/);
+  assert.doesNotMatch(html, /保存设置并验证\s*Token/);
+});
+
+test('workbench keeps GitHub credential entry in settings instead of duplicating it', () => {
+  const html = workbench(
+    {
+      config: {
+        bindingId: 'a', mode: 'continuous', prTransport: 'gitlab',
+        sourceUrl: 'https://github.com/demo/core', internalUrl: 'git@example:core',
+        sourceBranch: 'main', targetBranch: 'main', internalWebUrl: 'https://codehub.example/core',
+      },
+      state: {
+        initial: { upstream: 'a', internal: 'b' }, accepted: { upstream: 'a', internal: 'b' },
+        active: null, queue: [], automation: { status: 'COMPLETE' }, deliveryCount: 0,
+        scannedAt: null, latest: 'a', syncTarget: null,
+      },
+      sourceAuthentication: { available: false, verified: false }, connection: { revision: 'r' }, token: 'x',
+    },
+    { selected: 'current', detail: null, page: { total: 0, records: [], offset: 0 }, filters: { q: '', status: 'all', from: '', to: '' } },
+    [],
+    false,
+  );
+  assert.equal((html.match(/name="githubToken"/g) ?? []).length, 0);
+  assert.match(html, /data-auth-focus="github"/);
+});
+
+test('manual PR mode does not require internal API authentication', () => {
+  const html = enabledSettings({
+    config: {
+      bindingId: 'a', mode: 'version', prTransport: 'manual', sourceUrl: 'https://github.com/demo/core',
+      internalUrl: 'git@example:core', sourceBranch: 'main', targetBranch: 'main', internalWebUrl: 'https://codehub.example/core',
+      internalPaths: [],
+    },
+    connection: { revision: 'r' }, sourceAuthentication: {},
+    state: {
+      initial: { upstream: 'a', internal: 'b' }, accepted: { upstream: 'a', internal: 'b' },
+      active: null, queue: [], deliveries: [], automation: { status: 'COMPLETE' },
+    },
+  });
+  assert.match(html, /data-platform-auth hidden/);
+  assert.match(html, /当前为手工 PR \/ Issue 登记，不需要内部平台 API Token/);
+});
+
+test('selected tag keeps commit policy editable until synchronization starts', () => {
+  const html = enabledSettings({
+    config: {
+      bindingId: 'a', mode: 'version', prTransport: 'manual', sourceUrl: 'https://github.com/demo/core',
+      internalUrl: 'git@example:core', sourceBranch: 'main', targetBranch: 'main', internalWebUrl: 'https://codehub.example/core',
+      internalPaths: [],
+    },
+    connection: { revision: 'r' }, sourceAuthentication: {},
+    state: {
+      initial: { upstream: 'a', internal: 'b' }, accepted: { upstream: 'a', internal: 'b' },
+      active: null, queue: [{ target: 'tag-v1' }], deliveries: [], automation: { status: 'COMPLETE' },
+    },
+  });
+  const policy = html.slice(html.indexOf('<h3>提交与接收策略</h3>'), html.indexOf('<section class="settings-result"'));
+  assert.match(policy, /目标已选定，但同步尚未启动/);
+  assert.doesNotMatch(policy, /<fieldset disabled>/);
 });

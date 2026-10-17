@@ -24,6 +24,8 @@ export function createSettingsController(snapshot, refresh) {
     const initial = snapshot(),
       binding = initial.config.bindingId;
     const fields = Object.fromEntries(new FormData(form));
+    delete fields.issueToken;
+    delete fields.githubToken;
     delete fields.autoMergeWaitMinutes;
     if (!fields.internalWebUrl && !initial.config.internalWebUrl && fields.prMode === 'manual')
       delete fields.internalWebUrl;
@@ -42,10 +44,6 @@ export function createSettingsController(snapshot, refresh) {
     fields.autoMergeWaitMs = Number(form.elements.autoMergeWaitMinutes.value) * 60000;
     fields.workspaceRevision = initial.workspace?.revision;
     if (initial.workspace) fields.projectId = pageProjectId;
-    for (const name of ['issueToken', 'githubToken']) {
-      const field = form.elements.namedItem(name);
-      if (field) field.value = '';
-    }
     const buttons = [...form.querySelectorAll('button')];
     for (const button of buttons) button.disabled = true;
     try {

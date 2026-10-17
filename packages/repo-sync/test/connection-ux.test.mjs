@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { captureDraft, configuration } from '../web/connections.mjs';
 import { issueFields } from '../web/issue-settings.mjs';
+import { setupConfiguration } from '../web/setup-view.mjs';
 import { esc } from '../web/ui.mjs';
 
 test('connection groups source branch with source and target branch with target, with upfront source authentication and commit identity', () => {
@@ -28,6 +29,12 @@ test('manual Issue configuration hides platform-specific fields; direct Token in
   const automatic = issueFields({ issueAutomation: { mode: 'gitlab' } }, esc);
   assert.match(automatic, /type="password"[^>]*name="issueToken"/);
   assert.ok(automatic.includes('Issue 网页链接'));
+});
+
+test('version setup starts without a visible internal API Token requirement', () => {
+  const html = setupConfiguration({ config: null, state: null, connection: { revision: null } }, esc, () => '', () => '', {});
+  assert.match(html, /data-issue-api hidden/);
+  assert.match(html, /data-issue-selection hidden/);
 });
 
 test('password inputs never enter the browser configuration draft', () => {

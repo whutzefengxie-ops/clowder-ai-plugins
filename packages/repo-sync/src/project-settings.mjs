@@ -31,6 +31,6 @@ export function projectConfiguration(previous, state, input) {
     fail('COMMIT_POLICY_FROZEN', '本笔提交身份已冻结；可查看，完成后再修改');
   validateConfig(next);
   checkIssueSettings(state, previous, next);
-  checkFrozenPr(state?.active, previous, next);
+  checkFrozenPr(state?.active, previous, next, state);
   return next;
 }

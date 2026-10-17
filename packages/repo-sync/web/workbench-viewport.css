@@ -236,9 +236,14 @@ body[data-view="configuration"] #configuration-actions {
   .settings-save {
     bottom: 0;
   }
-  .next-action {
-    position: static;
-    max-height: none;
+  body[data-view="workbench"] .next-action {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    max-height: 45vh;
+    overflow-y: auto;
   }
   .journey-layout .record-list,
   .journey-layout .record-detail {

@@ -21,15 +21,24 @@ export function checkPlatformInput(input, receiver, revision) {
     fail('CONFIGURATION_CHANGED', '配置已变化或尚未创建，请刷新核对');
   if (!['git', 'manual', 'command', 'gitlab'].includes(input.prMode)) fail('INVALID_PR_ADAPTER', '请选择 PR 创建方式');
 }
-export function checkFrozenPr(active, previous, next) {
-  if (!active?.gitPr && !active?.prCreation && !active?.prUrl) return;
+export function checkFrozenPr(active, previous, next, state = null) {
+  const runActive = ['RUNNING', 'WAITING_REVIEW', 'PAUSED', 'FAILED'].includes(state?.automation?.status);
+  const roundLocked = Boolean(active || state?.queue?.length || runActive);
+  if (!roundLocked) return;
+  if (!active?.gitPr && !active?.prCreation && !active?.prUrl && !active?.candidate && !state?.queue?.length && !runActive)
+    return;
   const sameDriver = JSON.stringify(next.pullRequests ?? null) === JSON.stringify(previous.pullRequests ?? null);
-  if (!previous.internalWebUrl && next.internalWebUrl && sameDriver && !active.gitPr && !active.prCreation) {
-    prUrl(next, active.prUrl);
+  if (active && !previous.internalWebUrl && next.internalWebUrl && sameDriver && !active.gitPr && !active.prCreation) {
+    if (active.prUrl) prUrl(next, active.prUrl);
     return;
   }
   if (next.internalWebUrl !== previous.internalWebUrl || !sameDriver)
-    fail('PR_CONFIG_FROZEN', '当前交付已关联或发起 PR，不能更换创建配置；先核对原交付，不覆盖台账');
+    fail(
+      'PR_CONFIG_FROZEN',
+      roundLocked && !active
+        ? '当前同步轮次尚未结束，PR 创建方式和平台接口保持不变；完成本轮后可修改'
+        : '当前交付已关联或发起 PR，不能更换创建配置；先核对原交付，不覆盖台账',
+    );
 }
 export function publicPlatform(receiver) {
   const config = receiver?.config;

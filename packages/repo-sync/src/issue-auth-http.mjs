@@ -1,7 +1,7 @@
 import { fail } from './config.mjs';
 import { gitlabApi } from './gitlab-api.mjs';
 import { body, requireToken, send } from './http.mjs';
-import { apiSettings, setIssueToken } from './issue-auth.mjs';
+import { apiSettings, markIssueVerified, setIssueToken } from './issue-auth.mjs';
 import { configurationLock } from './private-config.mjs';
 import { checkProjectInput } from './server-projects.mjs';
 
@@ -38,6 +38,7 @@ export async function issueAuthRequest(request, response, path, context, token, 
     )
       fail('ISSUE_API_UNSUPPORTED', '接口响应与所配仓库不匹配；请核对平台协议和高级地址，未创建或修改任何 Issue。');
     send(response, 200, {
+      authentication: markIssueVerified(receiver.config),
       verified: true,
       scope: 'project-read-only',
       projectId: String(project.id),

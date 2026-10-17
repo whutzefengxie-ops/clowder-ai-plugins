@@ -109,6 +109,7 @@ try {
   for (let i = 0; i < 300 && (await receiver.status()).automation.status !== 'FAILED'; i++)
     await page.waitForTimeout(50);
   assert.equal((await receiver.status()).automation.status, 'FAILED');
+  setIssueToken(receiver.config, '', 'test');
   await page.reload();
   assert.equal(await page.locator('[data-stage][open]').count(), 0);
   await page.locator('.next-action [data-repair="platform"]').click();
@@ -116,10 +117,18 @@ try {
   assert.equal(await page.locator('.flow.setup,#operation').count(), 0);
   assert.equal(await page.getByLabel('内部 Git 姓名').inputValue(), 'Internal Operator');
   assert.equal(await page.getByLabel('提交处理方式').isDisabled(), true);
+  assert.match(await page.locator('#issue-auth [data-auth-status]').innerText(), /未提供/);
   platform.state.denied = false;
   await page.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
-  await page.getByRole('button', { name: '保存设置并验证 →' }).click();
-  await page.locator('[data-settings-result]').filter({ hasText: '设置已保存' }).waitFor({ timeout: 30000 });
+  await page.locator('#issue-auth').getByRole('button', { name: '保存 Token 到本次服务', exact: true }).click();
+  await page.locator('#issue-auth [data-auth-status="provided"]').waitFor();
+  await page.locator('#issue-auth').getByRole('button', { name: '只读验证内部接口', exact: true }).click();
+  try {
+    await page.locator('#issue-auth [data-auth-status="verified"]').waitFor({ timeout: 30000 });
+  } catch (error) {
+    console.log('[browser-test] issue-auth feedback:', await page.locator('#issue-auth [data-auth-feedback]').innerText());
+    throw error;
+  }
   assert.doesNotMatch(await readFile(file, 'utf8'), /SYNTHETIC_BROWSER_TOKEN/);
   await page.getByRole('button', { name: '继续原同步 →', exact: true }).click();
   await page.locator('[data-flow-stage="4"][data-flow-state="waiting-system"]').waitFor({ timeout: 30000 });
@@ -141,7 +150,6 @@ try {
   await server.shutdown();
   connection = await createConnection(file);
   receiver = await connection.current();
-  setIssueToken(receiver.config, platform.token, 'test');
   platform.state.mrs[0].head_pipeline.status = 'success';
   await receiver.change((s) => {
     s.deliveries[0].autoMerge.nextCheckAt = new Date(0).toISOString();
@@ -149,6 +157,13 @@ try {
   server = createReceiverServer(null, { connection, syncInterval: 100 });
   await new Promise((done) => server.listen(port, '127.0.0.1', done));
   await page.goto(base);
+  await page.getByRole('button', { name: '仓库设置', exact: true }).click();
+  assert.match(await page.locator('#issue-auth [data-auth-status]').innerText(), /未提供/);
+  await page.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
+  await page.locator('#issue-auth').getByRole('button', { name: '保存 Token 到本次服务', exact: true }).click();
+  await page.locator('#issue-auth').getByRole('button', { name: '只读验证内部接口', exact: true }).click();
+  await page.locator('#issue-auth [data-auth-status="verified"]').waitFor({ timeout: 30000 });
+  await page.getByRole('button', { name: '同步工作台', exact: true }).click();
   await page.getByRole('button', { name: '继续下一笔同步 →', exact: true }).waitFor({ timeout: 30000 });
   const result = await receiver.status();
   assert.equal(result.deliveries.length, 1);

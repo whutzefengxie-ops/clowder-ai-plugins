@@ -113,11 +113,12 @@ try {
   assert.equal(graphqlCalls, 0);
   await page.getByRole('button', { name: '配置 GitHub 读取认证', exact: true }).click();
   await page.getByLabel('GitHub 读取 Token', { exact: true }).fill(sourceToken);
-  await page.getByRole('button', { name: '提供 GitHub 读取令牌', exact: true }).click();
-  await page.getByText(/GitHub 读取令牌已提供/).waitFor();
+  await page.getByRole('button', { name: '保存 Token 到本次服务', exact: true }).click();
+  await page.getByText(/Token 已保存到本次服务/).waitFor();
   assert.equal(await page.getByLabel('GitHub 读取 Token', { exact: true }).inputValue(), '');
   assert.equal(await page.evaluate((secret) => JSON.stringify(sessionStorage).includes(secret), sourceToken), false);
   assert.equal((await readFile(file, 'utf8')).includes(sourceToken), false);
+  await page.getByRole('button', { name: '同步工作台', exact: true }).click();
   assert.equal(await page.getByLabel('目标 tag 名称 / 完整 commit SHA').inputValue(), 'v2.0.0');
   await page.getByRole('button', { name: '读取到目标版本的 PR 清单 →' }).click();
   await page.getByRole('button', { name: '同步上游 PR #1 →' }).waitFor({ timeout: 30000 });

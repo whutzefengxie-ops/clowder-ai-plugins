@@ -204,6 +204,14 @@ document.addEventListener('click', async (event) => {
   const clickedScope = content.dataset.actionScope;
   await navigate(element);
   if (element.dataset.view) changeView(element.dataset.view);
+  if (element.dataset.authFocus) {
+    const targetId = element.dataset.authFocus === 'github' ? 'github-source-auth' : 'issue-auth';
+    const target = document.getElementById(targetId);
+    for (let parent = target; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') parent.open = true;
+    target?.scrollIntoView({ block: 'center' });
+    target?.querySelector('input[type="password"], [data-auth-provide], [data-issue-check], [data-github-check]')?.focus({ preventScroll: true });
+  }
   if (element.hasAttribute('data-import-settings')) {
     changeView('configuration');
     const panel = content.querySelector('#transfer-settings');

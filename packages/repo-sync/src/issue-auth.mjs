@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fail } from './config.mjs';
 
 const sessions = new Map();
+const verified = new Set();
 const key = (config) => JSON.stringify([resolve(config.stateDir), config.bindingId ?? null]);
 export const apiSettings = (config) =>
   config.issues?.mode === 'gitlab'
@@ -38,7 +39,11 @@ export function issueToken(config, settings = apiSettings(config)) {
 export function authenticationStatus(config) {
   const direct = Boolean(session(config)),
     environment = Boolean(environmentToken(apiSettings(config)));
-  return { available: direct || environment, source: direct ? 'session' : environment ? 'environment' : 'missing' };
+  return {
+    available: direct || environment,
+    source: direct ? 'session' : environment ? 'environment' : 'missing',
+    verified: (direct || environment) && verified.has(key(config)),
+  };
 }
 function environmentToken(settings) {
   return settings?.authMode !== 'session' && settings?.tokenEnv ? process.env[settings.tokenEnv] : undefined;
@@ -52,6 +57,7 @@ export function setIssueToken(config, token, owner) {
     [...token].some((c) => c.charCodeAt(0) < 33 || c.charCodeAt(0) > 126)
   )
     fail('INVALID_ISSUE_TOKEN', 'Token 格式无效；请重新输入，不能包含空白或控制字符。');
+  verified.delete(key(config));
   if (token) sessions.set(key(config), { token, identity: identity(apiSettings(config)), owner });
   else {
     const value = sessions.get(key(config));
@@ -59,8 +65,15 @@ export function setIssueToken(config, token, owner) {
   }
   return authenticationStatus(config);
 }
+export function markIssueVerified(config) {
+  if (authenticationStatus(config).available) verified.add(key(config));
+  return authenticationStatus(config);
+}
 export function clearIssueTokens(owner) {
-  for (const [id, value] of sessions) if (value.owner === owner) sessions.delete(id);
+  for (const [id, value] of sessions) if (value.owner === owner) {
+    sessions.delete(id);
+    verified.delete(id);
+  }
 }
 export function retainIssueToken(previous, next) {
   const value = session(previous);

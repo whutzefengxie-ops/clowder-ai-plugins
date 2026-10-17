@@ -94,7 +94,7 @@ export async function createConnection(file, options = {}) {
     const existing = await receiver.status();
     checkIssueSettings(existing, receiver.config, next);
     const active = existing?.active;
-    checkFrozenPr(active, receiver.config, next);
+    checkFrozenPr(active, receiver.config, next, existing);
     await writePrivate(path, next);
     loaded = false;
     const configured = await current();

@@ -6,6 +6,7 @@ import test from 'node:test';
 import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
+import { checkFrozenPr } from '../src/pr-settings.mjs';
 
 test('enabling Git PR on an adopted binding preserves cursors and cannot set executable commands', async () => {
   const f = await versionRepositories();
@@ -74,4 +75,29 @@ test('Git creation intent freezes platform options even before PR link registrat
     { code: 'PR_CONFIG_FROZEN' },
   );
   assert.equal((await receiver.status()).active.gitPr.fingerprint, 'frozen-intent');
+});
+
+test('PR settings stay frozen for an unfinished round and unlock after the round is terminal', () => {
+  const previous = { pullRequests: { mode: 'git' }, internalWebUrl: 'https://codehub.example/core' };
+  const next = { pullRequests: { mode: 'manual' }, internalWebUrl: 'https://codehub.example/core' };
+  assert.throws(
+    () => checkFrozenPr(null, previous, next, { queue: [{ target: 'queued' }], automation: { status: 'PAUSED' } }),
+    { code: 'PR_CONFIG_FROZEN' },
+  );
+  assert.throws(
+    () => checkFrozenPr(null, previous, next, { queue: [], automation: { status: 'RUNNING' } }),
+    { code: 'PR_CONFIG_FROZEN' },
+  );
+  assert.doesNotThrow(() => checkFrozenPr(null, previous, next, { queue: [], automation: { status: 'COMPLETE' } }));
+});
+
+test('adding the first internal web origin does not validate an absent PR URL', () => {
+  assert.doesNotThrow(() =>
+    checkFrozenPr(
+      { status: 'PR_REQUIRED', prUrl: null },
+      { pullRequests: undefined },
+      { pullRequests: undefined },
+      { queue: [], automation: { status: 'RUNNING' } },
+    ),
+  );
 });

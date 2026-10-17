@@ -2,7 +2,6 @@ import { nextAction } from './action-policy.mjs';
 import { preDeliveryFlow } from './automation-view.mjs';
 import { firstUse } from './connections.mjs';
 import { boundaryDeliveryId } from './flow-stage.mjs';
-import { githubAuthForm } from './github-auth.mjs';
 import { recordList } from './history.mjs';
 import { issueReferenceNotes } from './issue-reference-notes.mjs';
 import { sourceTargetForm } from './source-target.mjs';
@@ -60,7 +59,18 @@ function target(snapshot, tags) {
     return `${accepted}${tagSelector(tags, esc, sha, config.prTransport !== 'manual', state.accepted.upstream)}<div id="operation"></div><div id="error-slot"></div>`;
   const next = state.queue[0];
   const heading = targetHeading(state, config, next);
-  return `${accepted}${config.mode === 'continuous' ? `${githubAuthForm(snapshot, { open: !snapshot.sourceAuthentication?.available })}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
+  return `${accepted}${config.mode === 'continuous' ? `${githubAuthSummary(snapshot)}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
+}
+
+function githubAuthSummary(snapshot) {
+  const auth = snapshot.sourceAuthentication ?? {};
+  const state = auth.available ? (auth.verified ? 'verified' : 'provided') : 'missing';
+  const text = auth.available
+    ? auth.verified
+      ? 'GitHub 读取认证已验证'
+      : 'GitHub Token 已提供，尚未验证'
+    : 'GitHub Token 未提供；服务重启后需要重新输入';
+  return `<section class="card auth-summary auth-${state}" aria-label="GitHub 读取认证状态"><p><span aria-hidden="true">${state === 'verified' ? '✓' : state === 'provided' ? '!' : '×'}</span> <b>${text}</b>${auth.source === 'environment' ? ' · 环境变量' : ''}</p>${state === 'verified' ? '<small>来源 PR、Issue 和关闭关联可以继续读取。</small>' : '<button type="button" data-view="configuration" data-auth-focus="github" class="primary">去仓库设置提供 / 验证 GitHub Token →</button>'}</section>`;
 }
 
 function repositorySummary(config, state) {
