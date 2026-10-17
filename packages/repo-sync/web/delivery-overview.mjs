@@ -29,7 +29,7 @@ function issueRow(issue, snapshot, d, historical) {
   const mapping =
     d.issueMappings?.[issue.sourceId] ?? (!historical ? snapshot.state?.issues?.[issue.sourceId] : null);
   const result = d.issueResults?.[issue.sourceId];
-  return `<li><b>${link(issue.url, `#${issue.number} ${issue.title ?? '标题未记录'}`)}</b><p>${issue.relation === 'closes' ? '上游有 PR 关闭事件：内部 PR 合入核验后关闭' : '上游仅引用 / 关联，保持内部 Issue 打开；如需随 PR 关闭，请在上游使用 closes、fixes 或 resolves'} · ${mapping ? link(mapping.url, `内部 #${mapping.internalId}`) : '内部 Issue 待创建 / 未记录'}${result ? ` · ${esc(result.state)}` : ''}</p></li>`;
+  return `<li><b>${link(issue.url, `#${issue.number} ${issue.title ?? '标题未记录'}`)}</b><details class="tech"><summary>为什么？</summary><div class="tech-copy">${issue.relation === 'closes' ? '上游有 PR 关闭事件：内部 PR 合入核验后关闭' : '上游仅引用 / 关联，保持内部 Issue 打开；如需随 PR 关闭，请在上游使用 closes、fixes 或 resolves'} · ${mapping ? link(mapping.url, `内部 #${mapping.internalId}`) : '内部 Issue 待创建 / 未记录'}${result ? ` · ${esc(result.state)}` : ''}</div></details></li>`;
 }
 function rowsForIssues(d, snapshot, historical, version) {
   const rows = (d.issues ?? []).map((issue) => issueRow(issue, snapshot, d, historical));

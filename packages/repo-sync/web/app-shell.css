@@ -35,10 +35,18 @@ header { max-width: none; padding: 18px 28px; background: #fff; }
 .next-action .auto-merge-choice p, .next-action .continuation-controls p { font-size: var(--t-5); }
 .next-action .continuation-controls { margin-top: 14px; }
 @media(min-width: 1280px) {
-  .app-shell main { padding-right: 330px; }
-  .next-action { position: static; top: 94px; bottom: auto; right: max(20px, calc((100vw - 2000px) / 2 + 20px)); left: auto; width: 282px; max-height: calc(100vh - 116px); overflow-y: auto; border-radius: var(--r); padding: 20px; }
+  .app-shell main { padding-right: 28px; }
+  .next-action.now { width: auto; max-height: none; overflow: visible; display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 4px 28px; align-items: start; padding: 22px 24px; }
+  .next-action.now .now-kicker,
+  .next-action.now h2,
+  .next-action.now .now-description,
+  .next-action.now .failure-summary,
+  .next-action.now .task-actions { grid-column: 1; }
+  .next-action.now .run-options { grid-column: 2; grid-row: 1 / span 5; display: block; margin: 0; }
+  .next-action.now .task-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .next-action.now .task-actions > * { width: auto; }
 }
-@media(min-width: 769px) and (max-width: 1279px) { .next-action { left: 260px; right: 24px; } }
+@media(min-width: 769px) and (max-width: 1279px) { .next-action.now { width: auto; } }
 @media(max-width: 1050px) { .journey-layout { grid-template-columns: 1fr; } .record-list { max-height: 280px; overflow: auto; } }
 @media(max-width: 768px) {
   .app-shell { grid-template-columns: 1fr; }
@@ -50,7 +58,7 @@ header { max-width: none; padding: 18px 28px; background: #fff; }
   #project-sidebar .project-controls { display: flex; margin-top: 10px; align-items: center; }
   #project-sidebar .project-controls label { flex: 1 1 100%; }
   #project-sidebar .project-bar > p { display: none; }
-  .app-shell main { padding: 20px 18px 220px; }
-  .next-action { left: 0; right: 0; max-height: 45vh; overflow-y: auto; }
+  .app-shell main { padding: 20px 18px 40px; }
+  .next-action.now { width: auto; max-height: none; overflow: visible; }
   .next-action .auto-merge-choice { margin-top: 10px; padding-top: 10px; }
 }

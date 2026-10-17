@@ -36,3 +36,9 @@ test('failures are presented as user work instead of a system wait', () => {
     assert.doesNotMatch(html, /<p class="now-kicker">系统正在处理<\/p>/);
   }
 });
+
+test('record persistence and stop uncertainty are explicit user actions', () => {
+  const policy = { text: '处理记录', action: 'persist-operation', label: '补存原任务记录' };
+  assert.match(actionBar(policy, false, { operation: { persistence: { status: 'FAILED' } }, state: {} }), /需要你处理/);
+  assert.match(actionBar({ text: '核对停止结果', action: 'recover', label: '核对原交付' }, false, { operation: { status: 'STOP_UNCONFIRMED' }, state: {} }), /需要你处理/);
+});

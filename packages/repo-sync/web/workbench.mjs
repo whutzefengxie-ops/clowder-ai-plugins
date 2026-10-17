@@ -63,13 +63,13 @@ function target(snapshot, tags) {
     return preDeliveryFlow(snapshot, nextAction(snapshot, state.active ?? null));
   const accepted =
     state.deliveryCount > 0
-      ? `<h3>当前已接收版本</h3><p>${esc(state.accepted.tag ?? '已接收提交')} · 外部 ${sha(state.accepted.upstream)} → 内部 ${sha(state.accepted.internal)}</p>`
+      ? `<h3>当前已接收版本</h3><details class="tech"><summary>为什么？</summary><div class="tech-copy">${esc(state.accepted.tag ?? '已接收提交')} · 外部 ${sha(state.accepted.upstream)} → 内部 ${sha(state.accepted.internal)}</div></details>`
       : '';
   if (config.mode === 'version' && !state.queue.length)
     return `${accepted}${tagSelector(tags, esc, sha, config.prTransport !== 'manual', state.accepted.upstream)}<div id="operation"></div><div id="error-slot"></div>`;
   const next = state.queue[0];
   const heading = targetHeading(state, config, next);
-  return `${accepted}${config.mode === 'continuous' ? `${githubAuthSummary(snapshot)}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p>${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
+  return `${accepted}${config.mode === 'continuous' ? `${githubAuthSummary(snapshot)}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}` : ''}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><details class="tech"><summary>为什么？</summary><div class="tech-copy">${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系。按接受顺序逐笔处理。'}</div></details>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
 }
 
 function githubAuthSummary(snapshot) {
