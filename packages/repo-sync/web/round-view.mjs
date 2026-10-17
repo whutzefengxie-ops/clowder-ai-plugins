@@ -16,7 +16,7 @@ export function roundView(round, error = '') {
     )
     .join(
       '',
-    )}</div><ol class="round-items">${round.items.map(rowView).join('') || '<li>本轮来源清单尚在读取，或没有符合筛选的交付。</li>'}</ol><div class="round-pages"><small>显示 ${round.items.length ? round.offset + 1 : 0}–${round.offset + round.items.length} / ${round.matched} 笔 · 创建 PR 不计完成</small><button type="button" data-round-page="-1" ${round.offset ? '' : 'disabled'}>上一页</button><button type="button" data-round-page="1" ${round.offset + round.items.length < round.matched ? '' : 'disabled'}>下一页</button></div>`;
+    )}</div><ol class="round-items">${round.items.map(rowView).join('') || '<li>本轮来源清单尚在读取，或没有符合筛选的交付。</li>'}</ol><div class="round-pages"><small>显示 ${round.items.length ? round.offset + 1 : 0}–${round.offset + round.items.length} / ${round.matched} 笔 · 创建 PR 不计完成</small>${round.matched > 20 ? `<button type="button" data-round-page="-1" ${round.offset ? '' : 'disabled'}>上一页</button><button type="button" data-round-page="1" ${round.offset + round.items.length < round.matched ? '' : 'disabled'}>下一页</button>` : ''}</div>`;
 }
 function sourceTitle(row) {
   const s = row.source;

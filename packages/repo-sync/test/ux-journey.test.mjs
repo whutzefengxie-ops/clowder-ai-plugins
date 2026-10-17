@@ -4,10 +4,10 @@ import { dispatch } from '../src/actions.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { configuration } from '../web/connections.mjs';
-import { esc, sha, button } from '../web/ui.mjs';
-import { versionRepositories } from './version-fixtures.mjs';
 import { fileTree } from '../web/files.mjs';
+import { button, esc, sha } from '../web/ui.mjs';
 import { repositories } from './fixtures.mjs';
+import { versionRepositories } from './version-fixtures.mjs';
 
 test('documentation shortcuts filter real paths without selecting preservation rules', () => {
   const html = fileTree([], 'files', { rules: true });
@@ -23,7 +23,8 @@ test('new connection requires an explicit goal and presents one compact setup ro
     button,
   );
   assert.match(html, /data-mode-cards/);
-  assert.match(html, /value=""[^>]*selected/);
+  assert.equal((html.match(/type="radio" name="mode" required/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /name="mode" required[^>]*checked/);
   assert.match(html, /保存并检查连接/);
   assert.match(html, /确认启用/);
 });

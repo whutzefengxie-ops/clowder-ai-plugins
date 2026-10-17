@@ -1,5 +1,5 @@
 import { nextAction } from './action-policy.mjs';
-import { stageGroups } from './attempts.mjs';
+import { stageGroups, stageSummary } from './attempts.mjs';
 import { rememberExpansion } from './expansion.mjs';
 import { currentStage, preDeliveryPresentation, stagePresentation } from './flow-stage.mjs';
 import { projectStep } from './step-plan.mjs';
@@ -27,7 +27,7 @@ const labels = {
   SKIPPED: '不适用',
 };
 export function panorama(snapshot, record, historical) {
-  return `<section class="flow-canvas" data-flow-canvas aria-label="五阶段审批流全景"><div class="flow-canvas-heading"><h2>审批流全景</h2><p>点击子节点，在下方查看结果、对象与处理入口</p><div class="flow-legend">✓ 完成 · ◌ 执行 · ◷ 自动等待 · ! 人工 · × 异常</div></div><div class="panorama-grid">${cards(snapshot, record, historical)}</div></section>`;
+  return `<section class="flow-canvas" data-flow-canvas aria-label="五阶段同步流程全景"><div class="flow-canvas-heading"><h2>本笔同步流程</h2><p>五阶段预先展示；展开子步骤后点击节点，在同页查看业务结果。技术执行记录仅用于诊断。</p><div class="flow-legend">✓ 完成 · ◌ 执行 · ◷ 自动等待 · ! 人工 · × 异常</div></div><div class="panorama-grid">${cards(snapshot, record, historical)}</div></section>`;
 }
 function cards(snapshot, record, historical) {
   const delivery = record?.delivery ?? snapshot.state?.active;
@@ -62,13 +62,13 @@ function cards(snapshot, record, historical) {
             )
           : preDeliveryPresentation(stage, task, policy);
       const groups = [...stageGroups(stage, record, snapshot.operation, historical, snapshot).values()];
-      return `<article class="flow-phase" data-flow-stage="${stage}" data-flow-state="${state.state}"><button type="button" class="flow-phase-heading" data-flow-stage-select="${stage}"><span class="flow-state-mark">${state.mark}</span><span><b>${stage} · ${name}</b><small>${state.caption}</small></span></button><ol class="flow-children">${groups
+      return `<article class="flow-phase" data-flow-stage="${stage}" data-flow-state="${state.state}"><button type="button" class="flow-phase-heading" data-flow-stage-select="${stage}"><span class="flow-state-mark">${state.mark}</span><span><b>${stage} · ${name}</b><small>${state.caption}</small></span></button><p class="flow-phase-summary">${esc(stageSummary(stage, record, task, historical, snapshot, state.state))}</p><details class="flow-child-disclosure" data-persist-details="flow-children-${stage}"><summary>查看 ${groups.length} 项子步骤</summary><ol class="flow-children">${groups
         .map((g) => {
           const projected = projectStep(g),
             s = projected.status;
           return `<li><button type="button" class="flow-node" data-flow-parent="${stage}" data-flow-node="${esc(g.key)}" data-flow-node-status="${s}" aria-label="${stage} · ${esc(g.label)} · ${labels[s]}"><span class="flow-state-mark">${marks[s]}</span><span><b>${esc(g.label)}</b><small>${labels[s]}</small></span></button></li>`;
         })
-        .join('')}</ol></article>`;
+        .join('')}</ol></details></article>`;
     })
     .join('');
 }
@@ -97,7 +97,9 @@ export function updatePanorama(content, snapshot, record, historical, key) {
   if (canvas) {
     const left = canvas.scrollLeft;
     const focused = document.activeElement?.dataset?.flowNode;
+    const open = new Set([...canvas.querySelectorAll('[data-persist-details][open]')].map((e) => e.dataset.persistDetails));
     canvas.innerHTML = cards(snapshot, record, historical);
+    for (const panel of canvas.querySelectorAll('[data-persist-details]')) panel.open = open.has(panel.dataset.persistDetails);
     canvas.scrollLeft = left;
     if (focused)
       [...canvas.querySelectorAll('[data-flow-node]')]

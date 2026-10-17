@@ -118,6 +118,7 @@ try {
   await page.locator('[data-round-filter="all"][aria-pressed="true"]').waitFor();
   assert.equal(await page.locator('[data-flow-stage]').count(), 5);
   assert.ok((await page.locator('[data-flow-node]').count()) >= 20);
+  await page.locator('[data-persist-details="flow-children-4"] > summary').click();
   await page.locator('[data-flow-node="merge-readiness"]').click();
   await page.locator('[data-stage="4"][open]').waitFor();
   assert.equal(await page.locator('[data-flow-node="merge-readiness"]').getAttribute('aria-pressed'), 'true');

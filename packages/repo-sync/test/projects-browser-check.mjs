@@ -84,7 +84,7 @@ try {
   await page.getByLabel('内部 Git 仓库地址', { exact: true }).fill('git@internal.example:team/other.git');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://internal.example/other');
   await page.getByLabel('PR 创建方式', { exact: true }).selectOption('manual');
-  await page.locator('[name="mode"]').selectOption('version');
+  await page.locator('[data-mode-card="version"]').check();
   await page.locator('[data-policy] > summary').click();
   await page.getByText('手动填写路径（高级）', { exact: true }).click();
   await page.getByLabel('内部保留文件 / 目录（每行一项）').fill('README.md');

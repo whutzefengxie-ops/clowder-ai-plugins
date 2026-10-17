@@ -180,7 +180,7 @@ test('expand-all and collapse-all both persist a complete per-stage state map', 
       selected: 'true', setAttribute(_name, value) { this.selected = value; },
     };
     const content = {
-      querySelectorAll: (selector) => selector === '[data-stage]' ? stages : selector === '[data-step-key]' ? [step] : [node],
+      querySelectorAll: (selector) => selector === '[data-stage]' ? stages : selector === '[data-step-key]' ? [step] : selector === '.flow-child-disclosure' ? [] : [node],
       querySelector: () => hint,
     };
     rememberExpansion('delivery1', { 'flow:selection': { stage: '4', node: 'merge-readiness' } });

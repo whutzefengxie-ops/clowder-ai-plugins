@@ -57,10 +57,10 @@ try {
     1,
   );
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.locator('[name="mode"]').selectOption('continuous');
+  await page.locator('[data-mode-card="continuous"]').check();
   assert.equal(await page.locator('[name="commitClosureVerified"]').count(), 1);
   assert.ok(await page.getByLabel('Issue 创建与关单方式').isVisible());
-  await page.locator('[name="mode"]').selectOption('version');
+  await page.locator('[data-mode-card="version"]').check();
   assert.equal(await page.getByLabel('外部 GitHub 仓库地址').inputValue(), '');
   assert.equal(await page.getByLabel('内部 Git 仓库地址').inputValue(), '');
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://user:secret@github.com/demo/core.git');

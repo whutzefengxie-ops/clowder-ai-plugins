@@ -2,7 +2,7 @@ export { businessStep, plannedSteps } from './workflow-plan.mjs';
 
 export function projectStep(group) {
   const actual = group.entries.filter(({ step }) => step.startedAt || step.status !== 'PENDING');
-  if (!actual.length) return { status: group.status, latest: null, actual };
+  if (!actual.length) return { status: group.proof ? 'DONE' : group.status, latest: null, actual };
   const lastTask = actual.at(-1).task;
   const entries = actual.filter((entry) => entry.task.id === lastTask.id);
   // Parent wrappers can span later stages. Prefer the actual business events where available.

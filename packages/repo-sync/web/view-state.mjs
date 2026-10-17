@@ -10,6 +10,7 @@ export function retainView(content, binding, revision) {
       ? JSON.stringify([
           form.dataset.form ?? '',
           form.dataset.source ?? '',
+          form.dataset.editBaseline ?? form.elements.namedItem('expectedRevision')?.value ?? '',
           ...['deliveryId', 'previousUrl', 'path', 'runId'].map((name) => form.elements.namedItem(name)?.value ?? ''),
         ])
       : element.closest('.record-list')

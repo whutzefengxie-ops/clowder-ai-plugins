@@ -35,3 +35,18 @@ export function toggleRule(rules, path, checked) {
   if (checked) next.push(path);
   return [...new Set(next)].sort();
 }
+
+export function ruleDraft(saved, current) {
+  const before = new Set(saved),
+    after = new Set(current);
+  const added = [...after].filter((path) => !before.has(path));
+  const removed = [...before].filter((path) => !after.has(path));
+  return { dirty: added.length + removed.length > 0, added, removed };
+}
+export function savedRules(panel) {
+  try {
+    return parseRules(JSON.parse(panel?.dataset.savedRules ?? '[]').join('\n'));
+  } catch {
+    return [];
+  }
+}

@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,6 +6,7 @@ import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
 import { phase } from '../src/execution.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
 const f = await versionRepositories(),
@@ -53,7 +53,7 @@ async function holdNextHeads() {
 }
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/?view=configuration`);
-  await page.locator('[name="mode"]').selectOption('version');
+  await page.locator('[data-mode-card="version"]').check();
   await page.getByLabel('外部 GitHub 仓库地址').fill('https://github.com/demo/core.git');
   await page.getByLabel('内部 Git 仓库地址').fill('git@codehub.example:team/core.git');
   await page.getByLabel('内部仓库网页地址（登记对象前必填）').fill('https://codehub.example/core');

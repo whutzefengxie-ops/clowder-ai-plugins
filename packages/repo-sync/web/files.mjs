@@ -1,5 +1,5 @@
 import { ruleField } from './file-rule-fields.mjs';
-import { parseRules, ruleState, selectableRule, toggleRule } from './file-rule-selection.mjs';
+import { parseRules, ruleState, savedRules, selectableRule, toggleRule } from './file-rule-selection.mjs';
 
 const escapeHtml = (value) =>
   String(value ?? '')
@@ -26,23 +26,23 @@ function choice(path, rules) {
   const supported = selectableRule(path);
   return `<label class="file-choice"><input type="checkbox" data-rule-choice="${escapeHtml(path)}" ${value.checked ? 'checked' : ''} ${value.inherited || !supported ? 'disabled data-preserve-disabled' : ''} ${value.partial ? 'data-partial' : ''} aria-label="保留内部 ${escapeHtml(path)}"><span>${path.endsWith('/') ? `保留整个目录 ${escapeHtml(path)}` : '保留内部'}${value.inherited ? `（由 ${escapeHtml(value.inherited)} 覆盖；先取消目录才能单选）` : !supported ? '（特殊路径不支持逐项选择，请选合法父目录或先规范文件名）' : ''}</span></label>`;
 }
-function row(item, rules, name) {
+function row(item, rules, name, saved) {
   const blockage = item.kind === 'conflict' ? '× 冲突待解决' : '× 未声明差异';
   const action = rules ? choice(item.path, rules) : '';
   const treatment =
     rules && ruleState(rules, item.path).checked
-      ? '内部保留草稿 · 保存后核验'
+      ? saved && ruleState(saved, item.path).checked ? '内部保留 · 已保存' : '内部保留修改 · 尚未保存'
       : item.blocking
         ? blockage
         : escapeHtml(labels[item.category] ?? '');
   return `<li class="file-row"><span title="${escapeHtml(item.path)}">${escapeHtml(name)}</span><small class="${item.blocking && !(rules && ruleState(rules, item.path).checked) ? 'bad' : ''}">${escapeHtml(labels[item.kind] ?? item.kind)} · ${treatment}${item.sourceMode && item.internalMode && item.sourceMode !== item.internalMode ? ' · 文件类型/权限变化' : ''}</small>${action}${rules ? `<button type="button" data-view-file="${escapeHtml(item.path)}">查看两侧内容</button>` : ''}</li>`;
 }
-function nodes(items, rules, searching, all, prefix = '', depth = 0) {
+function nodes(items, rules, searching, all, saved, prefix = '', depth = 0) {
   const files = [];
   const dirs = new Map();
   for (const item of items) {
     const parts = item.display.split('/');
-    if (parts.length === 1 || depth >= 12) files.push(row(item, rules, item.display));
+    if (parts.length === 1 || depth >= 12) files.push(row(item, rules, item.display, saved));
     else {
       const name = parts.shift();
       if (!dirs.has(name)) dirs.set(name, []);
@@ -51,7 +51,7 @@ function nodes(items, rules, searching, all, prefix = '', depth = 0) {
   }
   const folders = [...dirs.entries()].map(
     ([name, list]) =>
-      `<li class="file-directory"><div class="directory-line">${rules ? choice(`${prefix}${name}/`, rules) : ''}<details data-tree-directory="${escapeHtml(`${prefix}${name}/`)}" ${searching || rules ? 'open' : ''}><summary>📁 ${escapeHtml(name)}/ · ${all.filter((item) => item.path.startsWith(`${prefix}${name}/`)).length} 个差异文件</summary>${nodes(list, rules, searching, all, `${prefix}${name}/`, depth + 1)}</details></div></li>`,
+      `<li class="file-directory"><div class="directory-line">${rules ? choice(`${prefix}${name}/`, rules) : ''}<details data-tree-directory="${escapeHtml(`${prefix}${name}/`)}" ${searching || rules ? 'open' : ''}><summary>📁 ${escapeHtml(name)}/ · ${all.filter((item) => item.path.startsWith(`${prefix}${name}/`)).length} 个差异文件</summary>${nodes(list, rules, searching, all, saved, `${prefix}${name}/`, depth + 1)}</details></div></li>`,
   );
   return `<ul>${folders.join('')}${files.join('')}</ul>`;
 }
@@ -84,7 +84,7 @@ function render(root) {
     .slice(current.page * 50, (current.page + 1) * 50)
     .map((item) => ({ ...item, display: item.path }));
   root.querySelector('[data-tree-body]').innerHTML = visible.length
-    ? nodes(visible, rules, Boolean(query), current.items)
+    ? nodes(visible, rules, Boolean(query), current.items, savedRules(root.closest('[data-saved-rules]')))
     : '<p>没有符合条件的文件。</p>';
   for (const checkbox of root.querySelectorAll('[data-partial]')) checkbox.indeterminate = true;
   for (const node of root.querySelectorAll('[data-tree-directory]'))
@@ -129,6 +129,7 @@ globalThis.document?.addEventListener('click', (event) => {
   if (file) {
     const panel = file.closest('#baseline-differences');
     panel.querySelector('[data-baseline-path]').value = file.dataset.viewFile;
+    panel.querySelector('[data-baseline-path]').dispatchEvent(new Event('change', { bubbles: true }));
     panel.querySelector('[data-baseline-read]').click();
     return;
   }

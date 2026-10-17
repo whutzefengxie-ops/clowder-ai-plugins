@@ -1,5 +1,6 @@
-import { esc } from './ui.mjs';
 import { repairButton } from './recovery-navigation.mjs';
+import { esc } from './ui.mjs';
+
 const guides = [
   [
     /BASELINE_MISMATCH|TREE_MISMATCH|UNAPPROVED_DIFFERENCE|CORE_DRIFT/,
@@ -53,13 +54,17 @@ const guides = [
     '检查当前失败通道的网络、证书或服务后回读原任务；已完成内容保留，不提交新的同步请求。',
   ],
 ];
-export function errorGuide(error, context = {}) {
-  if (!error) return '';
+export function guidance(error) {
   const [, title, next] = guides.find(([pattern]) => pattern.test(error.code ?? '')) ?? [
     null,
     '当前步骤尚未完成',
     '原因尚未确认。保留当前交付，核对具体失败步骤与安全详情，再恢复原操作。',
   ];
+  return { title, next };
+}
+export function errorGuide(error, context = {}) {
+  if (!error) return '';
+  const { title, next } = guidance(error);
   const diagnostic = `错误码：${error.code ?? 'OPERATION_FAILED'}\n步骤：${context.stage ?? '当前步骤'}\n动作：${context.action ?? '未记录'}\n此摘要不含仓库地址、文件内容、Token 或原始日志。`;
   return `<section class="error-guide" role="alert"><h3>× ${title}</h3><p>${esc(error.message)}</p><p><b>接下来：</b>${next}</p>${repairButton(error, context)}<p>已创建对象与已接受版本保留；恢复按原对象核对。</p><details><summary>错误码与脱敏诊断摘要</summary><pre class="bounded-text" data-diagnostic-text>${esc(diagnostic)}</pre><button type="button" data-copy-diagnostic>复制摘要</button><span data-copy-result role="status"></span></details></section>`;
 }
@@ -74,3 +79,28 @@ globalThis.document?.addEventListener('click', async (event) => {
     panel.querySelector('[data-copy-result]').textContent = '无法访问剪贴板，请选择上方文本复制。';
   }
 });
+
+export function failureSummary(snapshot) {
+  const d = snapshot.state?.active,
+    task = snapshot.operation,
+    run = snapshot.state?.automation;
+  const owns = !d || task?.deliveryId === d.id || task?.deliveryIds?.includes(d.id) || !task?.deliveryId;
+  if (
+    owns &&
+    (task?.persistence?.status === 'FAILED' ||
+      ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task?.status))
+  )
+    return null;
+  const error =
+    (owns && task?.status === 'FAILED' && task.error) || d?.error || (run?.status === 'FAILED' && run.error);
+  if (!error) return null;
+  const { title, next } = guidance(error);
+  const repair = repairButton(error, { deliveryId: d?.id, primary: true });
+  const objects = d?.prUrl
+    ? '内部 PR 已登记，恢复将回读原 PR。'
+    : 'PR 创建状态需按原意图回读确认；不会因本次报错重复创建。';
+  return {
+    repair,
+    html: `<div class="failure-summary" role="alert"><b>× ${esc(title)}</b><p>${esc(error.message)}</p><small>${objects} ${esc(next)}</small></div>`,
+  };
+}

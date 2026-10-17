@@ -2,7 +2,7 @@ import { errorGuide } from './error-guide.mjs';
 import { automaticMergeActive } from './flow-stage.mjs';
 import { businessStep, plannedSteps, projectStep } from './step-plan.mjs';
 import { taskProgress } from './task-progress.mjs';
-import { esc, stageOf, when } from './ui.mjs';
+import { completionProof, esc, stageOf, when } from './ui.mjs';
 
 const marks = {
   DONE: '✓',
@@ -140,6 +140,7 @@ export function stageGroups(stage, record, operation, historical, snapshot) {
     for (const group of groups.values())
       if (['merge-verify', 'issue-state', 'acceptance-save'].includes(group.key))
         group.completionStatus = group.status === 'SKIPPED' ? 'SKIPPED' : 'PENDING';
+  if (stage === 5) for (const group of groups.values()) group.proof = completionProof(group.key, delivery, record);
   addUnscopedFailure(groups, tasks, stage, delivery);
   return groups;
 }
@@ -171,7 +172,7 @@ function stepView(group, stage, historical) {
       : '';
   const waiting = group.key === 'platform-review' && status === 'PENDING';
   const platformTiming = waiting ? '<small>平台审批时间未记录；实际合入结果由第五阶段核验。</small>' : '';
-  return `<li data-step-key="${esc(group.key)}" data-operation-state="${esc(status)}" data-step-state="${states[status] ?? 'pending'}"><span class="${tone}">${marks[status] ?? '○'}</span> <b>${esc(label)}</b> · ${labels[status] ?? '状态未记录'}${platformTiming}${latest ? taskProgress(latest.step, esc, Date.now(), false) : ''}${error}${actual.map(evidence).join('')}</li>`;
+  return `<li data-step-key="${esc(group.key)}" data-operation-state="${esc(status)}" data-step-state="${states[status] ?? 'pending'}"><span class="${tone}">${marks[status] ?? '○'}</span> <b>${esc(label)}</b> · ${labels[status] ?? '状态未记录'}${platformTiming}${latest ? taskProgress(latest.step, esc, Date.now(), false) : ''}${error}${!actual.length && group.proof ? `<details class="business-proof"><summary>结果已记录 · 查看依据</summary><p>${group.proof}</p><small>未单独采集此步骤事件；以上是实际保存结果的依据。</small></details>` : ''}${actual.map(evidence).join('')}</li>`;
 }
 
 function evidence({ task, step }, index) {

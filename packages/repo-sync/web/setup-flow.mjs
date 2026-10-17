@@ -116,11 +116,7 @@ export function createSetupFlow({ snapshot, render, action }) {
   document.addEventListener('click', (event) => {
     const target = event.target.closest('button');
     if (!target) return;
-    if (target.dataset.modeCard) {
-      const select = target.closest('form').elements.namedItem('mode');
-      select.value = target.dataset.modeCard;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+
     if (target.hasAttribute('data-edit-connection')) change({ editing: true, report: null, confirmed: false });
     if (target.hasAttribute('data-check-connections')) void checkConnections();
     if (target.hasAttribute('data-edit-baseline')) change({ confirmed: false });

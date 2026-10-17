@@ -1,6 +1,6 @@
-import { authenticationForm } from './issue-auth.mjs';
 import { githubAuthForm } from './github-auth.mjs';
-import { esc } from './ui.mjs';
+import { authenticationForm } from './issue-auth.mjs';
+import { esc, when } from './ui.mjs';
 
 export function repairButton(error, context = {}) {
   if (context.historical) return '';
@@ -15,7 +15,7 @@ export function repairButton(error, context = {}) {
           ? ['connection', '查看连接设置与处理方法 →']
           : [];
   return kind
-    ? `<button type="button" data-repair="${kind}" data-repair-delivery="${esc(context.deliveryId ?? '')}">${text}</button>`
+    ? `<button type="button" class="${context.primary ? 'primary' : ''}" data-repair="${kind}" data-repair-delivery="${esc(context.deliveryId ?? '')}">${text}</button>`
     : '';
 }
 
@@ -141,6 +141,6 @@ export function showActivity(task) {
   if (activity)
     activity.textContent =
       task && ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status)
-        ? `当前同步：${task.status} · 状态最近成功读取 ${task.observedAt ?? '未记录'} · 可点击“当前同步”返回查看`
+        ? `当前同步：${task.status} · 状态最近成功读取 ${when(task.observedAt)} · 可点击“当前同步”返回查看`
         : '';
 }

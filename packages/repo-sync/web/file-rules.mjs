@@ -1,5 +1,5 @@
 import { hydrateRuleLists, ruleField, ruleList } from './file-rule-fields.mjs';
-import { parseRules, ruleState, selectableRule, toggleRule } from './file-rule-selection.mjs';
+import { parseRules, ruleDraft, ruleState, savedRules, selectableRule, toggleRule } from './file-rule-selection.mjs';
 import { hydrateFiles } from './files.mjs';
 
 export function hydrateFileRules() {
@@ -10,10 +10,12 @@ export function hydrateFileRules() {
   const rules = parseRules(ruleField()?.value ?? '');
   const items = JSON.parse(panel.querySelector('[data-file-tree]').dataset.items);
   panel.querySelector('[data-selected-rules]').innerHTML = ruleList(rules);
+  const draft = ruleDraft(savedRules(panel), rules);
+  panel.querySelector('[data-rule-state]').textContent = draft.dirty ? `内部保留规则 · 尚未保存（新增 ${draft.added.length}，移除 ${draft.removed.length}）` : '内部保留规则 · 已保存';
   const remaining = items.filter((item) => item.blocking && !ruleState(rules, item.path).checked).length;
   const retained = items.filter((item) => ruleState(rules, item.path).checked).length;
   panel.querySelector('[data-rule-count]').textContent =
-    `完整清单 ${items.length} 个文件：草稿将保留内部 ${retained} 个，跟随外部 ${items.length - retained} 个；已选 ${rules.length} 条保留规则；仍有 ${remaining} 个未处理差异。最终以完整重新核验结果为准。`;
+    `完整清单 ${items.length} 个文件：${draft.dirty ? '修改后将保留' : '已声明保留'}内部 ${retained} 个，跟随外部 ${items.length - retained} 个；已选 ${rules.length} 条保留规则；仍有 ${remaining} 个未处理差异。最终以完整重新核验结果为准。`;
 }
 export function initializeFileRules({ snapshot, action, saveDraft, errorPanel }) {
   let saving = false;

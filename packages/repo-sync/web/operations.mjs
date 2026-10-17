@@ -43,7 +43,8 @@ export function createOperations({ snapshot, refresh, completed, errorPanel, onT
     for (const element of document.querySelectorAll(
       'button[data-action], [data-save-file-rules], [data-remove-rule], [data-baseline-read], form button, input, textarea, select',
     ))
-      if (!element.closest('.record-list, [data-project-navigation], [data-transfer-upload]'))
+      if (!element.matches('[data-baseline-path], [data-baseline-read]') &&
+          !element.closest('.record-list, [data-project-navigation], [data-transfer-upload]'))
         element.disabled = busy || element.hasAttribute('data-preserve-disabled');
   }
   function show(task) {

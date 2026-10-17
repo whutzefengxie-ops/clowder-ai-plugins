@@ -1,7 +1,7 @@
 import { guardRenderedScope, snapshotIdentity } from './action-scope.mjs';
 import { updateShell } from './app-shell.mjs';
 import { captureDraft, configuration, restoreDraft } from './connections.mjs';
-import { baselineContent, diagnostics } from './diagnostics.mjs';
+import { createBaselineViewer, diagnostics } from './diagnostics.mjs';
 import { initializeExpansion, restoreExpansion, setAllExpansion } from './expansion.mjs';
 import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
 import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
@@ -25,6 +25,7 @@ import { createSetupFlow } from './setup-flow.mjs';
 import { createTaskFocus, focusBaselineInput } from './setup-navigation.mjs';
 import { createTransfers } from './transfers.mjs';
 import { button, esc, sha } from './ui.mjs';
+import { updateTagChoice } from './version.mjs';
 import { retainView } from './view-state.mjs';
 import { workbench } from './workbench.mjs';
 
@@ -48,6 +49,7 @@ const recovery = createRecoveryNavigation({
 const records = createHistory(() => snapshot, render);
 const roundView = createRoundView(() => snapshot);
 const focusTask = createTaskFocus();
+const baselineViewer = createBaselineViewer({ snapshot: () => snapshot, action: (...args) => action(...args) });
 const setup = createSetupFlow({
   snapshot: () => snapshot,
   render,
@@ -129,7 +131,9 @@ function render({ keepScroll = false } = {}) {
     if (panel) (baseline ?? content).insertAdjacentHTML(baseline ? 'beforeend' : 'afterbegin', panel);
   }
   for (const form of content.querySelectorAll('form[data-form]')) updateIssueFields(form);
+  for (const form of content.querySelectorAll('form[data-accepted-upstream]')) updateTagChoice(form);
   hydrateFileRules();
+  baselineViewer.render();
   onTask(snapshot.operation);
   operations.lock();
   restoreView({ keepScroll });
@@ -199,20 +203,12 @@ document.addEventListener('click', async (event) => {
   if (!snapshot || !element) return;
   const clickedScope = content.dataset.actionScope;
   await navigate(element);
-  if (element.hasAttribute('data-baseline-read')) {
-    const result = await action({
-      action: 'baseline-file',
-      upstream: element.dataset.upstream,
-      internal: element.dataset.internal,
-      path: document.querySelector('[data-baseline-path]').value,
-    });
-    if (result) {
-      const viewer = document.getElementById('baseline-file-content');
-      viewer.innerHTML = baselineContent(result.result, esc);
-      viewer.closest('details').open = true;
-    }
-  }
   if (element.dataset.view) changeView(element.dataset.view);
+  if (element.hasAttribute('data-import-settings')) {
+    changeView('configuration');
+    const panel = content.querySelector('#transfer-settings');
+    if (panel) { panel.open = true; panel.scrollIntoView({ block: 'start' }); }
+  }
   if (element.dataset.action) {
     mobileDetail = true;
     const result = await action(

@@ -1,7 +1,8 @@
 import { updateIssueFields } from './issue-auth.mjs';
+
 export { setupConfiguration as configuration } from './setup-view.mjs';
 export function firstUse() {
-  return '<section class="card task"><h2>开始同步你的项目</h2><p>连接两侧仓库、核验已有起点，再确认启用。每个项目独立保存模式和历史。</p><button type="button" data-view="configuration" class="primary">配置真实仓库 →</button></section>';
+  return '<section class="card task"><h2>开始同步你的项目</h2><p>连接两侧仓库、核验已有起点，再确认启用。每个项目独立保存模式和历史。</p><div class="task-actions"><button type="button" data-view="configuration" class="primary">配置真实仓库 →</button><button type="button" data-import-settings>导入已有配置或迁移包</button></div></section>';
 }
 export function repositoryInput(fields) {
   const input = {
@@ -31,9 +32,10 @@ export function repositoryInput(fields) {
 }
 export function captureDraft() {
   return [...document.querySelectorAll('form[data-form]')]
-    .filter((form) => form.dataset.form !== 'configure-continuation')
     .map((form) => ({
       kind: form.dataset.form,
+      dirty: [...form.elements].some((e) => e.name && e.type !== 'password' && edited(e)),
+      baseline: form.dataset.editBaseline ?? form.elements.namedItem('expectedRevision')?.value ?? '',
       open: form.closest('details')?.open ?? false,
       openSummary: form.closest('details')?.querySelector(':scope > summary')?.textContent ?? '',
       reference: form.elements.namedItem('previousUrl')?.value ?? '',
@@ -45,6 +47,7 @@ export function captureDraft() {
         .filter(
           (element) =>
             element.name &&
+            (element.type !== 'radio' || element.checked) &&
             element.type !== 'password' &&
             element.name !== 'issueToken' &&
             element.name !== 'confirmed' &&
@@ -69,6 +72,15 @@ export function restoreDraft(drafts) {
         (item.elements.namedItem('runId')?.value ?? '') === (draft.runId ?? ''),
     );
     if (!form) continue;
+    const baseline = form.dataset.editBaseline ?? form.elements.namedItem('expectedRevision')?.value ?? '';
+    if (baseline !== (draft.baseline ?? '')) {
+      if (draft.dirty && draft.values.some((saved) => {
+        const e = form.elements.namedItem(saved.name);
+        return e && (e.type === 'checkbox' ? e.checked !== saved.checked : e.value !== saved.value);
+      }) && !form.querySelector('[data-draft-superseded]')) form.insertAdjacentHTML?.('afterbegin',
+        '<p data-draft-superseded role="status">保存值已变化，旧草稿未覆盖当前设置；请核对后重新编辑。</p>');
+      continue;
+    }
     restoreForm(form, draft);
   }
 }
@@ -84,6 +96,7 @@ function restoreForm(form, draft) {
   const closure = form.querySelector('[data-closure]');
   if (closure) closure.hidden = version;
   updateIssueFields(form);
+  updateEditNote(form);
   const parent = form.closest('details');
   if (
     draft.kind !== 'configure-repositories' &&
@@ -92,3 +105,16 @@ function restoreForm(form, draft) {
   )
     parent.open = true;
 }
+
+function edited(e) {
+  return ['checkbox', 'radio'].includes(e.type) ? e.checked !== e.defaultChecked :
+    e.tagName === 'SELECT' ? e.value !== [...e.options].find((o) => o.defaultSelected)?.value :
+    e.value !== e.defaultValue;
+}
+export function updateEditNote(form) {
+  const note = form?.querySelector('[data-edit-note]');
+  if (note) note.hidden = ![...form.elements].some((e) => e.name && edited(e));
+}
+for (const type of ['input', 'change']) globalThis.document?.addEventListener(type, (event) => {
+  updateEditNote(event.target.form);
+});

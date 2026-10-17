@@ -1,9 +1,11 @@
 import { nextAction } from './action-policy.mjs';
-import { actionBar } from './actionbar.mjs';
+import { actionBar, actionSignature } from './actionbar.mjs';
 import { attempts, stageSummary } from './attempts.mjs';
+import { captureDraft, restoreDraft } from './connections.mjs';
 import { restoreExpansion } from './expansion.mjs';
 import { currentStage, preDeliveryPresentation, stagePresentation } from './flow-stage.mjs';
 import { updatePanorama } from './panorama.mjs';
+import { retainView } from './view-state.mjs';
 
 export function updateLiveWorkflow(content, snapshot, record, task, selected, key) {
   const nodes = content.querySelectorAll('[data-attempts-stage]');
@@ -52,9 +54,12 @@ export function updateLiveWorkflow(content, snapshot, record, task, selected, ke
       );
   }
   const footer = content.querySelector('.next-action');
-  if (footer && footer.dataset.policy !== JSON.stringify(policy)) {
+  if (footer && footer.dataset.policy !== actionSignature(policy, snapshot)) {
+    const drafts = captureDraft();
+    const restore = retainView(content, snapshot.config?.bindingId, snapshot.connection?.revision);
     footer.outerHTML = actionBar(policy, false, snapshot);
-    content.querySelector('.next-action').dataset.policy = JSON.stringify(policy);
+    restoreDraft(drafts);
+    restore();
   }
   const errorSlot = content.querySelector('#error-slot');
   content.querySelector(`[data-stage="${current}"] .stage-body`)?.append(...(errorSlot ? [errorSlot] : []));

@@ -1,4 +1,5 @@
 import { continuationControls } from './continuation-view.mjs';
+import { failureSummary } from './error-guide.mjs';
 import { esc } from './ui.mjs';
 
 function control(p, primary) {
@@ -12,14 +13,20 @@ function control(p, primary) {
   const attribute = p.action ? `data-action="${esc(p.action)}"` : `data-${p.special}`;
   return `<button type="button" class="${tone}" ${attribute}>${label}</button>`;
 }
+export function actionSignature(policy, snapshot) {
+  const run = snapshot.state?.automation, task = snapshot.operation, d = snapshot.state?.active;
+  return JSON.stringify([policy, run?.id, d?.id, run?.autoMerge, run?.continuation, run?.pauseRequested,
+    task?.status, task?.error, task?.persistence?.status, d?.error, d?.prUrl]);
+}
 export function actionBar(policy, historical, snapshot = {}) {
   if (historical) return '';
+  const failure = failureSummary(snapshot);
   const run = snapshot.state?.automation;
   const pause = run && ['RUNNING', 'WAITING_REVIEW'].includes(run.status) && !run.pauseRequested;
   const pauseStatus = run?.pauseRequested
     ? '<small class="pause-boundary-note">已设置：本笔完成后暂停，下一笔不会自动开始。</small>'
     : '';
-  return `<footer class="next-action" aria-label="当前操作区"><h2>当前操作与等待</h2><p role="status">${esc(policy.text)}${pauseStatus}</p><div class="task-actions">${control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${run && run.status !== 'COMPLETE' ? `<details class="auto-merge-options" data-persist-details="merge-options"><summary>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'} · 修改</summary>${autoMergeControls(snapshot)}</details>` : ''}<details><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></div></footer>`;
+  return `<footer class="next-action" data-policy="${esc(actionSignature(policy, snapshot))}" aria-label="当前操作区"><h2>当前操作与等待</h2><p role="status">${esc(policy.text)}${pauseStatus}</p>${failure?.html ?? ''}<div class="task-actions">${failure?.repair || control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${run && run.status !== 'COMPLETE' ? `<details class="auto-merge-options" data-persist-details="merge-options"><summary>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'} · 修改</summary>${autoMergeControls(snapshot)}</details>` : ''}<details><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></div></footer>`;
 }
 function autoMergeControls(snapshot) {
   const run = snapshot.state?.automation;
@@ -27,5 +34,5 @@ function autoMergeControls(snapshot) {
   const enabled = snapshot.config?.prTransport === 'gitlab' || snapshot.platform?.transport === 'gitlab';
   const delivery = snapshot.state?.active;
   const waiting = run.status === 'WAITING_REVIEW' && delivery?.status === 'WAITING_APPROVAL';
-  return `<form class="auto-merge-choice" data-form="configure-auto-merge"><input type="hidden" name="runId" value="${esc(run.id)}"><input type="hidden" name="deliveryId" value="${esc(delivery?.id ?? '')}"><label><input type="checkbox" name="autoMerge" ${run.autoMerge === true ? 'checked' : ''} ${enabled ? '' : 'disabled data-preserve-disabled'}>本轮允许平台自动合入</label><p>默认关闭。仅在检查通过且平台审批 / 分支规则允许时请求合入；保留提交，不使用 squash。${waiting ? '保存后自动等待 CI 和平台条件，通过后才请求合入。' : ''}</p><button type="submit" ${enabled ? '' : 'disabled data-preserve-disabled'}>保存自动合入选择</button>${enabled ? '' : '<p>当前创建方式没有合入 API，请在本项目设置中配置兼容平台接口。</p>'}</form>`;
+  return `<form class="auto-merge-choice" data-form="configure-auto-merge" data-edit-baseline="${esc(JSON.stringify([run.id, delivery?.id, run.autoMerge === true]))}"><input type="hidden" name="runId" value="${esc(run.id)}"><input type="hidden" name="deliveryId" value="${esc(delivery?.id ?? '')}"><label><input type="checkbox" name="autoMerge" ${run.autoMerge === true ? 'checked' : ''} ${enabled ? '' : 'disabled data-preserve-disabled'}>本轮允许平台自动合入</label><p>默认关闭。仅在检查通过且平台审批 / 分支规则允许时请求合入；保留提交，不使用 squash。${waiting ? '保存后自动等待 CI 和平台条件，通过后才请求合入。' : ''}</p><p data-edit-note role="status" hidden>有未保存修改；以保存后的选择为准。</p><button type="submit" ${enabled ? '' : 'disabled data-preserve-disabled'}>保存自动合入选择</button>${enabled ? '' : '<p>当前创建方式没有合入 API，请在本项目设置中配置兼容平台接口。</p>'}</form>`;
 }

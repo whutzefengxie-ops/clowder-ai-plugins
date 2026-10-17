@@ -1,4 +1,3 @@
-import { launchOwnedBrowser } from './owned-browser.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +8,7 @@ import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { continuousRepositories } from './continuous-fixtures.mjs';
+import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 
 // Real Git + production entry; GitHub metadata and CodeHub-compatible HTTP are synthetic fixtures.
@@ -117,6 +117,7 @@ try {
   await form.getByLabel('内部平台 Token', { exact: true }).fill(platform.token);
   await form.getByText('首次接收条件：提交消息关单规则', { exact: true }).click();
   await form.locator('[name="commitClosureVerified"]').check();
+  await form.locator('.identity-advanced > summary').click();
   await form.getByLabel('提交处理方式').selectOption('rewrite');
   if (!(await form.getByLabel('内部 Git 姓名').isVisible()))
     await form.getByText('姓名与邮箱（重写模式必填；保留模式用于接收节点）', { exact: true }).click();

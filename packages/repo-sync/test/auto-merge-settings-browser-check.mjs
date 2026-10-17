@@ -8,7 +8,7 @@ import { setIssueToken } from '../src/issue-auth.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { repositories } from './fixtures.mjs';
-import { openAutoMerge, openStage } from './journey-controls.mjs';
+import { openAutoMerge } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await repositories(),
@@ -60,6 +60,15 @@ try {
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
   await openAutoMerge(page);
   await page.locator('.auto-merge-choice [name="autoMerge"]').check();
+  // Polling and refresh retain the draft without granting merge authority.
+  await page.locator('.auto-merge-choice [name="autoMerge"]').blur();
+  await page.waitForTimeout(5500);
+  assert.equal(await page.locator('.auto-merge-choice [name="autoMerge"]').isChecked(), true);
+  assert.equal((await receiver.status()).automation.autoMerge, false);
+  await page.reload();
+  await openAutoMerge(page);
+  assert.equal(await page.locator('.auto-merge-choice [name="autoMerge"]').isChecked(), true);
+  await page.locator('.auto-merge-choice [data-edit-note]:not([hidden])').waitFor();
   await page.getByRole('button', { name: '保存自动合入选择', exact: true }).click();
   await page.locator('[data-flow-stage="4"][data-flow-state="waiting-system"]').waitFor({ timeout: 30000 });
   assert.equal(platform.state.merges, 0);
@@ -101,8 +110,8 @@ try {
     await page.waitForTimeout(50);
   assert.equal((await receiver.status()).automation.status, 'FAILED');
   await page.reload();
-  await openStage(page, 4);
-  await page.locator('[data-stage="4"] [data-repair="platform"]').first().click();
+  assert.equal(await page.locator('[data-stage][open]').count(), 0);
+  await page.locator('.next-action [data-repair="platform"]').click();
   await page.locator('[data-settings-form]').waitFor();
   assert.equal(await page.locator('.flow.setup,#operation').count(), 0);
   assert.equal(await page.getByLabel('内部 Git 姓名').inputValue(), 'Internal Operator');

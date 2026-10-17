@@ -36,3 +36,21 @@ export const stageOf = (delivery) =>
     COMPLETE: 5,
     CANCELLED: 2,
   })[delivery?.status] ?? 1;
+
+export function completionTime(delivery, record) {
+  return delivery.finishedAt ?? record?.events?.findLast((e) =>
+    e.deliveryId === delivery.id && e.stage === 'COMPLETE')?.time;
+}
+export function completionProof(key, delivery, record) {
+  if (delivery?.status !== 'COMPLETE') return null;
+  const completedAt = completionTime(delivery, record);
+  if (key === 'acceptance-save' && delivery.acceptedInternal && completedAt)
+    return `接收台账：${sha(delivery.target)} → ${sha(delivery.acceptedInternal)} · ${when(completedAt)}`;
+  const lastId = delivery.taskIds?.at(-1);
+  const task = record?.tasks?.find(
+    (item) => item.id === lastId && item.status === 'SUCCEEDED' && item.finishedAt,
+  );
+  if (key === 'execution-record' && task && !record?.missingTasks?.includes(lastId))
+    return `已读取本笔最终执行记录 · ${when(task.finishedAt)}。原记录保留，不补造独立步骤事件。`;
+  return null;
+}
