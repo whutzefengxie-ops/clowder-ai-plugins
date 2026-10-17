@@ -174,6 +174,22 @@ body[data-view="workbench"] .app-shell main {
   min-height: 72px;
   padding: 10px;
   border-top: 3px solid var(--flow-tone);
+  position: relative;
+}
+.flow-phase-heading::before {
+  content: attr(data-flow-stage-select);
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--flow-tone);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--flow-tone);
+  font-size: var(--t-5);
+  font-weight: 700;
+  line-height: 1;
 }
 .flow-phase-heading b,
 .flow-node b {
