@@ -1,7 +1,4 @@
 :root {
-  --good: #217347;
-  --bad: #b03326;
-  --muted: #74675b;
 }
 input,
 textarea,
@@ -25,7 +22,7 @@ summary:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid #ad632a;
+  outline: 3px solid var(--accent);
   outline-offset: 3px;
 }
 main,
@@ -43,9 +40,9 @@ main {
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   padding: 20px 24px;
-  background: #f3ede4;
+  background: var(--soft);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r);
 }
 .repository-summary p {
   margin-bottom: 0;
@@ -60,12 +57,12 @@ main {
 .record-list {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r);
   padding: 20px;
   min-width: 0;
 }
 .record-list h2 {
-  font-size: 20px;
+  font-size: var(--t-2);
   margin-top: 0;
 }
 .record-list > button {
@@ -78,12 +75,12 @@ main {
 }
 .record-list > button span {
   display: block;
-  font-size: 13px;
+  font-size: var(--t-5);
   margin-top: 8px;
 }
 .record-list > button[aria-current="true"] {
   border: 2px solid var(--accent);
-  background: #fff3e7;
+  background: var(--soft);
 }
 .record-list form {
   border-top: 1px solid var(--line);
@@ -98,7 +95,7 @@ main {
   grid-template-columns: 1fr 1fr;
 }
 .record-list p {
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .record-detail {
   min-width: 0;
@@ -107,18 +104,18 @@ main {
 .detail-head {
   padding: 20px 24px;
   background: #fff;
-  border-radius: 12px;
+  border-radius: var(--r);
   border: 1px solid var(--line);
 }
 .detail-head h2 {
-  font-size: 24px;
+  font-size: var(--t-1);
 }
 .detail-head .delivery-boundary {
   margin: 8px 0;
-  font-size: 13px;
+  font-size: var(--t-5);
 }
 .execution-meta {
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--muted);
 }
 .execution-meta summary {
@@ -133,7 +130,7 @@ main {
 .journey-flow > li > details > summary [data-stage-detail] {
   flex-basis: 100%;
   padding-left: 44px;
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--muted);
 }
 .journey-flow > li > details[data-stage-state="failed"] > summary [data-stage-detail] {
@@ -153,7 +150,7 @@ main {
   margin-top: 0;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r);
 }
 .journey-flow > li > details[data-stage-state="current"] {
   border-color: var(--accent);
@@ -172,18 +169,20 @@ main {
   flex: 1;
 }
 .journey-flow > li > details > summary > span:last-child {
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--muted);
 }
 .stage-mark {
-  font-size: 20px;
+  font-size: var(--t-2);
 }
 .stage-body {
   border-top: 1px solid var(--line);
   padding: 20px;
 }
 .stage-body .card {
-  padding: 18px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
 }
 .substeps {
   list-style: none;
@@ -191,7 +190,7 @@ main {
   margin-top: 0;
 }
 .substeps li {
-  font-size: 14px;
+  font-size: var(--t-4);
   padding: 8px 0;
 }
 .attempt-steps {
@@ -199,29 +198,29 @@ main {
 }
 .attempt-steps li {
   padding: 6px 0;
-  font-size: 13px;
+  font-size: var(--t-5);
 }
 .stage-body [data-attempt] {
   border-top: 1px dashed var(--line);
   padding-top: 6px;
 }
 .record-gap {
-  background: #fff0e5;
-  border: 1px solid #dec4ad;
+  background: var(--soft);
+  border: 1px solid var(--line);
   padding: 16px;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 .next-action {
-  position: fixed;
+  position: static;
   bottom: 0;
   z-index: 10;
   left: max(calc((100vw - 1440px) / 2 + 370px), 370px);
   right: max(calc((100vw - 1440px) / 2 + 32px), 32px);
-  background: #fffdf9;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--r);
   padding: 14px 20px max(14px, env(safe-area-inset-bottom));
-  box-shadow: 0 -4px 20px #36251812;
+  box-shadow: 0 -4px 20px rgba(54,37,24,.07);
 }
 .next-action p {
   margin: 0 0 10px;

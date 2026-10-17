@@ -15,8 +15,8 @@ export const button = (action, label) =>
 export const labels = {
   COMPLETE: '已完成',
   CANCELLED: '已撤销',
-  ISSUES_REQUIRED: '准备代码',
-  CODE_PREPARE_REQUIRED: '准备代码',
+  ISSUES_REQUIRED: '等待 Issue 映射',
+  CODE_PREPARE_REQUIRED: '等待候选检查',
   PR_REQUIRED: '创建 PR',
   WAITING_APPROVAL: '等待审核合入',
   PUSH_RESULT_UNKNOWN: '推送结果待核对',
@@ -38,7 +38,7 @@ export const stageOf = (delivery) =>
     WAITING_APPROVAL: 4,
     CODE_ACCEPTED_PENDING_METADATA: 5,
     COMPLETE: 5,
-    CANCELLED: 2,
+    CANCELLED: 0,
   })[delivery?.status] ?? 1;
 
 export function completionTime(delivery, record) {

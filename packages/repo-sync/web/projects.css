@@ -42,7 +42,7 @@
   margin: 12px 0;
 }
 .project-filters [aria-pressed="true"] {
-  border-color: var(--accent, #b45309);
+  border-color: var(--accent, var(--accent));
   font-weight: 700;
 }
 .project-cards {
@@ -54,11 +54,11 @@
 .project-card {
   min-width: 0;
   padding: 16px;
-  border: 1px solid var(--line, #e0d9d0);
-  border-radius: 10px;
+  border: 1px solid var(--line, var(--line));
+  border-radius: var(--r);
 }
 .project-card h3 {
-  font-size: 16px;
+  font-size: var(--t-3);
   margin-top: 0;
   overflow-wrap: anywhere;
 }
@@ -66,7 +66,7 @@
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .project-card dd {
   margin: 0;
@@ -78,13 +78,13 @@
 .project-switch-warning {
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid var(--accent, #b45309);
-  border-radius: 8px;
+  border: 1px solid var(--accent, var(--accent));
+  border-radius: var(--r-sm);
 }
 .project-bar button:focus-visible,
 .project-overview > summary:focus-visible,
 .history-date-shortcuts button:focus-visible {
-  outline: 3px solid var(--accent, #b45309);
+  outline: 3px solid var(--accent, var(--accent));
   outline-offset: 3px;
 }
 .history-date-shortcuts button {

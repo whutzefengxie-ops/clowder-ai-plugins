@@ -28,7 +28,7 @@ body[data-view="workbench"] .app-shell main {
 }
 .record-detail:has([data-flow-canvas]) > .next-action h2 {
   grid-column: 1;
-  font-size: 15px;
+  font-size: var(--t-4);
   margin: 0;
 }
 .record-detail:has([data-flow-canvas]) > .next-action > p {
@@ -51,7 +51,7 @@ body[data-view="workbench"] .app-shell main {
 }
 .run-options > details {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .run-options > details > summary {
   min-height: 30px;
@@ -63,7 +63,7 @@ body[data-view="workbench"] .app-shell main {
 }
 .record-detail:has([data-flow-canvas]) .auto-merge-options {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .auto-merge-options > summary {
   min-height: 32px;
@@ -97,9 +97,9 @@ body[data-view="workbench"] .app-shell main {
   grid-column: 1 / -1;
 }
 .flow-canvas {
-  background: #f7f4ef;
+  background: var(--soft);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r);
   padding: 16px;
   min-width: 0;
 }
@@ -111,12 +111,12 @@ body[data-view="workbench"] .app-shell main {
   margin-bottom: 16px;
 }
 .flow-canvas-heading h2 {
-  font-size: 17px;
+  font-size: var(--t-3);
   margin: 0;
 }
 .flow-canvas-heading p,
 .flow-legend {
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--muted);
   margin: 0;
 }
@@ -137,11 +137,13 @@ body[data-view="workbench"] .app-shell main {
   --flow-tone: var(--muted);
 }
 .flow-phase:not(:last-child)::after {
-  content: "→";
+  content: "";
   position: absolute;
-  right: -16px;
-  top: 23px;
-  color: var(--muted);
+  right: -18px;
+  top: 25px;
+  width: 18px;
+  height: 2px;
+  background: var(--line);
 }
 .flow-phase[data-flow-state="done"] {
   --flow-tone: var(--good);
@@ -156,6 +158,13 @@ body[data-view="workbench"] .app-shell main {
 .flow-phase[data-flow-state="failed"] {
   --flow-tone: var(--bad);
 }
+.flow-phase[data-flow-state="current"] .flow-phase-heading,
+.flow-phase[data-flow-state="waiting-human"] .flow-phase-heading,
+.flow-phase[data-flow-state="waiting-system"] .flow-phase-heading {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--flow-tone) 16%, transparent);
+  transform: scale(1.03);
+  transform-origin: left center;
+}
 .flow-phase-heading {
   display: flex;
   gap: 8px;
@@ -168,13 +177,13 @@ body[data-view="workbench"] .app-shell main {
 }
 .flow-phase-heading b,
 .flow-node b {
-  font-size: 12px;
+  font-size: var(--t-5);
   line-height: 1.5;
 }
 .flow-phase-heading small,
 .flow-node small {
   display: block;
-  font-size: 11px;
+  font-size: var(--t-5);
   margin-top: 4px;
   color: var(--flow-tone);
 }
@@ -209,15 +218,15 @@ body[data-view="workbench"] .app-shell main {
   width: 100%;
   min-height: 44px;
   padding: 5px;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .flow-node b {
-  font-size: 11px;
+  font-size: var(--t-5);
   font-weight: 500;
   line-height: 1.4;
 }
 .flow-node small {
-  font-size: 10px;
+  font-size: var(--t-5);
   margin-top: 2px;
 }
 .flow-node[data-flow-node-status="UNRECORDED"],
@@ -229,17 +238,17 @@ body[data-view="workbench"] .app-shell main {
 }
 .flow-node[data-flow-node-status="FAILED"] {
   --flow-tone: var(--bad);
-  background: #fff0ef;
+  background: var(--soft);
   border-color: var(--bad);
 }
 .flow-node[data-flow-node-status="RUNNING"],
 .flow-node[data-flow-node-status="AUTO_WAIT"] {
   --flow-tone: var(--state-blue);
-  background: #edf5ff;
+  background: var(--soft);
 }
 .flow-node[data-flow-node-status="WAITING"] {
   --flow-tone: var(--state-yellow);
-  background: #fff9e8;
+  background: var(--soft);
 }
 .flow-node[aria-pressed="true"] {
   outline: 2px solid var(--accent);
@@ -251,7 +260,7 @@ body[data-view="workbench"] .app-shell main {
 .flow-inspector {
   min-height: 90px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r);
   background: #fff;
   padding: 12px 16px;
 }
@@ -289,7 +298,7 @@ body[data-view="workbench"] .app-shell main {
   }
   .record-detail:has([data-flow-canvas]) > .next-action {
     display: block;
-    position: fixed;
+    position: static;
     left: 0;
     right: 0;
     bottom: 0;
@@ -319,18 +328,18 @@ body[data-view="workbench"] .app-shell main {
   overflow: visible !important;
   margin: 12px 0 !important;
   border-left: 4px solid var(--accent);
-  background: #fffdf9;
+  background: var(--surface);
   box-shadow: 0 2px 10px rgba(54, 37, 24, .06);
 }
 .next-action.now .now-kicker {
   margin: 0 0 4px;
   color: var(--accent);
-  font-size: 11px;
+  font-size: var(--t-5);
   font-weight: 700;
   letter-spacing: .9px;
   text-transform: uppercase;
 }
-.next-action.now h2 { margin: 0 0 4px; font-size: 19px; }
+.next-action.now h2 { margin: 0 0 4px; font-size: var(--t-2); }
 .next-action.now .now-description { margin: 0 0 10px; color: var(--muted); }
 .next-action.now .run-options {
   display: flex;
@@ -341,8 +350,8 @@ body[data-view="workbench"] .app-shell main {
   border-top: 1px solid var(--line);
 }
 .next-action.now .run-options > details { min-width: 220px; margin: 0; }
-.next-action.now .run-options > details > summary { min-height: 32px; color: var(--muted); font-size: 12px; }
-.workflow-controls-hint { flex: 1 1 260px; color: var(--muted); font-size: 12px; }
+.next-action.now .run-options > details > summary { min-height: 32px; color: var(--muted); font-size: var(--t-5); }
+.workflow-controls-hint { flex: 1 1 260px; color: var(--muted); font-size: var(--t-5); }
 @media (max-width: 768px) {
   .repository-summary { grid-template-columns: 1fr; }
   .repository-summary > div + div { border-left: 0; border-top: 1px solid var(--line); padding: 10px 0 0; }

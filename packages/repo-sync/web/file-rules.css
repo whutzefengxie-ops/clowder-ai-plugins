@@ -10,7 +10,7 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  font-size: 13px;
+  font-size: var(--t-5);
   cursor: pointer;
 }
 .file-choice input {
@@ -48,9 +48,9 @@
 }
 .rule-review {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   padding: 16px;
-  background: #fcfaf7;
+  background: var(--canvas);
   margin: 20px 0;
 }
 .rule-chips {
@@ -63,7 +63,7 @@
 .rule-chips li {
   border: 1px solid var(--line);
   background: white;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   display: flex;
   align-items: center;
   min-width: 0;
@@ -108,7 +108,7 @@
 }
 .baseline-viewer {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   padding: 16px;
   position: sticky;
   top: 16px;

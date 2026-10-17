@@ -24,3 +24,15 @@ test('historical runs and already paused runs do not show a live pause action', 
   assert.equal(actionBar(policy, true, snapshot), '');
   assert.doesNotMatch(actionBar(policy, false, snapshot), /data-action="pause-sync"/);
 });
+
+test('failures are presented as user work instead of a system wait', () => {
+  for (const code of ['BASELINE_MISMATCH', 'PR_CREATE_RESULT_UNKNOWN', 'LEDGER_WRITE_FAILED']) {
+    const html = actionBar(
+      { text: '修正当前错误后恢复', action: 'resume-sync', label: '恢复原同步 →' },
+      false,
+      { state: { active: { id: 'delivery-1', error: { code, message: '需要处理' } } }, config: {} },
+    );
+    assert.match(html, /需要你处理/);
+    assert.doesNotMatch(html, /<p class="now-kicker">系统正在处理<\/p>/);
+  }
+});

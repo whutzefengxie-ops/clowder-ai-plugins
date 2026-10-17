@@ -6,7 +6,7 @@
     margin-bottom: 6px;
   }
   .heading h1 {
-    font-size: 23px;
+    font-size: var(--t-1);
   }
   body[data-view="workbench"] #page-description {
     display: none;
@@ -16,7 +16,7 @@
     margin-bottom: 6px;
   }
   .automation-status h3 {
-    font-size: 16px;
+    font-size: var(--t-3);
   }
   .automation-status {
     display: flex;
@@ -26,7 +26,7 @@
     align-items: center;
   }
   .automation-status > p {
-    font-size: 12px;
+    font-size: var(--t-5);
   }
   #current-activity:empty {
     display: none;
@@ -52,14 +52,14 @@
     margin: 6px 0;
   }
   .delivery-metrics dd {
-    font-size: 17px;
+    font-size: var(--t-3);
   }
   .delivery-metrics dt {
-    font-size: 12px;
+    font-size: var(--t-5);
   }
   .delivery-objects summary,
   .delivery-more > summary {
-    font-size: 12px;
+    font-size: var(--t-5);
     min-height: 28px;
   }
   .delivery-object-details {
@@ -75,7 +75,7 @@
     display: inline-block;
   }
   .detail-head h2 {
-    font-size: 16px;
+    font-size: var(--t-3);
     margin: 0;
   }
   .journey-flow {
@@ -102,7 +102,7 @@
     text-overflow: ellipsis;
   }
   .journey-flow > li > details > summary [data-stage-caption] {
-    font-size: 12px;
+    font-size: var(--t-5);
   }
 }
 .journey-flow [data-stage-state="waiting-system"] {
@@ -110,7 +110,7 @@
 }
 .journey-flow [data-stage-state="waiting-human"] {
   border-color: var(--state-yellow);
-  background: #fffbec;
+  background: var(--soft);
 }
 [data-stage-state="waiting-system"] .stage-mark {
   color: var(--state-blue);
@@ -119,7 +119,7 @@
   color: var(--state-yellow);
 }
 [data-stage-state="failed"] > summary {
-  background: #fff0ef;
+  background: var(--soft);
 }
 .substeps {
   list-style: none;
@@ -157,7 +157,7 @@
   max-height: none;
   overflow: visible;
   margin-top: 16px;
-  border-radius: 12px;
+  border-radius: var(--r);
 }
 .next-action .task-actions {
   display: flex;
@@ -181,7 +181,7 @@ body[data-view="configuration"] #configuration-actions {
     padding-right: 292px;
   }
   body[data-view="workbench"] .next-action {
-    position: fixed;
+    position: static;
     top: 94px;
     right: max(20px, calc((100vw - 2000px) / 2 + 20px));
     width: 248px;
@@ -200,7 +200,7 @@ body[data-view="configuration"] #configuration-actions {
     margin-top: 8px;
   }
   .next-action h2 {
-    font-size: 16px;
+    font-size: var(--t-3);
     margin-bottom: 6px;
   }
   .next-action > p {
@@ -219,7 +219,7 @@ body[data-view="configuration"] #configuration-actions {
   }
   .next-action .auto-merge-choice > p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--t-5);
     flex: 1 1 300px;
   }
 }
@@ -237,7 +237,7 @@ body[data-view="configuration"] #configuration-actions {
     bottom: 0;
   }
   body[data-view="workbench"] .next-action {
-    position: fixed;
+    position: static;
     bottom: 0;
     left: 0;
     right: 0;
@@ -250,7 +250,7 @@ body[data-view="configuration"] #configuration-actions {
     display: block;
   }
   .heading h1 {
-    font-size: 25px;
+    font-size: var(--t-1);
   }
 }
 @media (prefers-reduced-motion: reduce) {

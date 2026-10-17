@@ -26,8 +26,12 @@ export function actionBar(policy, historical, snapshot = {}) {
   const pauseStatus = run?.pauseRequested
     ? '<small class="pause-boundary-note">已设置：本笔完成后暂停，下一笔不会自动开始。</small>'
     : '';
-  const actionLabel = failure?.repair ? '需要处理' : policy.href ? '轮到你了' : '系统正在处理';
-  return `<section class="next-action now" data-policy="${esc(actionSignature(policy, snapshot))}" aria-label="当前操作区"><p class="now-kicker">${actionLabel}</p><h2>${esc(policy.text)}</h2><p class="now-description" role="status">${failure ? '先完成下面的修复动作；原对象和已完成结果会保留。' : policy.href ? '完成后系统会自动回到本轮流程并继续核验。' : '当前阶段会在此处更新，页面刷新后仍可继续。'}${pauseStatus}</p>${failure?.html ?? ''}<div class="task-actions">${failure?.repair || control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${run && run.status !== 'COMPLETE' ? `<details class="auto-merge-options" data-persist-details="merge-options"><summary>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'} · 修改</summary>${autoMergeControls(snapshot)}</details>` : ''}<details data-persist-details="continuation"><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></div></section>`;
+  const code = failure?.code;
+  const passiveFailure = ['GITHUB_AUTH_REQUIRED', 'GITHUB_AUTH_INVALID', 'ISSUE_AUTH_REQUIRED', 'RECORD_NOT_FOUND', 'INVALID_RECORD_QUERY'].includes(code);
+  const needsHuman = Boolean(failure) && !passiveFailure;
+  const actionLabel = needsHuman ? '需要你处理' : (failure || policy.href || policy.action || policy.anchor || policy.secondary) ? '轮到你了' : '系统正在处理';
+  const fallback = failure && !failure.repair ? '<a class="button" href="#flow-inspector" data-reveal="flow-inspector">查看失败步骤 →</a>' : '';
+  return `<section class="next-action now" data-policy="${esc(actionSignature(policy, snapshot))}" aria-label="当前操作区"><p class="now-kicker">${actionLabel}</p><h2>${esc(policy.text)}</h2><p class="now-description" role="status">${failure ? '先完成下面的修复动作；原对象和已完成结果会保留。' : policy.href ? '完成后系统会自动回到本轮流程并继续核验。' : '当前阶段会在此处更新，页面刷新后仍可继续。'}${pauseStatus}</p>${failure?.html ?? ''}<div class="task-actions">${failure?.repair || fallback || control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${run && run.status !== 'COMPLETE' ? `<details class="auto-merge-options" data-persist-details="merge-options"><summary>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'} · 修改</summary>${autoMergeControls(snapshot)}</details>` : ''}<details data-persist-details="continuation"><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></div></section>`;
 }
 function autoMergeControls(snapshot) {
   const run = snapshot.state?.automation;

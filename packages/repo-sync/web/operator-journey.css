@@ -1,7 +1,7 @@
 :root {
   --surface: #fff;
-  --surface-soft: #f3ede4;
-  --focus: #ad632a;
+  --surface-soft: var(--soft);
+  --focus: var(--accent);
 }
 .setup-current {
   max-width: 1060px;
@@ -24,7 +24,7 @@
 [data-mode-cards] {
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r);
   margin-bottom: 24px;
 }
 [data-mode-cards] legend {
@@ -38,7 +38,7 @@
   margin-block: 22px;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r);
 }
 .setup-current form > details {
   border-top: 1px solid var(--line);
@@ -62,7 +62,7 @@
   background: var(--surface-soft);
   border-left: 4px solid var(--bad);
   padding: 16px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   margin-block: 14px;
 }
 .error-guide h3 {
@@ -77,7 +77,7 @@
 }
 [data-copy-result] {
   display: block;
-  font-size: 13px;
+  font-size: var(--t-5);
 }
 .step-timeline {
   list-style: none;
@@ -88,11 +88,11 @@
   border-bottom: 1px solid var(--line);
 }
 .step-timeline > li > summary {
-  font-size: 14px;
+  font-size: var(--t-4);
 }
 .step-timeline time,
 .step-timeline small {
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .stage-body #operation {
   margin-block: 14px;
@@ -156,7 +156,7 @@ textarea {
     gap: 8px;
   }
   .flow.setup b {
-    font-size: 12px;
+    font-size: var(--t-5);
   }
   .setup-current button.primary {
     width: 100%;

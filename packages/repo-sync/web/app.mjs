@@ -156,6 +156,7 @@ function onTask(task) {
   if (view === 'configuration') focusTask(task, snapshot);
 }
 let refreshing = 0;
+let settlingRefreshes = 0;
 async function refresh({ background = false } = {}) {
   const ticket = ++refreshing;
   saveDraft();
@@ -169,6 +170,7 @@ async function refresh({ background = false } = {}) {
   if (ticket !== refreshing) return;
   if (!snapshot && result.state?.active) mobileDetail = true;
   snapshot = result;
+  if (snapshot.state?.active || snapshot.state?.automation) settlingRefreshes = 0;
   projectNavigation.update(result.workspace);
   if (!snapshot.state && snapshot.operation) view = 'configuration';
   await Promise.all([records.load(true), roundView.load()]);
@@ -336,7 +338,10 @@ setInterval(() => {
   if (
     ['RUNNING', 'WAITING_REVIEW'].includes(snapshot?.state?.automation?.status) ||
     (['synchronize', 'resume-sync'].includes(snapshot?.operation?.action) &&
-      snapshot.operation.status === 'RUNNING')
+      snapshot.operation.status === 'RUNNING') ||
+    (snapshot?.operation?.status === 'SUCCEEDED' &&
+      !snapshot.state?.active &&
+      settlingRefreshes++ < 6)
   )
     refresh({ background: true }).catch(() => {});
 }, 5000);

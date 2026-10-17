@@ -20,7 +20,8 @@ test('current PR business summary shows development/main/internal counts and con
   assert.match(html, /展开查看外部 → 内部映射与关单条件/);
   assert.match(html, /这里是业务对象映射；底层命令和重试记录请查看对应阶段的执行详情/);
   assert.match(html, /delivery-object-guide/);
-  assert.match(html, /准备代码与 Issue/);
+  assert.match(html, /准备交付/);
+  assert.ok(html.indexOf('class="next-action now"') < html.indexOf('data-flow-canvas'));
   assert.match(html, /修复读取 &lt;script&gt;/);
   assert.match(html, /内部 #71/);
   assert.ok(html.indexOf('修复读取') < html.indexOf('journey-flow'));

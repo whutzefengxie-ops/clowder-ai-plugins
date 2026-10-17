@@ -92,13 +92,13 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
   const current = preDeliveryPresentation(0, task, policy).current;
   const version = snapshot.config.mode === 'version';
   const names = [
-    '确认同步范围',
-    '准备代码与 Issue',
-    '发布分支与创建 PR',
-    '平台审核与合入',
-    '核验与登记接收',
+    '确认范围',
+    '准备交付',
+    '发布 PR',
+    '审核合入',
+    '核验接收',
   ];
-  return `${policy?.outcome === 'cancelled' ? `<p class="cancelled-notice">上一笔已撤销，未合入；接受基线未变。<button type="button" data-record="${esc(snapshot.state.automation.restartOf)}">查看已撤销记录</button></p>` : ''}${panorama(snapshot, null, false)}<section class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
+  return `${policy?.outcome === 'cancelled' ? `<p class="cancelled-notice">上一笔已撤销，未合入；接受基线未变。<button type="button" data-record="${esc(snapshot.state.automation.restartOf)}">查看已撤销记录</button></p>` : ''}${actionBar(policy, false, snapshot)}${panorama(snapshot, null, false)}<section id="flow-inspector" class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
     .map((name, index) => {
       const stage = index + 1;
       const presentation = preDeliveryPresentation(stage, task, policy);
@@ -108,7 +108,7 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
       const detail = stageSummary(stage, null, task, false, snapshot, status);
       return `<li><details data-stage="${stage}" data-stage-state="${status}"><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${presentation.mark}</span><b>${stage} · ${name}</b><span data-stage-caption>${presentation.caption}</span><small data-stage-detail>${esc(detail)}</small></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
     })
-    .join('')}</ol></section>${policy ? actionBar(policy, false, snapshot) : ''}`;
+    .join('')}</ol></section>`;
 }
 
 function referenceRemedy(delivery) {

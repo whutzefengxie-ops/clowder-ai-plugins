@@ -20,7 +20,7 @@
   margin: 6px 8px 6px 0;
 }
 .transfer-settings input[type="file"] {
-  font-size: 13px;
+  font-size: var(--t-5);
 }
 .transfer-settings [data-transfer-feedback]:empty {
   display: none;
@@ -47,12 +47,12 @@
   border-bottom: 1px solid var(--line);
 }
 .transfer-facts dt {
-  font-size: 12px;
+  font-size: var(--t-5);
   color: var(--accent);
 }
 .transfer-facts dd {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-5);
   overflow-wrap: anywhere;
 }
 .transfer-steps {
@@ -82,14 +82,14 @@
 }
 .transfer-steps button {
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .transfer-auth .card {
   margin: 14px 0;
 }
 .transfer-auth #issue-auth {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r);
   padding: 20px;
 }
 .transfer-check-list {

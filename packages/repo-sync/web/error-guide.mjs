@@ -100,6 +100,7 @@ export function failureSummary(snapshot) {
     ? '内部 PR 已登记，恢复将回读原 PR。'
     : 'PR 创建状态需按原意图回读确认；不会因本次报错重复创建。';
   return {
+    code: error.code,
     repair,
     html: `<div class="failure-summary" role="alert"><b>× ${esc(title)}</b><p>${esc(error.message)}</p><small>${objects} ${esc(next)}</small></div>`,
   };

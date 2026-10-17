@@ -47,10 +47,20 @@ function target(snapshot, tags) {
     task &&
     (['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task.status) ||
       task.persistence?.status === 'FAILED');
+  if (state.active)
+    return workflow(snapshot, {
+      delivery: state.active,
+      tasks: [],
+      configurations: [],
+      issues: [],
+      missingTasks: [],
+      taskPage: {},
+      events: [],
+    }, false);
   if (snapshot.state.automation && snapshot.state.automation.status !== 'COMPLETE')
     return preDeliveryFlow(snapshot, nextAction(snapshot, null));
   if (pending)
-    return '<section class="card"><h2>原操作需要处理</h2><div id="operation"></div><div id="error-slot"></div></section>';
+    return preDeliveryFlow(snapshot, nextAction(snapshot, state.active ?? null));
   const accepted =
     state.deliveryCount > 0
       ? `<h3>当前已接收版本</h3><p>${esc(state.accepted.tag ?? '已接收提交')} · 外部 ${sha(state.accepted.upstream)} → 内部 ${sha(state.accepted.internal)}</p>`

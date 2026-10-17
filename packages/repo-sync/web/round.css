@@ -1,7 +1,7 @@
 [data-round-slot] {
   margin-bottom: 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r);
   padding: 14px 18px;
   background: #fff;
 }
@@ -13,24 +13,24 @@
   gap: 8px;
 }
 .round-heading h2 {
-  font-size: 17px;
+  font-size: var(--t-3);
   margin: 0;
 }
 .round-heading h2 span {
   color: var(--accent);
-  font-size: 14px;
+  font-size: var(--t-4);
   margin-left: 10px;
 }
 .round-heading p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--t-5);
 }
 .round-target {
   display: flex;
   gap: 8px 14px;
   flex-wrap: wrap;
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--t-5);
   align-items: center;
 }
 .round-target code {
@@ -46,11 +46,11 @@
 .round-filter button {
   padding: 5px 12px;
   min-height: 32px;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .round-filter [aria-pressed="true"] {
   border-color: var(--accent);
-  background: #fff3e7;
+  background: var(--soft);
 }
 .round-items {
   list-style: none;
@@ -66,14 +66,14 @@
   gap: 8px 14px;
   padding: 8px 0;
   border-top: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .round-items > li > div {
   flex: 1 1 340px;
   min-width: 0;
 }
 .round-items b {
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .round-items small {
   display: block;
@@ -83,10 +83,10 @@
 .round-items button {
   padding: 6px 10px;
   min-height: 34px;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .round-items [data-round-status="current"] {
-  background: #edf5ff;
+  background: var(--soft);
 }
 .round-pages {
   display: flex;
@@ -103,7 +103,7 @@
 .round-pages button {
   padding: 4px 10px;
   min-height: 30px;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 @media (min-width: 769px) {
   [data-round-slot] {
@@ -127,7 +127,7 @@
     margin: 0;
     grid-column: 1;
     align-self: center;
-    font-size: 11px;
+    font-size: var(--t-5);
   }
   .round-target code {
     max-width: 260px;
@@ -219,9 +219,9 @@
   line-height: 1.5;
 }
 [data-edit-note]:not([hidden]) {
-  color: #975400;
+  color: var(--wait);
   padding: 8px;
-  background: #fff8e7;
+  background: var(--soft);
 }
 .mode-cards {
   display: grid;
@@ -232,13 +232,13 @@
   flex-direction: row;
   gap: 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r);
   padding: 16px;
   cursor: pointer;
 }
 .mode-card:has(:checked) {
   border-color: var(--accent);
-  background: #edf5ff;
+  background: var(--soft);
 }
 .mode-card input {
   flex: 0 0 auto;
@@ -251,14 +251,14 @@
 .flow-phase-summary {
   min-height: 42px;
   margin: 8px 2px;
-  font-size: 11px;
+  font-size: var(--t-5);
   line-height: 1.6;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
 .flow-child-disclosure {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-5);
 }
 .flow-child-disclosure > summary {
   padding: 7px 2px;
@@ -270,7 +270,7 @@
   margin: 12px 0;
 }
 .project-bar > p {
-  font-size: 11px;
+  font-size: var(--t-5);
   color: var(--muted);
 }
 .setup-current > form > .primary {
@@ -332,13 +332,13 @@ form .mode-cards .mode-card {
     gap: 2px 10px;
   }
   .round-items small {
-    font-size: 10px;
+    font-size: var(--t-5);
     line-height: 1.4;
   }
   .round-pages {
     min-height: 16px;
   }
   .round-pages small {
-    font-size: 10px;
+    font-size: var(--t-5);
   }
 }

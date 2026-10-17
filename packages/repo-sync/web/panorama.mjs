@@ -5,7 +5,7 @@ import { currentStage, preDeliveryPresentation, stagePresentation } from './flow
 import { projectStep } from './step-plan.mjs';
 import { esc, stageOf } from './ui.mjs';
 
-const names = ['确认同步范围', '准备代码与 Issue', '发布分支与创建 PR', '平台审核与合入', '核验与登记接收'];
+const names = ['确认范围', '准备交付', '发布 PR', '审核合入', '核验接收'];
 const marks = {
   DONE: '✓',
   RUNNING: '◌',
