@@ -17,6 +17,8 @@ test('current PR business summary shows development/main/internal counts and con
   assert.match(html, /main 落地提交[\s\S]*1/);
   assert.match(html, /内部候选提交[\s\S]*18/);
   assert.match(html, /关联 Issue[\s\S]*1/);
+  assert.match(html, /展开查看外部 → 内部映射与关单条件/);
+  assert.match(html, /这里是业务对象映射；底层命令和重试记录请查看对应阶段的执行详情/);
   assert.match(html, /修复读取 &lt;script&gt;/);
   assert.match(html, /内部 #71/);
   assert.ok(html.indexOf('修复读取') < html.indexOf('journey-flow'));

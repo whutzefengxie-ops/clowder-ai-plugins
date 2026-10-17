@@ -7,6 +7,7 @@ import { automaticPolicy, automationBanner } from '../web/automation-view.mjs';
 import { preDeliveryFlow } from '../web/automation-view.mjs';
 import { workflow } from '../web/workflow.mjs';
 import { sourceTargetForm } from '../web/source-target.mjs';
+import { continuationControls } from '../web/continuation-view.mjs';
 import { esc, sha } from '../web/ui.mjs';
 import { projectStep } from '../web/step-plan.mjs';
 import { nextAction } from '../web/action-policy.mjs';
@@ -126,6 +127,10 @@ test('paused between deliveries stays at completed verification and has an expli
   assert.match(flow, /name="continuation"/);
   assert.match(flow, /data-action="resume-sync"/);
   assert.match(sourceTargetForm(snapshot.state, [], esc, sha), /name="continuation"/);
+});
+test('completed or missing rounds explain why continuation controls are unavailable', () => {
+  assert.match(continuationControls({ state: {} }), /没有进行中的同步轮次/);
+  assert.match(continuationControls({ state: { automation: { status: 'COMPLETE' } } }), /本轮同步已完成/);
 });
 test('task admission accepts and validates the restricted continuation controls', () => {
   const base = { action: 'configure-continuation', runId: 'a'.repeat(32), requestId: 'b'.repeat(32) };

@@ -44,20 +44,53 @@
 }
 .delivery-object-details {
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fcfaf7;
+  overflow: hidden;
 }
-.delivery-object-details > summary {
+.delivery-overview .delivery-object-details > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 12px 14px;
+  cursor: pointer;
   font-weight: 600;
+}
+.delivery-object-details[open] > summary {
+  background: #f3ede4;
+  border-bottom: 1px solid var(--line);
+}
+.delivery-object-title {
+  overflow-wrap: anywhere;
+}
+.delivery-object-details > summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.delivery-object-guide {
+  margin: 0;
+  padding: 10px 14px 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 .delivery-object-details .delivery-object-list {
   max-height: 360px;
   overflow: auto;
 }
 .delivery-object-list {
-  padding-left: 20px;
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px 12px;
 }
 .delivery-object-list li {
-  padding: 6px 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
+}
+.delivery-object-list li:last-child {
+  border-bottom: 0;
 }
 .delivery-object-list li p {
   font-size: 13px;

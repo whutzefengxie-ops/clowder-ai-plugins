@@ -4,7 +4,10 @@ export function continuationField(value = 'automatic') {
 }
 export function continuationControls(snapshot) {
   const run = snapshot.state?.automation;
-  if (!run || run.status === 'COMPLETE') return '';
+  if (!run)
+    return '<section class="continuation-controls"><h4>本轮接收节奏</h4><p>当前没有进行中的同步轮次；选择目标并开始同步后，可在这里设置每笔完成后的处理方式。</p></section>';
+  if (run.status === 'COMPLETE')
+    return '<section class="continuation-controls"><h4>本轮接收节奏</h4><p>本轮同步已完成。需要设置接收节奏时，请选择新的同步目标并开始新一轮。</p></section>';
   const busy =
     ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(snapshot.operation?.status) ||
     snapshot.operation?.persistence?.status === 'FAILED';

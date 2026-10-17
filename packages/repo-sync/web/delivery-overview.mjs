@@ -18,8 +18,8 @@ export function deliveryOverview(snapshot, _record, d, historical) {
     ${d.source.developmentReplay ? `<p class="delivery-note">已展开上游 squash：${development} 条 PR 开发提交 → 内部逐条重放；main 的 ${d.commits.length} 条落点单独记录接受对应。</p>` : oldSquash ? '<p class="record-gap">此候选沿用上游压缩后的 main 历史，未展开原 PR 开发提交。需要逐条重放时，先放弃未合入的旧 PR，再重新同步。</p>' : ''}
     ${d.supersedes ? `<p>本笔替代已撤销同步 <code>${esc(d.supersedes)}</code>；旧 PR 和历史保留。</p>` : ''}
     ${issueReferenceNotes(d.source)}
-    <div class="delivery-objects"><details class="delivery-object-details" data-persist-details="issues"><summary>关联 Issue（${d.issues?.length ?? 0}） · 查看具体 Issue</summary>${rowsForIssues(d, snapshot, historical, version)}</details>
-    <details class="delivery-object-details" data-persist-details="commits"><summary>${d.source.developmentReplay ? '逐条开发提交与内部 SHA' : '本笔提交与内部 SHA'}（${rows.length}） · 查看 SHA 对应</summary>${rowsForCommits(d, rows, mappings)}</details></div>
+    <div class="delivery-objects"><details class="delivery-object-details" data-persist-details="issues"><summary><span class="delivery-object-title">关联 Issue · ${d.issues?.length ?? 0} 个</span><small>${issueGuide(d.issues?.length ?? 0, version)}</small></summary><p class="delivery-object-guide">展开后查看外部 Issue、内部映射、关联关系和合入后的关单条件。</p>${rowsForIssues(d, snapshot, historical, version)}</details>
+    <details class="delivery-object-details" data-persist-details="commits"><summary><span class="delivery-object-title">${d.source.developmentReplay ? '逐条开发提交与内部 SHA' : '本笔提交与内部 SHA'} · ${rows.length} 条</span><small>${rows.length ? '展开后查看外部 SHA、内部 SHA 和提交标题。' : '提交清单尚未冻结。'}</small></summary><p class="delivery-object-guide">这里是业务对象映射；底层命令和重试记录请查看对应阶段的执行详情。</p>${rowsForCommits(d, rows, mappings)}</details></div>
     <details class="delivery-more" data-persist-details="source-actions"><summary>更多来源与操作</summary>${d.source.number ? link(`${d.source.url}/commits`, '查看上游 PR 的完整开发提交 ↗') : ''}
     ${!historical && d.source.number && development === undefined ? '<button type="button" data-action="inspect-delivery-source">读取原 PR 开发提交数量与清单</button>' : ''}
     ${cancellationForm(d, historical)}</details></section>`;
@@ -46,6 +46,10 @@ function rowsForCommits(d, rows, mappings) {
       return `<li><b>${esc(detail?.subject ?? '提交标题未记录')}</b><p>外部 ${shortSha(source)}<br>内部 ${mapped ? shortSha(mapped.internal) : d.commitPolicy?.strategy === 'rewrite' ? '待重写 / 未记录' : shortSha(source)}</p></li>`;
     })
     .join('')}</ul>`;
+}
+function issueGuide(count, version) {
+  if (version) return '版本模式不搬运 Issue。';
+  return count ? '展开查看外部 → 内部映射与关单条件。' : '本笔没有关联 Issue；展开查看原因。';
 }
 function link(url, text) {
   return /^https?:\/\//.test(url ?? '')
