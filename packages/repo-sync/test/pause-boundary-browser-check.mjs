@@ -9,32 +9,10 @@ import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { continuousRepositories } from './continuous-fixtures.mjs';
+import { openStage } from './journey-controls.mjs';
+import { gate, until } from './journey-gates.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
-function gate(label) {
-  let reached = false,
-    release;
-  const blocked = new Promise((done) => {
-    release = done;
-  });
-  return {
-    entered: () => until(() => reached, Boolean, `${label} must be reached`),
-    release,
-    wait: () => {
-      reached = true;
-      return blocked;
-    },
-  };
-}
-async function until(read, accept, message) {
-  const deadline = Date.now() + 30000;
-  let value;
-  do {
-    value = await read();
-    if (accept(value)) return value;
-    await new Promise((done) => setTimeout(done, 200));
-  } while (Date.now() < deadline);
-  assert.fail(`${message}; last status: ${value?.automation?.status ?? value?.operation?.status ?? 'unknown'}`);
-}
+
 const f = await continuousRepositories(),
   platform = await codehubPlatform(f);
 await writeFile(join(f.source, 'core.txt'), 'third direct delivery');
@@ -140,7 +118,7 @@ const steps = () =>
       ),
     );
 async function fifthStage(expectedOpen = false) {
-  await page.locator('[data-stage="5"][data-stage-state="current"]').waitFor({ timeout: 30000 });
+  await page.locator('[data-flow-stage="5"][data-flow-state="current"]').waitFor({ timeout: 30000 });
   assert.notEqual(await page.locator('[data-stage="2"]').getAttribute('data-stage-state'), 'current');
   assert.equal(await page.locator('[data-stage="2"]').evaluate((node) => node.open), false);
   assert.equal(await page.locator('[data-stage="5"]').evaluate((node) => node.open), expectedOpen);
@@ -210,7 +188,7 @@ try {
   );
   await page.reload();
   await page.getByText(/已设置：本笔完成后暂停/).waitFor();
-  await page.locator('.next-action details > summary').click();
+  await page.locator('.next-action .run-options > details:not(.auto-merge-options) > summary').click();
   const continuation = page.locator('form[data-form="configure-continuation"]');
   await continuation.locator('[name="continuation"]').selectOption('after-each');
   await continuation.getByRole('button').click();
@@ -227,7 +205,7 @@ try {
   const runId = configured.automation.id;
   const firstStage = page.locator('[data-stage="1"]');
   assert.equal(await firstStage.evaluate((node) => node.open), false);
-  await firstStage.locator(':scope > summary').click();
+  await openStage(page, await firstStage.getAttribute('data-stage'));
   await page.waitForTimeout(5500);
   assert.equal(
     await firstStage.evaluate((node) => node.open),
@@ -241,7 +219,7 @@ try {
   assert.equal(await firstStage.evaluate((node) => node.open), true);
   assert.deepEqual(await steps(), planned);
   const mergeStage = page.locator('[data-stage="5"]');
-  await mergeStage.locator(':scope > summary').click();
+  await openStage(page, await mergeStage.getAttribute('data-stage'));
   fetchGate.release();
   await verification.entered();
   await page.locator('[data-stage="5"] [data-step-key="merge-verify"][data-step-state="current"]').waitFor();
@@ -272,7 +250,7 @@ try {
     (current) => current.active?.source.number === 2 && Boolean(current.active.prUrl),
     'explicit continue starts exactly PR 2',
   );
-  await page.getByRole('heading', { name: /PR #2 · 等待审核合入/ }).waitFor({ timeout: 30000 });
+  await page.locator('[data-round-current]').filter({ hasText: 'PR #2' }).waitFor({ timeout: 30000 });
   assert.equal(
     await page.locator('[data-stage="1"]').evaluate((node) => node.open),
     false,

@@ -42,7 +42,7 @@ try {
   const completedTasks = (await receiver.status()).deliveries[0].taskIds.slice();
   assert.equal(accepted.tag, 'v2.0.0');
   await openHistory(page);
-  await page.locator(`[data-record="${active.id}"]`).click();
+  await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   assert.equal(await page.locator('.record-detail [data-action]').count(), 0);
   await page.locator('.delivery-boundary > summary').click();
@@ -61,7 +61,7 @@ try {
     if (width <= 768) {
       await page.getByRole('button', { name: '返回同步记录' }).click();
       await openHistory(page);
-      await page.locator(`[data-record="${active.id}"]`).click();
+      await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
     }
     if ([1440, 390].includes(width))
       await page.screenshot({
@@ -108,15 +108,15 @@ try {
     return originalChecks(head);
   };
   await page.getByRole('button', { name: '同步到所选版本 →' }).click();
-  await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
+  await page.locator('[data-flow-stage="2"][data-flow-state="failed"]').waitFor({ timeout: 30000 });
   const failedCandidate = (await receiver.status()).active.candidate;
   await openHistory(page);
-  await page.locator(`[data-record="${active.id}"]`).click();
+  await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
-  await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
+  await page.locator('[data-flow-stage="2"][data-flow-state="failed"]').waitFor({ timeout: 30000 });
   await page.reload();
-  await page.locator('[data-stage="2"][data-stage-state="failed"]').waitFor({ timeout: 30000 });
-  assert.equal(await page.locator('[data-stage="2"][data-stage-state="failed"]').count(), 1);
+  await page.locator('[data-flow-stage="2"][data-flow-state="failed"]').waitFor({ timeout: 30000 });
+  assert.equal(await page.locator('[data-flow-stage="2"][data-flow-state="failed"]').count(), 1);
   assert.equal((await receiver.status()).active.candidate, failedCandidate);
   assert.equal(await page.locator('[data-form="resolve"], [name="mergePaths"]').count(), 0);
   const checks = receiver.git.checks.bind(receiver.git);
@@ -132,7 +132,7 @@ try {
   await page.getByRole('button', { name: '恢复原同步 →' }).click();
   await page.waitForFunction(() => document.querySelector('[data-operation-state="RUNNING"]'));
   await openHistory(page);
-  await page.locator(`[data-record="${active.id}"]`).click();
+  await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   assert.equal(await page.locator('.record-list input[name="q"]').isDisabled(), false);
   for (let retry = 0; retry < 100 && !checking; retry++) await new Promise((done) => setTimeout(done, 100));

@@ -244,7 +244,7 @@ try {
     assert.equal(platform.state.creates.issues, 1);
     assert.equal(platform.state.creates.prs, number);
     if (number === 1) {
-      await page.locator('.next-action details > summary').click();
+      await page.locator('.next-action .run-options > details:not(.auto-merge-options) > summary').click();
       const continuation = page.locator('.next-action [data-form="configure-continuation"]');
       await continuation.locator('[name="continuation"]').selectOption('after-each');
       await continuation.getByRole('button', { name: '保存后续处理方式', exact: true }).click();

@@ -1,13 +1,20 @@
 const activeCI = new Set(['created', 'pending', 'running', 'preparing', 'waiting_for_resource', 'scheduled']);
 const human = new Set(['not_approved', 'discussions_not_resolved', 'draft_status', 'requested_changes']);
-const checking = new Set(['checking', 'unchecked', 'approvals_syncing', 'ci_still_running', 'ci_must_pass']);
+const checking = new Set(['checking', 'approvals_syncing', 'ci_still_running', 'ci_must_pass']);
 export function mergeReadiness(detail, head) {
-  const status = detail.detailed_merge_status ?? detail.merge_status;
+  const status = detail.detailed_merge_status || detail.merge_status;
   const pipeline = detail.head_pipeline ?? detail.pipeline;
   const wait = (reason, manual = false) => ({ kind: 'wait', reason, manual });
   if (detail.has_conflicts === true || ['conflict', 'cannot_be_merged'].includes(status))
     return { kind: 'blocked', reason: 'PR 存在冲突或平台明确禁止合入' };
-  if (detail.draft === true || detail.work_in_progress === true || human.has(status))
+  if (
+    detail.draft === true ||
+    detail.work_in_progress === true ||
+    human.has(status) ||
+    detail.blocking_discussions_resolved === false ||
+    detail.approvals_left > 0 ||
+    detail.approved === false
+  )
     return wait('等待人工审批、解除草稿或处理讨论', true);
   if (pipeline?.sha && pipeline.sha !== head) return wait('当前 CI 不属于冻结候选，等待本次提交的检查');
   if (pipeline && ['failed', 'canceled'].includes(pipeline.status))
@@ -18,9 +25,16 @@ export function mergeReadiness(detail, head) {
   if (pipeline?.status === 'manual') return wait('等待人工触发 CI 任务', true);
   if (activeCI.has(pipeline?.status)) return wait(`等待 CI · ${pipeline.status}`);
   if (checking.has(status)) return wait('等待平台完成 CI 或可合入性检查');
-  const mergeable = ['mergeable', 'can_be_merged'].includes(status);
+  // CodeHub may leave this lazy status unchecked; the SHA-protected merge endpoint remains authoritative.
+  const mergeable = ['mergeable', 'can_be_merged', 'unchecked'].includes(status);
   if (pipeline?.status === 'success' && pipeline.sha === head && mergeable)
-    return { kind: 'ready', reason: '本次候选 CI 与平台合入条件通过' };
+    return {
+      kind: 'ready',
+      reason:
+        status === 'unchecked'
+          ? '本次候选 CI 通过，交由平台在合入时校验最终规则'
+          : '本次候选 CI 与平台合入条件通过',
+    };
   return wait('平台尚未提供当前候选的完整合入条件；可打开原 PR 核对');
 }
 

@@ -7,7 +7,7 @@ import { createConnection } from '../src/connections.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { gitPrFixture } from './git-pr-fixtures.mjs';
-import { openHistory } from './journey-controls.mjs';
+import { openHistory, openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await gitPrFixture(),
@@ -93,7 +93,7 @@ try {
   assert.equal(await page.locator('.primary:visible').count(), 1);
   const active = (await receiver.status()).active;
   assert.ok(active.prUrl.endsWith('/501'));
-  await page.locator('[data-stage="1"] > summary').click();
+  await openStage(page, 1);
   await openHistory(page);
   await page.locator('.record-list input[name="q"]').fill('v2');
   await page.locator('.record-list input[name="q"]').evaluate((element) => element.setSelectionRange(1, 1));

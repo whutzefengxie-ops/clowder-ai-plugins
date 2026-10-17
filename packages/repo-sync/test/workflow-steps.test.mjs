@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { attempts } from '../web/attempts.mjs';
 import { preDeliveryFlow } from '../web/automation-view.mjs';
+import { panorama } from '../web/panorama.mjs';
 import { workflow } from '../web/workflow.mjs';
 
 const stamp = '2026-10-15T10:00:00Z';
@@ -63,6 +64,43 @@ const snapshot = {
   state: { active: delivery, issues: {} },
   platform: {},
 };
+
+test('successful observation calls do not claim merge or acceptance while the platform PR is still open', () => {
+  const waiting = {
+    ...delivery,
+    mode: 'continuous',
+    issues: [{ sourceId: 'issue-1' }],
+    status: 'WAITING_APPROVAL',
+    prUrl: 'https://codehub.example/core/pull/1',
+  };
+  const operation = {
+    ...task('1'.repeat(32), 'SUCCEEDED', 'DONE'),
+    steps: ['merge-observe', 'merge-verify', 'issue-sync'].map((key, i) => ({
+      id: key,
+      key,
+      stage: i ? 5 : 4,
+      status: 'DONE',
+      startedAt: stamp,
+      deliveryId: waiting.id,
+    })),
+  };
+  const state = { ...snapshot, state: { active: waiting, automation: { autoMerge: true } }, operation };
+  const selected = { ...record([operation]), delivery: waiting };
+  assert.match(
+    attempts(4, selected, operation, false, state),
+    /data-step-key="merge-observe"[^>]*data-operation-state="AUTO_WAIT"/,
+  );
+  for (const key of ['merge-verify', 'issue-state']) {
+    assert.match(
+      attempts(5, selected, operation, false, state),
+      new RegExp(`data-step-key="${key}"[^>]*data-operation-state="PENDING"`),
+    );
+    assert.match(
+      panorama(state, selected, false),
+      new RegExp(`data-flow-node="${key}"[^>]*data-flow-node-status="PENDING"`),
+    );
+  }
+});
 
 test('each real substep has one current row with retries folded underneath and the latest state on that row', () => {
   const first = task('1'.repeat(32), 'FAILED', 'FAILED');

@@ -7,6 +7,7 @@ import { git } from '../src/process.mjs';
 import { createProjectWorkspace } from '../src/projects.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { repositories } from './fixtures.mjs';
+import { openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 import { inspectAndActivate } from './setup-journey-helpers.mjs';
 
@@ -109,7 +110,7 @@ try {
   const cb = await projects.connection(id),
     rb = await cb.current();
   const prStage = page.locator('[data-stage="3"]');
-  if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
+  if (!(await prStage.evaluate((node) => node.open))) await openStage(page, await prStage.getAttribute('data-stage'));
   await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });
   await rb.linkPr('https://internal.example/other/pull/1');
   await page.reload();
@@ -124,14 +125,14 @@ try {
   assert.equal(await page.getByLabel('当前同步项目').inputValue(), id);
   await otherTab.close();
   await page.locator('.history-disclosure > summary').click();
-  await page.locator(`[data-record="${completed.id}"]`).click();
+  await page.locator(`.history-disclosure [data-record="${completed.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   await page.locator('.delivery-boundary > summary').click();
   assert.ok((await page.locator('.record-detail').innerText()).includes(b.u2));
   await page.locator('.project-sidebar-list [data-project-enter="default"]').click();
   await page.getByRole('heading', { name: '原操作需要处理', exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.has('record'), false);
-  assert.equal(await page.locator(`[data-record="${completed.id}"]`).count(), 0);
+  assert.equal(await page.locator(`.history-disclosure [data-record="${completed.id}"]`).count(), 0);
   assert.equal((await ra.status()).accepted.upstream, a.u0);
   release();
   for (let count = 0; count < 100; count++) {

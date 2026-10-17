@@ -7,7 +7,7 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { configuredReceiver } from '../src/settings.mjs';
-import { openHistory } from './journey-controls.mjs';
+import { openHistory, openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
@@ -113,7 +113,7 @@ try {
         await page.setViewportSize({ width: 1440, height: 1100 });
       }
       const prStage = page.locator('[data-stage="3"]');
-      if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
+      if (!(await prStage.evaluate((node) => node.open))) await openStage(page, await prStage.getAttribute('data-stage'));
       await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
       assert.equal(await page.locator('[data-form="issue"]').count(), 0);
       assert.equal(await page.locator('[data-form="receipts"]').count(), 0);

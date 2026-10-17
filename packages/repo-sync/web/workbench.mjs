@@ -1,5 +1,5 @@
 import { nextAction } from './action-policy.mjs';
-import { automationBanner, preDeliveryFlow } from './automation-view.mjs';
+import { preDeliveryFlow } from './automation-view.mjs';
 import { firstUse } from './connections.mjs';
 import { boundaryDeliveryId } from './flow-stage.mjs';
 import { githubAuthForm } from './github-auth.mjs';
@@ -39,7 +39,7 @@ export function workbench(snapshot, records, tags, _mobileDetail) {
       : historical
         ? '<p role="status">正在读取所选记录…</p>'
         : target(snapshot, tags);
-  return `${summary}${historical ? '<p>正在查看历史；当前轮次继续由后台处理，返回当前同步后才能操作。</p>' : automationBanner(snapshot)}<p id="current-activity" role="status"></p><div class="journey-layout"><details class="history-disclosure" data-persist-details="history" ${historical ? 'open' : ''}><summary>历史记录 · ${records.page?.total ?? state.deliveryCount ?? state.deliveries?.length ?? 0} 笔</summary>${recordList(records, state.active)}</details><section class="record-detail" aria-label="本笔同步详情"><button type="button" class="mobile-back" data-record-back>返回同步记录</button>${detail}</section></div>`;
+  return `${summary}${historical ? '<p>正在查看历史；当前轮次继续由后台处理，返回当前同步后才能操作。</p>' : ''}<p id="current-activity" role="status"></p><div class="journey-layout"><details class="history-disclosure" data-persist-details="history" ${historical ? 'open' : ''}><summary>历史记录 · ${records.page?.total ?? state.deliveryCount ?? state.deliveries?.length ?? 0} 笔</summary>${recordList(records, state.active)}</details><section class="record-detail" aria-label="本笔同步详情"><button type="button" class="mobile-back" data-record-back>返回同步记录</button>${detail}</section></div>`;
 }
 function target(snapshot, tags) {
   const { state, config } = snapshot;

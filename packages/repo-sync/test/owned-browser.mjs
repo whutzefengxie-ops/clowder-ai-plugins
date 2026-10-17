@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { appendFile, readFile } from 'node:fs/promises';
 // Test-only lifecycle evidence; never print page contents, credentials or configuration.
 export async function traceLifecycle(label, operation) {
   console.log(`[browser-test] ${label}: start`);
@@ -32,8 +34,36 @@ export async function launchOwnedBrowser(browserType, options = {}) {
     throw error;
   }
   let closing;
+  async function record(status) {
+    if (!process.env.REPO_SYNC_TEST_LEDGER) return;
+    const packageBytes = await readFile(new URL('../package.json', import.meta.url));
+    await appendFile(
+      process.env.REPO_SYNC_TEST_LEDGER,
+      `${JSON.stringify({
+        task: 'repo-sync PR #77',
+        owner: 'Codex regression',
+        component: 'test-browser',
+        status,
+        test: process.argv[1],
+        sourceCommit: process.env.REPO_SYNC_SOURCE_COMMIT,
+        sourceHash: process.env.REPO_SYNC_SOURCE_HASH,
+        packageVersion: JSON.parse(packageBytes).version,
+        packageHash: createHash('sha256').update(packageBytes).digest('hex'),
+        executable: child.spawnfile,
+        programDirectory: process.cwd(),
+        dataDirectory: process.env.TEMP,
+        controllerPid: process.pid,
+        pid: child.pid,
+        purpose: 'isolated synthetic browser acceptance',
+        retention: 'evidence/data retained; owned browser exits in finally',
+        time: new Date().toISOString(),
+      })}\n`,
+    );
+  }
+  await record('running');
   return {
     browser,
+    processId: child.pid,
     close() {
       closing ??= (async () => {
         releaseExitedPipes();
@@ -51,6 +81,7 @@ export async function launchOwnedBrowser(browserType, options = {}) {
         }
         if (child.exitCode === null && child.signalCode === null)
           throw new Error('Owned test browser cleanup returned before its process exited');
+        await record('stopped');
       })();
       return closing;
     },

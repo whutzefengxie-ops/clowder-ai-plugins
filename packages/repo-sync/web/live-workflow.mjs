@@ -2,7 +2,8 @@ import { nextAction } from './action-policy.mjs';
 import { actionBar } from './actionbar.mjs';
 import { attempts, stageSummary } from './attempts.mjs';
 import { restoreExpansion } from './expansion.mjs';
-import { currentStage, stagePresentation } from './flow-stage.mjs';
+import { currentStage, preDeliveryPresentation, stagePresentation } from './flow-stage.mjs';
+import { updatePanorama } from './panorama.mjs';
 
 export function updateLiveWorkflow(content, snapshot, record, task, selected, key) {
   const nodes = content.querySelectorAll('[data-attempts-stage]');
@@ -18,18 +19,19 @@ export function updateLiveWorkflow(content, snapshot, record, task, selected, ke
   for (const node of content.querySelectorAll('[data-attempt]'))
     if (opened.has(node.dataset.attempt)) node.open = true;
   const policy = nextAction({ ...snapshot, operation: task }, delivery);
-  const current = currentStage(delivery, policy);
+  const current = delivery ? currentStage(delivery, policy) : preDeliveryPresentation(0, task, policy).current;
   const taskOwns = !delivery || task?.deliveryId === delivery.id || task?.deliveryIds?.includes(delivery.id);
-  const failed =
-    taskOwns && (task?.status === 'FAILED' || task?.persistence?.status === 'FAILED') ? policy.stage : 0;
+  const failed = taskOwns && task?.persistence?.status === 'FAILED' ? 5 :
+    taskOwns && task?.status === 'FAILED' ? task.steps?.findLast((s) => s.status === 'FAILED')?.stage ?? policy.stage :
+    delivery?.error ? policy.stage : 0;
   for (const node of content.querySelectorAll('[data-stage]')) {
-    const state = stagePresentation(
+    const state = delivery ? stagePresentation(
       Number(node.dataset.stage),
       delivery,
       current,
       failed,
       snapshot.state?.automation,
-    );
+    ) : preDeliveryPresentation(Number(node.dataset.stage), task, policy);
     node.dataset.stageState = state.state;
     const mark = node.querySelector(':scope > summary .stage-mark');
     if (mark) {
@@ -57,5 +59,6 @@ export function updateLiveWorkflow(content, snapshot, record, task, selected, ke
   const errorSlot = content.querySelector('#error-slot');
   content.querySelector(`[data-stage="${current}"] .stage-body`)?.append(...(errorSlot ? [errorSlot] : []));
   restoreExpansion(content, snapshot, selected, key, delivery);
+  updatePanorama(content, snapshot, record, historical, key);
   return true;
 }

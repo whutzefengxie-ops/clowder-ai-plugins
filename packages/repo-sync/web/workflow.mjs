@@ -12,6 +12,7 @@ import { currentStage, stagePresentation } from './flow-stage.mjs';
 import { authenticationForm } from './issue-auth.mjs';
 import { autoIssuePanel } from './issue-settings.mjs';
 import { issueForms } from './issues.mjs';
+import { panorama } from './panorama.mjs';
 import { prPanel } from './pr.mjs';
 import { receiptFields } from './receipts.mjs';
 import { esc, labels, sha, stageOf, title, when } from './ui.mjs';
@@ -24,7 +25,7 @@ export function workflow(snapshot, record, historical) {
   const current = currentStage(delivery, policy, historical);
   const failure = stageFailure(snapshot, record, delivery, historical);
   const failedStage = failure?.stage ?? 0;
-  return `${deliveryOverview(snapshot, record, delivery, historical)}<div class="detail-head"><span class="badge">${historical ? '历史记录 · 只读' : '当前同步'}</span><h2>${esc(title(delivery))} · ${esc(labels[delivery.status] ?? delivery.status)}</h2><details class="delivery-boundary" data-persist-details="boundary"><summary>查看内外基线与提交位置</summary><p>外部 ${sha(delivery.base.upstream)} → ${sha(delivery.target)}<br>内部 ${sha(delivery.base.internal)} → ${sha(delivery.acceptedInternal ?? '待接受')}</p></details><details class="execution-meta" data-persist-details="execution-meta"><summary>执行详情 · 同步标识与时间</summary><p>同步标识 ${esc(delivery.id)}<br>开始 ${when(delivery.startedAt)} · 结束 ${when(delivery.finishedAt)}</p></details><div class="workflow-controls">${historical ? '<button type="button" data-record="current">返回当前同步</button>' : ''}<button type="button" data-expand-all>展开全部阶段</button><button type="button" data-collapse-all>全部收起</button></div></div>${record?.legacy ? '<p class="record-gap">此为旧记录：未记录的时间、配置或任务关联保持“未记录”，不会用当前配置补齐。</p>' : ''}${record?.missingTasks.length ? `<p class="record-gap bad">× ${record.missingTasks.length} 份关联执行记录缺失。业务结果保留，不能补造时间线。</p>` : ''}<ol class="journey-flow">${names
+  return `${deliveryOverview(snapshot, record, delivery, historical)}<div class="detail-head"><span class="badge">${historical ? '历史记录 · 只读' : '当前同步'}</span><h2>${esc(title(delivery))} · ${esc(labels[delivery.status] ?? delivery.status)}</h2><details class="delivery-boundary" data-persist-details="boundary"><summary>查看内外基线与提交位置</summary><p>外部 ${sha(delivery.base.upstream)} → ${sha(delivery.target)}<br>内部 ${sha(delivery.base.internal)} → ${sha(delivery.acceptedInternal ?? '待接受')}</p></details><details class="execution-meta" data-persist-details="execution-meta"><summary>执行详情 · 同步标识与时间</summary><p>同步标识 ${esc(delivery.id)}<br>开始 ${when(delivery.startedAt)} · 结束 ${when(delivery.finishedAt)}</p></details><div class="workflow-controls">${historical ? '<button type="button" data-record="current">返回当前同步</button>' : ''}<button type="button" data-expand-all>展开全部阶段</button><button type="button" data-collapse-all>全部收起</button></div></div>${record?.legacy ? '<p class="record-gap">此为旧记录：未记录的时间、配置或任务关联保持“未记录”，不会用当前配置补齐。</p>' : ''}${record?.missingTasks.length ? `<p class="record-gap bad">× ${record.missingTasks.length} 份关联执行记录缺失。业务结果保留，不能补造时间线。</p>` : ''}${panorama(snapshot, record, historical)}<section class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点，查看本步骤的结果、对象和恢复操作。技术日志默认收起。</p><ol class="journey-flow">${names
     .map((name, index) =>
       stageView(
         index + 1,
@@ -39,7 +40,7 @@ export function workflow(snapshot, record, historical) {
         failure,
       ),
     )
-    .join('')}</ol>${actionBar(policy, historical, snapshot)}`;
+    .join('')}</ol></section>${actionBar(policy, historical, snapshot)}`;
 }
 function stageForm(stage, delivery, snapshot) {
   if (stage === 2 && delivery.status === 'CODE_PREPARE_REQUIRED')
@@ -112,7 +113,7 @@ function moreTasks(stage, record) {
 
 function stageFailure(snapshot, record, delivery, historical) {
   const task = snapshot.operation;
-  if (!historical && task?.deliveryId === delivery.id) {
+  if (!historical && (task?.deliveryId === delivery.id || task?.deliveryIds?.includes(delivery.id))) {
     if (task.persistence?.status === 'FAILED') return { stage: 5, error: task.persistence.error };
     const failed = task.steps?.findLast((step) => step.status === 'FAILED');
     if (task.status === 'FAILED' && (task.error || failed?.error))

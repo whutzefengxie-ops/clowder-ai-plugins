@@ -13,11 +13,13 @@ import { createIssueAuthentication, updateIssueFields } from './issue-auth.mjs';
 import { updateLiveWorkflow } from './live-workflow.mjs';
 import { renderTask } from './operation-view.mjs';
 import { createOperations } from './operations.mjs';
+import { initializePanorama, restorePanorama, retainPanoramaFocus } from './panorama.mjs';
 import { serviceLabel } from './platform.mjs';
 import { previewPanel } from './preview-view.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { createProjectNavigation } from './projects.mjs';
 import { createRecoveryNavigation, showActivity } from './recovery-navigation.mjs';
+import { createRoundView } from './round-controller.mjs';
 import { createSettingsController } from './settings-controller.mjs';
 import { createSetupFlow } from './setup-flow.mjs';
 import { createTaskFocus, focusBaselineInput } from './setup-navigation.mjs';
@@ -44,6 +46,7 @@ const recovery = createRecoveryNavigation({
   action: (...args) => action(...args),
 });
 const records = createHistory(() => snapshot, render);
+const roundView = createRoundView(() => snapshot);
 const focusTask = createTaskFocus();
 const setup = createSetupFlow({
   snapshot: () => snapshot,
@@ -86,6 +89,7 @@ function expandedKey() {
   return `${draftKey()}:expanded:${id ?? 'setup'}`;
 }
 function render({ keepScroll = false } = {}) {
+  const restoreNodeFocus = retainPanoramaFocus(content);
   const restoreView = retainView(content, snapshot.config?.bindingId, snapshot.connection?.revision);
   if (
     preview &&
@@ -99,6 +103,7 @@ function render({ keepScroll = false } = {}) {
     view === 'configuration'
       ? configuration(snapshot, esc, sha, button, setup.state())
       : workbench(snapshot, records.get(), availableTags, mobileDetail);
+  if (view === 'workbench') content.insertAdjacentHTML('afterbegin', roundView.render());
   transfers.render(content, view);
   updateShell(snapshot, view);
   recovery.mount(content, view);
@@ -117,6 +122,7 @@ function render({ keepScroll = false } = {}) {
     expandedKey(),
     currentRecord(snapshot, records.get())?.delivery ?? snapshot.state?.active,
   );
+  restorePanorama(content, expandedKey());
   if (view === 'configuration') {
     const baseline = content.querySelector('form[data-form="inspect-baseline"]')?.closest('.card');
     const panel = diagnostics(snapshot.operation?.error, snapshot, esc);
@@ -127,6 +133,7 @@ function render({ keepScroll = false } = {}) {
   onTask(snapshot.operation);
   operations.lock();
   restoreView({ keepScroll });
+  restoreNodeFocus();
 }
 
 function onTask(task) {
@@ -142,7 +149,7 @@ function onTask(task) {
     const panel = content.querySelector('#operation');
     if (panel) panel.innerHTML = renderTask(task);
   }
-  focusTask(task, snapshot);
+  if (view === 'configuration') focusTask(task, snapshot);
 }
 let refreshing = 0;
 async function refresh({ background = false } = {}) {
@@ -160,7 +167,7 @@ async function refresh({ background = false } = {}) {
   snapshot = result;
   projectNavigation.update(result.workspace);
   if (!snapshot.state && snapshot.operation) view = 'configuration';
-  await records.load(true);
+  await Promise.all([records.load(true), roundView.load()]);
   render({ keepScroll: background });
   operations.observe(snapshot.operation);
 }
@@ -313,6 +320,7 @@ document.addEventListener('change', (event) => {
   saveDraft();
 });
 initializeExpansion(expandedKey);
+initializePanorama(expandedKey);
 projectNavigation
   .load()
   .then(refresh)

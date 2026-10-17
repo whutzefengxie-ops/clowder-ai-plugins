@@ -13,6 +13,7 @@ import { attempts } from '../web/attempts.mjs';
 import { automationBanner } from '../web/automation-view.mjs';
 import { repositories } from './fixtures.mjs';
 import { issuePlatform } from './issue-fixtures.mjs';
+import { openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser, traceLifecycle } from './owned-browser.mjs';
 import { reportWorkflowEvidence } from './workflow-phase-evidence.mjs';
 
@@ -164,7 +165,7 @@ console.log(JSON.stringify(s[r.head]??null));`,
       )
       .first();
     const currentStageId = await currentStage.getAttribute('data-stage');
-    await currentStage.locator(':scope > summary').click();
+    await openStage(page, currentStageId);
     await currentStage.locator(':scope > summary').click();
     await traceLifecycle('workflow-page-reload', () => page.reload());
     await page.locator('.next-action a[href="https://codehub.example/core/pull/1"]').waitFor();
@@ -184,7 +185,7 @@ console.log(JSON.stringify(s[r.head]??null));`,
       () => document.documentElement.scrollWidth <= innerWidth,
     );
     if (!(await page.locator('[data-stage="1"]').evaluate((node) => node.open)))
-      await page.locator('[data-stage="1"] > summary').click();
+      await openStage(page, 1);
     await page.reload();
     await page.locator('.next-action a[href="https://codehub.example/core/pull/1"]').waitFor();
     const manualSurvivedReload = await page.locator('[data-stage="1"]').evaluate((node) => node.open);

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { repositories } from './fixtures.mjs';
+import { openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const require = createRequire(import.meta.url);
@@ -48,8 +49,8 @@ try {
   }
   for (let index = 0; index < 2; index++) {
     await page.locator('[data-action="start"]').click();
-    await page.locator('[data-stage="2"][data-stage-state="current"]').waitFor();
-    await page.locator('[data-stage="2"] > summary').click();
+    await page.locator('[data-flow-stage="2"][data-flow-state="current"]').waitFor();
+    await openStage(page, 2);
     if (!index) {
       await page.getByLabel('内部 Issue 编号').fill('318');
       await page.getByLabel('内部 Issue 具体链接').fill('https://codehub.example/core/issues/318');
@@ -70,8 +71,8 @@ try {
       });
     await page.locator('[data-action="prepare"]').click();
     const prStage = page.locator('[data-stage="3"]');
-    await prStage.waitFor();
-    if (!(await prStage.evaluate((node) => node.open))) await prStage.locator(':scope > summary').click();
+    await prStage.waitFor({ state: 'attached' });
+    if (!(await prStage.evaluate((node) => node.open))) await openStage(page, await prStage.getAttribute('data-stage'));
     await page.locator('[data-form="pr"]').waitFor({ timeout: 20000 });
     if (!index) assert.equal(await page.locator('html').getAttribute('data-prepare-repainted'), 'true');
     const before = await receiver.status();
@@ -90,9 +91,9 @@ try {
     assert.equal((await receiver.status()).accepted.internal, before.accepted.internal);
     await page.getByRole('button', { name: '已在平台合入，核验 Git 结果' }).click();
     const receiptStage = page.locator('[data-stage="5"]');
-    await receiptStage.waitFor();
+    await receiptStage.waitFor({ state: 'attached' });
     if (!(await receiptStage.evaluate((node) => node.open)))
-      await receiptStage.locator(':scope > summary').click();
+      await openStage(page, await receiptStage.getAttribute('data-stage'));
     await page.locator('[data-form="receipts"]').waitFor({ timeout: 20000 });
     if (index) {
       await page.getByRole('button', { name: '保存本笔接收记录，完成同步' }).click();

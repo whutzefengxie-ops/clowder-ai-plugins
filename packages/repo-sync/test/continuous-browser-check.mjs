@@ -128,7 +128,7 @@ try {
     if (number === 2) {
       await page.getByRole('button', { name: '恢复原同步 →' }).waitFor({ timeout: 30000 });
       assert.equal((await receiver.status()).active.status, 'CODE_ACCEPTED_PENDING_METADATA');
-      assert.equal(await page.locator('[data-stage="5"][data-stage-state="failed"]').count(), 1);
+      assert.equal(await page.locator('[data-flow-stage="5"][data-flow-state="failed"]').count(), 1);
       await page.screenshot({
         path: join(evidence, 'continuous-recovery.png'),
         fullPage: true,
@@ -148,7 +148,7 @@ try {
       await new Promise((done) => setTimeout(done, 200));
     assert.equal((await receiver.status()).deliveries.at(-1).status, 'COMPLETE');
     await openHistory(page);
-    await page.locator(`[data-record="${active.id}"]`).click();
+    await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
     await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
     await page.getByRole('button', { name: '展开全部阶段' }).click();
     await page.getByText('当时配置与来源', { exact: true }).click();

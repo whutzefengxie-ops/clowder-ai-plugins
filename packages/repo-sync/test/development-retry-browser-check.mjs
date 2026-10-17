@@ -10,7 +10,7 @@ import { createReceiverServer } from '../src/server.mjs';
 import { readTask } from '../src/task-store.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { developmentFixture } from './development-history-fixture.mjs';
-import { openHistory } from './journey-controls.mjs';
+import { openAutoMerge, openHistory } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await developmentFixture(),
@@ -195,11 +195,10 @@ try {
     replacement.prUrl,
     'the primary review action opens the concrete internal PR',
   );
+  await openAutoMerge(page);
   await autoMerge.locator('[name="autoMerge"]').check();
   await autoMerge.getByRole('button', { name: '保存自动合入选择' }).click();
-  await page.waitForFunction(
-    () => document.querySelector('[data-form="configure-auto-merge"] [name="autoMerge"]')?.checked === true,
-  );
+  await waitState((s) => s.automation.autoMerge === true);
   assert.equal((await receiver.status()).automation.autoMerge, true);
   state = await waitState((s) => !s.active && s.automation.status === 'COMPLETE');
   await waitTask('resume-sync', 'SUCCEEDED');
@@ -219,7 +218,7 @@ try {
   assert.equal(await receiver.git.remoteBranch(original.branch), original.candidate);
   await page.reload();
   await openHistory(page);
-  await page.locator(`[data-record="${original.id}"]`).click();
+  await page.locator(`.history-disclosure [data-record="${original.id}"]`).click();
   await page.locator('[data-delivery-overview]').waitFor();
   assert.equal(
     await page.locator('[data-form="cancel-delivery"]').count(),

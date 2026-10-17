@@ -57,3 +57,24 @@ export function stagePresentation(stage, delivery, current, failedStage = 0, run
 export function currentStage(delivery, policy, historical = false) {
   return historical ? stageOf(delivery) : policy.stage || stageOf(delivery);
 }
+
+export function preDeliveryPresentation(stage, task, policy) {
+  const current =
+    task?.persistence?.status === 'FAILED'
+      ? 5
+      : task?.steps?.findLast((s) => ['RUNNING', 'FAILED'].includes(s.status))?.stage || policy?.stage || 1;
+  const failed =
+    stage === current &&
+    (['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status) ||
+      task?.persistence?.status === 'FAILED');
+  const steps = task?.steps?.filter((s) => s.stage === stage) ?? [];
+  const done = steps.length > 0 && steps.every((s) => s.status === 'DONE');
+  const state = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
+  return {
+    current,
+    state,
+    mark: failed ? '×' : done ? '✓' : stage === current ? '●' : '○',
+    caption: failed ? '异常待处理' : done ? '已完成' : stage === current ? '当前步骤' : '待执行',
+    tone: failed ? 'bad' : done ? 'good' : '',
+  };
+}

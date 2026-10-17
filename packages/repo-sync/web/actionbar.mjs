@@ -17,9 +17,9 @@ export function actionBar(policy, historical, snapshot = {}) {
   const run = snapshot.state?.automation;
   const pause = run && ['RUNNING', 'WAITING_REVIEW'].includes(run.status) && !run.pauseRequested;
   const pauseStatus = run?.pauseRequested
-    ? '<p role="status">已设置：本笔完成后暂停，下一笔不会自动开始。</p>'
+    ? '<small class="pause-boundary-note">已设置：本笔完成后暂停，下一笔不会自动开始。</small>'
     : '';
-  return `<footer class="next-action" aria-label="当前操作区"><h2>当前操作与等待</h2><p role="status">${esc(policy.text)}</p>${pauseStatus}<div class="task-actions">${control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div>${autoMergeControls(snapshot)}<details><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></footer>`;
+  return `<footer class="next-action" aria-label="当前操作区"><h2>当前操作与等待</h2><p role="status">${esc(policy.text)}${pauseStatus}</p><div class="task-actions">${control(policy, true)}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${run && run.status !== 'COMPLETE' ? `<details class="auto-merge-options" data-persist-details="merge-options"><summary>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'} · 修改</summary>${autoMergeControls(snapshot)}</details>` : ''}<details><summary>本轮接收节奏</summary>${continuationControls(snapshot)}</details></div></footer>`;
 }
 function autoMergeControls(snapshot) {
   const run = snapshot.state?.automation;

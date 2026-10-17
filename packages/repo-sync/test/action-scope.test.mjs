@@ -81,7 +81,10 @@ test('expand-all is persisted for this delivery and remains open on a polling up
       dataset: { stage: String(id), stageState: id < 4 ? 'done' : 'current' },
       open: true,
     }));
-    const content = { querySelectorAll: () => stages };
+    const content = {
+      querySelectorAll: (selector) => selector === '[data-stage]' ? stages : [],
+      querySelector: () => null,
+    };
     rememberExpansion('delivery1', Object.fromEntries(stages.map((stage) => [stage.dataset.stage, true])));
     const snapshot = {
       config: { mode: 'continuous' },
@@ -117,7 +120,10 @@ test('all workflow stages start collapsed, including the active and failed stage
       },
       open: true,
     }));
-    const content = { querySelectorAll: () => stages };
+    const content = {
+      querySelectorAll: (selector) => selector === '[data-stage]' ? stages : [],
+      querySelector: () => null,
+    };
     const snapshot = {
       config: { mode: 'continuous' },
       state: {
@@ -170,24 +176,37 @@ test('expand-all and collapse-all both persist a complete per-stage state map', 
       dataset: { stage: String(id) },
       open: false,
     }));
-    const content = { querySelectorAll: () => stages };
+    const step = { hidden: true }, hint = { hidden: false }, node = {
+      selected: 'true', setAttribute(_name, value) { this.selected = value; },
+    };
+    const content = {
+      querySelectorAll: (selector) => selector === '[data-stage]' ? stages : selector === '[data-step-key]' ? [step] : [node],
+      querySelector: () => hint,
+    };
+    rememberExpansion('delivery1', { 'flow:selection': { stage: '4', node: 'merge-readiness' } });
     setAllExpansion(content, 'delivery1', true);
     assert.ok(stages.every((stage) => stage.open));
+    assert.equal(step.hidden, false);
+    assert.equal(node.selected, 'false');
+    assert.equal(hint.hidden, true);
     assert.deepEqual(JSON.parse(values.get('delivery1')), {
       1: true,
       2: true,
       3: true,
       4: true,
       5: true,
+      'flow:selection': null,
     });
     setAllExpansion(content, 'delivery1', false);
     assert.ok(stages.every((stage) => !stage.open));
+    assert.equal(hint.hidden, false);
     assert.deepEqual(JSON.parse(values.get('delivery1')), {
       1: false,
       2: false,
       3: false,
       4: false,
       5: false,
+      'flow:selection': null,
     });
   } finally {
     delete globalThis.sessionStorage;

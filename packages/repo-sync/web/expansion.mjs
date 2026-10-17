@@ -7,8 +7,12 @@ export function rememberExpansion(key, states) {
 }
 export function setAllExpansion(content, key, open) {
   const stages = [...content.querySelectorAll('[data-stage]')];
-  rememberExpansion(key, Object.fromEntries(stages.map((stage) => [stage.dataset.stage, open])));
+  rememberExpansion(key, { ...Object.fromEntries(stages.map((stage) => [stage.dataset.stage, open])), 'flow:selection': null });
   for (const stage of stages) stage.open = open;
+  for (const step of content.querySelectorAll('[data-step-key]')) step.hidden = false;
+  for (const node of content.querySelectorAll('[data-flow-node]')) node.setAttribute('aria-pressed', 'false');
+  const hint = content.querySelector('[data-flow-inspector-hint]');
+  if (hint) hint.hidden = open;
 }
 export function restoreExpansion(content, _snapshot, _selected, key) {
   let expanded;

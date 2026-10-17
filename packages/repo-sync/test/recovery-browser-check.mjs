@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
+import { openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
 
@@ -61,7 +62,7 @@ fs.rename = async (from, to) => {
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   const prStage = page.locator('[data-stage="3"]');
-  if (!(await prStage.evaluate((element) => element.open))) await prStage.locator(':scope > summary').click();
+  if (!(await prStage.evaluate((element) => element.open))) await openStage(page, await prStage.getAttribute('data-stage'));
   await page.getByRole('heading', { name: '先配置内部仓库网页地址', level: 3 }).waitFor();
   await page.getByRole('link', { name: '配置网页地址，继续 PR →' }).waitFor();
   assert.equal(await page.locator('[data-form="pr"]').count(), 0);
@@ -82,7 +83,7 @@ try {
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 20000 });
   assert.equal((await receiver.status()).active.prUrl, url);
   if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
-    await page.locator('[data-stage="3"] > summary').click();
+    await openStage(page, 3);
   await page.getByText('链接填错了？纠正或撤销引用').click();
   denied = true;
   await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();
@@ -92,7 +93,7 @@ try {
   await page.reload();
   const reopenedPrStage = page.locator('[data-stage="3"]');
   if (!(await reopenedPrStage.evaluate((element) => element.open)))
-    await reopenedPrStage.locator(':scope > summary').click();
+    await openStage(page, await reopenedPrStage.getAttribute('data-stage'));
   const failedReference = page.locator(
     '[data-stage="3"] [data-step-key="platform-pr"][data-step-state="failed"]',
   );
@@ -117,7 +118,7 @@ try {
   });
   denied = false;
   if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
-    await page.locator('[data-stage="3"] > summary').click();
+    await openStage(page, 3);
   const correction = page.getByText('链接填错了？纠正或撤销引用');
   if (!(await correction.evaluate((element) => element.closest('details').open))) await correction.click();
   await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();

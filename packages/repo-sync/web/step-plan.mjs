@@ -22,5 +22,6 @@ export function projectStep(group) {
   const failed = [...latestEvidence.values()].findLast((entry) => entry.step.status === 'FAILED');
   const running = states.findLast((entry) => entry.step.status === 'RUNNING');
   const latest = failed || running || states.at(-1);
-  return { actual, latest, status: latest.step.status };
+  const status = latest.step.status === 'DONE' ? group.completionStatus ?? 'DONE' : latest.step.status;
+  return { actual, latest, status };
 }

@@ -17,6 +17,7 @@ export function validateAutomation(value) {
     !/^[a-f0-9]{32}$/.test(value.id ?? '') ||
     !['RUNNING', 'WAITING_REVIEW', 'FAILED', 'PAUSED', 'COMPLETE'].includes(value.status) ||
     (value.autoMerge !== undefined && typeof value.autoMerge !== 'boolean') ||
+    (value.startingDeliveryCount !== undefined && (!Number.isSafeInteger(value.startingDeliveryCount) || value.startingDeliveryCount < 0)) ||
     !Number.isFinite(Date.parse(value.startedAt)) ||
     !value.selection ||
     !['latest', 'tag', 'commit', 'queue'].includes(value.selection.kind) ||
@@ -139,6 +140,7 @@ function register(receiver, input, id) {
             status: 'RUNNING',
             startedAt: new Date().toISOString(),
             startingDeliveryId: active?.id ?? null,
+            startingDeliveryCount: saved.deliveries.length,
             continuation: input.continuation ?? 'automatic',
             autoMerge: input.autoMerge === true,
             selection: input.targetKind

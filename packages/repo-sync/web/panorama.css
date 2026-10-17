@@ -1,0 +1,335 @@
+.app-shell main {
+  margin: 0;
+  align-self: start;
+}
+.journey-layout {
+  align-items: stretch;
+}
+.record-detail:has([data-flow-canvas]) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+body[data-view="workbench"] .app-shell main {
+  padding-right: 24px;
+}
+.record-detail:has([data-flow-canvas]) > .next-action {
+  position: static;
+  order: -3;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+  box-shadow: none;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+}
+.record-detail:has([data-flow-canvas]) > .next-action h2 {
+  grid-column: 1;
+  font-size: 15px;
+  margin: 0;
+}
+.record-detail:has([data-flow-canvas]) > .next-action > p {
+  grid-column: 1;
+  margin: 0;
+}
+.record-detail:has([data-flow-canvas]) > .next-action .task-actions {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+}
+.record-detail:has([data-flow-canvas]) > .next-action .task-actions > * {
+  width: auto;
+}
+.record-detail:has([data-flow-canvas]) > .next-action .run-options {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.run-options > details {
+  margin: 0;
+  font-size: 12px;
+}
+.run-options > details > summary {
+  min-height: 30px;
+}
+.pause-boundary-note {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.record-detail:has([data-flow-canvas]) .auto-merge-options {
+  margin: 0;
+  font-size: 12px;
+}
+.auto-merge-options > summary {
+  min-height: 32px;
+}
+.record-detail:has([data-flow-canvas]) > .delivery-overview {
+  order: -2;
+  margin: 0;
+}
+.record-detail:has([data-flow-canvas]) > .flow-canvas {
+  order: -1;
+}
+.record-detail:has([data-flow-canvas]) > .detail-head h2 {
+  display: none;
+}
+.record-detail:has([data-flow-canvas]) > .detail-head:has([data-record="current"]) h2 {
+  display: block;
+}
+.record-detail:has([data-flow-canvas]) > .delivery-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 14px;
+}
+.record-detail:has([data-flow-canvas]) .delivery-metrics {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+}
+.record-detail:has([data-flow-canvas]) .delivery-objects,
+.record-detail:has([data-flow-canvas]) .delivery-more,
+.record-detail:has([data-flow-canvas]) .delivery-note {
+  grid-column: 1 / -1;
+}
+.flow-canvas {
+  background: #f7f4ef;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+.flow-canvas-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.flow-canvas-heading h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.flow-canvas-heading p,
+.flow-legend {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.flow-legend {
+  margin-left: auto;
+}
+.panorama-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(172px, 1fr));
+  gap: 18px;
+  overflow-x: auto;
+  padding: 3px 3px 12px;
+  align-items: start;
+}
+.flow-phase {
+  position: relative;
+  min-width: 0;
+  --flow-tone: var(--muted);
+}
+.flow-phase:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  right: -16px;
+  top: 23px;
+  color: var(--muted);
+}
+.flow-phase[data-flow-state="done"] {
+  --flow-tone: var(--good);
+}
+.flow-phase[data-flow-state="current"],
+.flow-phase[data-flow-state="waiting-system"] {
+  --flow-tone: var(--state-blue);
+}
+.flow-phase[data-flow-state="waiting-human"] {
+  --flow-tone: var(--state-yellow);
+}
+.flow-phase[data-flow-state="failed"] {
+  --flow-tone: var(--bad);
+}
+.flow-phase-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  width: 100%;
+  min-height: 72px;
+  padding: 10px;
+  border-top: 3px solid var(--flow-tone);
+}
+.flow-phase-heading b,
+.flow-node b {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.flow-phase-heading small,
+.flow-node small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--flow-tone);
+}
+.flow-state-mark {
+  flex: 0 0 18px;
+  color: var(--flow-tone);
+  text-align: center;
+}
+.flow-children {
+  list-style: none;
+  padding: 0 0 0 10px;
+  margin: 12px 0 0 7px;
+  border-left: 1px solid var(--line);
+}
+.flow-children > li {
+  position: relative;
+  margin-bottom: 7px;
+}
+.flow-children > li::before {
+  content: "";
+  position: absolute;
+  left: -11px;
+  top: 20px;
+  width: 11px;
+  border-top: 1px solid var(--line);
+}
+.flow-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+  min-height: 44px;
+  padding: 5px;
+  font-size: 12px;
+}
+.flow-node b {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.flow-node small {
+  font-size: 10px;
+  margin-top: 2px;
+}
+.flow-node[data-flow-node-status="UNRECORDED"],
+.flow-node[data-flow-node-status="SKIPPED"] {
+  --flow-tone: var(--muted);
+}
+.flow-node[data-flow-node-status="DONE"] {
+  --flow-tone: var(--good);
+}
+.flow-node[data-flow-node-status="FAILED"] {
+  --flow-tone: var(--bad);
+  background: #fff0ef;
+  border-color: var(--bad);
+}
+.flow-node[data-flow-node-status="RUNNING"],
+.flow-node[data-flow-node-status="AUTO_WAIT"] {
+  --flow-tone: var(--state-blue);
+  background: #edf5ff;
+}
+.flow-node[data-flow-node-status="WAITING"] {
+  --flow-tone: var(--state-yellow);
+  background: #fff9e8;
+}
+.flow-node[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.flow-node[data-flow-node-status="RUNNING"] .flow-state-mark {
+  animation: workflow-spin 1.5s linear infinite;
+}
+.flow-inspector {
+  min-height: 90px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 16px;
+}
+.flow-inspector [data-flow-inspector-hint] {
+  margin: 8px 0;
+}
+.flow-inspector [data-stage]:not([open]) {
+  display: none;
+}
+.flow-inspector .journey-flow {
+  margin: 0;
+}
+.flow-inspector .journey-flow > li {
+  padding: 0;
+  border: 0;
+}
+.flow-inspector .journey-flow > li > details {
+  border: 0;
+}
+.flow-inspector .stage-body {
+  padding: 12px;
+}
+.flow-inspector .substeps {
+  border-left: 0;
+}
+@media (max-width: 768px) {
+  body[data-view="workbench"] .app-shell main {
+    padding-right: 14px;
+  }
+  .panorama-grid {
+    grid-template-columns: repeat(5, 194px);
+  }
+  .flow-canvas {
+    padding: 12px;
+  }
+  .record-detail:has([data-flow-canvas]) > .next-action {
+    display: block;
+  }
+  .record-detail:has([data-flow-canvas]) > .delivery-overview {
+    display: block;
+  }
+  .record-detail:has([data-flow-canvas]) > .next-action .task-actions {
+    margin: 10px 0;
+  }
+  .flow-legend {
+    margin-left: 0;
+  }
+}
+@media (min-width: 769px) {
+  .record-detail:has([data-flow-canvas]) {
+    gap: 6px;
+  }
+  .record-detail:has([data-flow-canvas]) > .delivery-overview {
+    padding: 6px 12px;
+  }
+  .record-detail:has([data-flow-canvas]) .delivery-objects {
+    display: flex;
+    gap: 8px 24px;
+    flex-wrap: wrap;
+  }
+  .record-detail:has([data-flow-canvas]) .delivery-more {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    margin: 0;
+  }
+  .record-detail:has([data-flow-canvas]) > .detail-head {
+    padding: 4px 12px;
+  }
+  .flow-canvas {
+    padding: 10px;
+  }
+  .flow-canvas-heading {
+    margin-bottom: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-node .flow-state-mark {
+    animation: none;
+  }
+}

@@ -1,5 +1,7 @@
 import { actionBar } from './actionbar.mjs';
 import { attempts, stageSummary } from './attempts.mjs';
+import { preDeliveryPresentation } from './flow-stage.mjs';
+import { panorama } from './panorama.mjs';
 import { esc, title, when } from './ui.mjs';
 
 export function automationBanner(snapshot) {
@@ -86,12 +88,7 @@ export function automaticPolicy(snapshot, delivery) {
 
 export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, null)) {
   const task = snapshot.operation;
-  const current =
-    task?.persistence?.status === 'FAILED'
-      ? 5
-      : task?.steps?.findLast((step) => ['RUNNING', 'FAILED'].includes(step.status))?.stage ||
-        policy?.stage ||
-        1;
+  const current = preDeliveryPresentation(0, task, policy).current;
   const version = snapshot.config.mode === 'version';
   const names = [
     '读取目标与真实来源集合',
@@ -100,20 +97,15 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
     '人工审核合入',
     version ? '自动核验与保存版本' : '自动核验、关单与保存映射',
   ];
-  return `<ol class="journey-flow">${names
+  return `${panorama(snapshot, null, false)}<section class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
     .map((name, index) => {
       const stage = index + 1;
-      const failed =
-        stage === current &&
-        (['FAILED', 'INTERRUPTED', 'STOP_UNCONFIRMED'].includes(task?.status) ||
-          task?.persistence?.status === 'FAILED');
-      const steps = task?.steps?.filter((step) => step.stage === stage) ?? [];
-      const done = steps.length > 0 && steps.every((step) => step.status === 'DONE');
-      const status = failed ? 'failed' : done ? 'done' : stage === current ? 'current' : 'pending';
+      const presentation = preDeliveryPresentation(stage, task, policy);
+      const status = presentation.state, failed = status === 'failed', done = status === 'done';
       const detail = stageSummary(stage, null, task, false, snapshot, status);
       return `<li><details data-stage="${stage}" data-stage-state="${status}"><summary><span class="stage-mark ${failed ? 'bad' : done ? 'good' : ''}">${failed ? '×' : done ? '✓' : stage === current ? '●' : '○'}</span><b>${stage} · ${name}</b><span data-stage-caption>${failed ? '异常待处理' : done ? '已完成' : stage === current ? '当前步骤' : '待执行'}</span><small data-stage-detail>${esc(detail)}</small></summary><div class="stage-body"><div data-attempts-stage="${stage}">${attempts(stage, null, task, false, snapshot)}</div>${stage === current ? '<div id="error-slot"></div>' : ''}</div></details></li>`;
     })
-    .join('')}</ol>${policy ? actionBar(policy, false, snapshot) : ''}`;
+    .join('')}</ol></section>${policy ? actionBar(policy, false, snapshot) : ''}`;
 }
 
 function referenceRemedy(delivery) {

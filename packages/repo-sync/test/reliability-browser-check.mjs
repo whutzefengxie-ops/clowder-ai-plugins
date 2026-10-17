@@ -7,6 +7,7 @@ import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { configuredReceiver } from '../src/settings.mjs';
+import { openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 import { activateBaseline } from './setup-journey-helpers.mjs';
 import { versionRepositories } from './version-fixtures.mjs';
@@ -54,7 +55,7 @@ try {
   await serve(receiver, async (page) => {
     const reviewStage = page.locator('[data-stage="2"]');
     if (!(await reviewStage.evaluate((element) => element.open)))
-      await reviewStage.locator(':scope > summary').click();
+      await openStage(page, await reviewStage.getAttribute('data-stage'));
     const tree = page.locator('[data-file-tree]').first();
     assert.equal(await tree.isVisible(), false);
     await page.getByText(/上游文件变化（/).click();
@@ -66,7 +67,7 @@ try {
     await page.getByRole('button', { name: '保留文件、检查并推送候选 →' }).click();
     const prStage = page.locator('[data-stage="3"]');
     if (!(await prStage.evaluate((element) => element.open)))
-      await prStage.locator(':scope > summary').click();
+      await openStage(page, await prStage.getAttribute('data-stage'));
     await page.locator('[data-form="pr"]').waitFor({ timeout: 30000 });
     const candidate = (await receiver.status()).active.candidate;
     await page.getByLabel('内部 PR 具体链接').fill('https://elsewhere.example/core/pull/1');
@@ -83,7 +84,7 @@ try {
       'https://codehub.example/core/pull/999',
     );
     if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
-      await page.locator('[data-stage="3"] > summary').click();
+      await openStage(page, 3);
     await page.getByText('链接填错了？纠正或撤销引用').click();
     await page.getByLabel('内部 PR 具体链接').fill('https://codehub.example/core/pull/501');
     await page.locator('[data-pr-confirm]').check();
@@ -91,7 +92,7 @@ try {
     await page.locator('a.button[href="https://codehub.example/core/pull/501"]').waitFor({ timeout: 20000 });
     assert.equal((await receiver.status()).active.prUrl, 'https://codehub.example/core/pull/501');
     if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
-      await page.locator('[data-stage="3"] > summary').click();
+      await openStage(page, 3);
     await page.getByText('链接填错了？纠正或撤销引用').click();
     await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();
     await page.getByRole('button', { name: '撤销错误引用，返回 PR 创建步骤' }).click();

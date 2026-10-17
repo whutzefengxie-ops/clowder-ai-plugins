@@ -17,6 +17,7 @@ import { journeyProgress } from './journey-progress.mjs';
 import { publicApi, publicPlatform } from './pr-settings.mjs';
 import { projectSettingsRequest } from './project-settings-http.mjs';
 import { recordDetail, recordList } from './records.mjs';
+import { roundProgress } from './round-progress.mjs';
 import { checkProjectInput, projectRequest, serverScopes } from './server-projects.mjs';
 import { configure } from './settings.mjs';
 import { transferRequest } from './transfer-http.mjs';
@@ -88,6 +89,11 @@ const assets = new Map([
     'settings-controller.mjs',
     'workbench-layout.css',
     'workbench-viewport.css',
+    'round-view.mjs',
+    'round-controller.mjs',
+    'panorama.mjs',
+    'panorama.css',
+    'round.css',
     'flow-stage.mjs',
     'live-workflow.mjs',
     'continuation-view.mjs',
@@ -292,6 +298,14 @@ export function listen(server, port = 5187) {
 }
 
 async function recordRequest(request, response, receiver, tasks, token, path) {
+  if (path === '/api/round') {
+    requireToken(request, token);
+    if (request.method !== 'GET') { send(response, 404, { code: 'NOT_FOUND' }); return true; }
+    const params = new URL(request.url, 'http://localhost').searchParams;
+    params.delete('project');
+    send(response, 200, { round: roundProgress(await receiver?.status(), params) });
+    return true;
+  }
   if (path === '/api/records' || /^\/api\/records\/[a-f0-9]{24}$/.test(path)) {
     requireToken(request, token);
     if (request.method !== 'GET') {

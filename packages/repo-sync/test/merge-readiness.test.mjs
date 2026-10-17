@@ -12,13 +12,22 @@ test('merge readiness distinguishes current CI, transient checks, human waits an
   assert.equal(mergeReadiness(ready, head).kind, 'ready');
   for (const status of ['created', 'pending', 'running', 'preparing', 'waiting_for_resource'])
     assert.equal(mergeReadiness({ ...ready, head_pipeline: { sha: head, status } }, head).kind, 'wait');
-  for (const detailed_merge_status of ['checking', 'unchecked', 'ci_still_running', 'approvals_syncing'])
+  for (const detailed_merge_status of ['checking', 'ci_still_running', 'approvals_syncing'])
     assert.equal(mergeReadiness({ ...ready, detailed_merge_status }, head).kind, 'wait');
   assert.equal(mergeReadiness({ ...ready, detailed_merge_status: 'not_approved' }, head).manual, true);
   assert.equal(mergeReadiness({ ...ready, draft: true }, head).manual, true);
   assert.equal(mergeReadiness({ ...ready, has_conflicts: true }, head).kind, 'blocked');
   for (const status of ['failed', 'canceled'])
     assert.equal(mergeReadiness({ ...ready, head_pipeline: { sha: head, status } }, head).kind, 'blocked');
+});
+test('CodeHub unchecked with successful current CI may request a SHA-protected platform merge', () => {
+  for (const detailed_merge_status of [undefined, '', 'unchecked'])
+    assert.equal(mergeReadiness({ ...ready, merge_status: 'unchecked', detailed_merge_status }, head).kind, 'ready');
+  for (const patch of [{ draft: true }, { has_conflicts: true }, { detailed_merge_status: 'not_approved' },
+    { blocking_discussions_resolved: false }, { approvals_left: 1 }])
+    assert.notEqual(mergeReadiness({ ...ready, merge_status: 'unchecked', ...patch }, head).kind, 'ready');
+  for (const head_pipeline of [undefined, { status: 'success', sha: 'b'.repeat(40) }, { status: 'pending', sha: head }])
+    assert.notEqual(mergeReadiness({ merge_status: 'unchecked', head_pipeline }, head).kind, 'ready');
 });
 test('missing, skipped or stale CI never authorizes a merge of an unproven candidate', () => {
   for (const head_pipeline of [

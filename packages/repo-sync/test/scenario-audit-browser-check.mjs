@@ -7,6 +7,7 @@ import { createConnection } from '../src/connections.mjs';
 import { Receiver } from '../src/engine.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { gitPrFixture } from './git-pr-fixtures.mjs';
+import { openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await gitPrFixture();
@@ -69,9 +70,9 @@ try {
   denyTerminal = true;
   await page.getByRole('button', { name: '重送原请求（保持同一标识）' }).click();
   const failedStage = page.locator('[data-stage="5"]');
-  await failedStage.waitFor();
+  await failedStage.waitFor({ state: 'attached' });
   assert.equal(await failedStage.evaluate((element) => element.open), false);
-  await failedStage.locator(':scope > summary').click();
+  await openStage(page, await failedStage.getAttribute('data-stage'));
   const failedRecord = page.locator('[data-step-key="execution-record"][data-step-state="failed"]');
   await failedRecord.waitFor({ timeout: 30000 });
   await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor();
@@ -91,7 +92,7 @@ try {
   );
   await page.reload();
   const restoredFailureStage = page.locator('[data-stage="5"]');
-  await restoredFailureStage.waitFor();
+  await restoredFailureStage.waitFor({ state: 'attached' });
   assert.equal(await restoredFailureStage.evaluate((element) => element.open), true);
   await failedRecord.waitFor();
   await page.getByRole('button', { name: '只补存原任务记录', exact: true }).waitFor();
@@ -106,7 +107,7 @@ try {
   assert.equal(await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).isVisible(), true);
   assert.equal(JSON.parse(await fs.readFile(f.resultFile)).count, 1);
   if (!(await page.locator('[data-stage="3"]').evaluate((element) => element.open)))
-    await page.locator('[data-stage="3"] > summary').click();
+    await openStage(page, 3);
   await page.getByText('链接填错了？纠正或撤销引用').click();
   await page.locator('[data-form="clear-pr"] input[type="checkbox"]').check();
   await page.getByRole('button', { name: '撤销错误引用，返回 PR 创建步骤' }).click();

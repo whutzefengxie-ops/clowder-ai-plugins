@@ -32,7 +32,7 @@ const labels = {
   WAITING: '等待人工审核',
   AUTO_WAIT: '自动等待',
   UNRECORDED: '执行证据未记录',
-  SKIPPED: '不适用 · 本笔无关联 Issue',
+  SKIPPED: '不适用',
 };
 
 export function attempts(stage, record, operation, historical, snapshot = {}) {
@@ -72,7 +72,7 @@ export function stageSummary(stage, record, operation, historical, snapshot = {}
   return `共 ${groups.length} 项业务步骤 · 展开查看`;
 }
 
-function stageGroups(stage, record, operation, historical, snapshot) {
+export function stageGroups(stage, record, operation, historical, snapshot) {
   const delivery = record?.delivery ?? snapshot.state?.active;
   const tasks = selectedTasks(record, operation, historical, delivery?.id);
   const version = (delivery?.mode ?? snapshot.config?.mode) === 'version';
@@ -117,6 +117,10 @@ function stageGroups(stage, record, operation, historical, snapshot) {
         : 'PENDING';
     groups.get('platform-merge').status = merged && automatic ? 'DONE' : automatic ? 'PENDING' : 'SKIPPED';
     groups.get('merge-observe').status = merged ? 'DONE' : waiting ? 'AUTO_WAIT' : 'PENDING';
+    if (!merged) {
+      groups.get('merge-observe').completionStatus = waiting ? 'AUTO_WAIT' : 'PENDING';
+      groups.get('merge-readiness').completionStatus = automatic ? 'AUTO_WAIT' : 'SKIPPED';
+    }
     groups.set('platform-review', {
       key: 'platform-review',
       label: delivery.autoMerge?.manual ? delivery.autoMerge.reason : '在内部平台审核并合入',
@@ -130,6 +134,12 @@ function stageGroups(stage, record, operation, historical, snapshot) {
       entries: [],
     });
   }
+  // A polling call can succeed without observing a merge. Its technical receipt is
+  // retained below, but cannot mark post-merge business work as accepted.
+  if (stage === 5 && delivery && !delivery.mergeObservation && !delivery.acceptedInternal)
+    for (const group of groups.values())
+      if (['merge-verify', 'issue-state', 'acceptance-save'].includes(group.key))
+        group.completionStatus = group.status === 'SKIPPED' ? 'SKIPPED' : 'PENDING';
   addUnscopedFailure(groups, tasks, stage, delivery);
   return groups;
 }

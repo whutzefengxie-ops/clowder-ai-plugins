@@ -8,6 +8,7 @@ import { setIssueToken } from '../src/issue-auth.mjs';
 import { createReceiverServer } from '../src/server.mjs';
 import { codehubPlatform } from './codehub-fixture.mjs';
 import { repositories } from './fixtures.mjs';
+import { openAutoMerge, openStage } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
 const f = await repositories(),
@@ -57,9 +58,10 @@ try {
   await page.goto(base);
   await page.locator('[data-action="synchronize"]').click();
   await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).waitFor({ timeout: 30000 });
+  await openAutoMerge(page);
   await page.locator('.auto-merge-choice [name="autoMerge"]').check();
   await page.getByRole('button', { name: '保存自动合入选择', exact: true }).click();
-  await page.locator('[data-stage="4"][data-stage-state="waiting-system"]').waitFor({ timeout: 30000 });
+  await page.locator('[data-flow-stage="4"][data-flow-state="waiting-system"]').waitFor({ timeout: 30000 });
   assert.equal(platform.state.merges, 0);
   for (let i = 0; i < 300 && (await receiver.status()).automation.status !== 'WAITING_REVIEW'; i++)
     await page.waitForTimeout(50);
@@ -67,7 +69,9 @@ try {
   assert.equal(await page.locator('[data-stage][open]').count(), 0);
   const keys = await page.locator('[data-step-key]').evaluateAll((n) => n.map((i) => i.dataset.stepKey));
   await page.reload();
-  await page.locator('[data-stage="4"][data-stage-state="waiting-system"]').waitFor();
+  await page.locator('[data-flow-stage="4"][data-flow-state="waiting-system"]').waitFor();
+  if (await page.locator('.auto-merge-options').evaluate((e) => e.open))
+    await page.locator('.auto-merge-options > summary').click();
   assert.deepEqual(
     await page.locator('[data-step-key]').evaluateAll((n) => n.map((i) => i.dataset.stepKey)),
     keys,
@@ -79,9 +83,10 @@ try {
     await page.setViewportSize({ width, height });
     await page.evaluate(() => scrollTo(0, 0));
     const bottom = await page
-      .locator('[data-stage="5"] > summary')
+      .locator('[data-flow-stage-select="5"]')
       .evaluate((e) => e.getBoundingClientRect().bottom);
-    assert.ok(bottom <= height, `all five stages fit ${width}x${height}: ${bottom}`);
+    await page.screenshot({ path: join(evidence, `phase-headers-${width}.png`), fullPage: true });
+    assert.ok(bottom <= height, `all five phase headings fit ${width}x${height}: ${bottom}`);
     assert.ok(
       (await page.getByRole('link', { name: '打开内部 PR ↗', exact: true }).boundingBox()).y < height,
     );
@@ -96,7 +101,7 @@ try {
     await page.waitForTimeout(50);
   assert.equal((await receiver.status()).automation.status, 'FAILED');
   await page.reload();
-  await page.locator('[data-stage="4"] > summary').click();
+  await openStage(page, 4);
   await page.locator('[data-stage="4"] [data-repair="platform"]').first().click();
   await page.locator('[data-settings-form]').waitFor();
   assert.equal(await page.locator('.flow.setup,#operation').count(), 0);
@@ -108,7 +113,7 @@ try {
   await page.locator('[data-settings-result]').filter({ hasText: '设置已保存' }).waitFor({ timeout: 30000 });
   assert.doesNotMatch(await readFile(file, 'utf8'), /SYNTHETIC_BROWSER_TOKEN/);
   await page.getByRole('button', { name: '继续原同步 →', exact: true }).click();
-  await page.locator('[data-stage="4"][data-stage-state="waiting-system"]').waitFor({ timeout: 30000 });
+  await page.locator('[data-flow-stage="4"][data-flow-state="waiting-system"]').waitFor({ timeout: 30000 });
   assert.equal(platform.state.creates.prs, 1);
   await page.getByRole('button', { name: '仓库设置', exact: true }).click();
   for (const width of [1440, 1366, 1280, 390]) {
