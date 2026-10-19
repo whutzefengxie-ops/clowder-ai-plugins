@@ -28,6 +28,36 @@ test('latest pointer to a missing record is corruption, not an empty task histor
   await assert.rejects(() => readTask({ stateDir: folder, bindingId: 'fixture-binding' }), { code: 'TASK_UNREADABLE' });
 });
 
+test('an empty delivery id written by an older client is read as no delivery', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'repo-sync-task-empty-delivery-'));
+  const config = { stateDir: folder, bindingId: 'empty-delivery-binding' };
+  await mkdir(join(folder, 'operations'));
+  const id = 'd'.repeat(32);
+  await writeFile(
+    join(folder, 'operations', `${id}.json`),
+    JSON.stringify({
+      schema: 2,
+      id,
+      inputHash: 'b'.repeat(64),
+      ownerPid: process.pid,
+      bindingId: config.bindingId,
+      deliveryId: '',
+      action: 'configure-auto-merge',
+      status: 'SUCCEEDED',
+      startedAt: new Date().toISOString(),
+      steps: [],
+      configSnapshot: {},
+    }),
+  );
+  await assert.rejects(
+    () => readTask(config, id),
+    (error) => {
+      assert.notEqual(error.message, '任务同步身份无效');
+      return true;
+    },
+  );
+});
+
 test('a request ID belonging to a different binding cannot be treated as an unused ID', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'repo-sync-task-foreign-'));
   await mkdir(join(folder, 'operations'));

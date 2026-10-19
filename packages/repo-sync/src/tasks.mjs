@@ -122,7 +122,7 @@ export class Tasks {
       inputHash: hash,
       ownerPid: process.pid,
       bindingId: receiver.config.bindingId,
-      deliveryId: input.deliveryId ?? null,
+      deliveryId: input.deliveryId || null,
       configSnapshot: configSnapshot(receiver.config),
       action: input.action,
       status: 'RUNNING',

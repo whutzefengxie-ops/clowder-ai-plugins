@@ -146,6 +146,8 @@ export async function readTask(config, id) {
     }
     if (!/^[a-f0-9]{32}$/.test(id)) fail('TASK_UNREADABLE', '任务记录格式无效，请在本机核对');
     const value = JSON.parse(await readText(join(folder, `${id}.json`)));
+    // 旧版本把"没有交付"写成空字符串；这里先归一化，避免一条历史记录让整个项目读不出来。
+    if (value && value.deliveryId === '') value.deliveryId = null;
     validateTaskVersion(value);
     if (value.bindingId !== config.bindingId) {
       if (explicit) fail('TASK_BINDING_CHANGED', '原请求属于其他仓库绑定，暂停；不可当成未使用的请求标识覆盖');
@@ -236,7 +238,7 @@ function validateTaskVersion(value) {
     fail('TASK_UNREADABLE', '任务项目身份损坏，保留原记录');
   if (value.schema !== undefined && value.schema !== 2) fail('TASK_UNREADABLE', '任务记录版本不支持，不能当旧格式重建');
   if (value.schema === 2) {
-    if (value.deliveryId !== null && !/^[a-f0-9]{24}$/.test(value.deliveryId ?? ''))
+    if (value.deliveryId != null && value.deliveryId !== '' && !/^[a-f0-9]{24}$/.test(value.deliveryId))
       fail('TASK_UNREADABLE', '任务同步身份无效');
     try {
       validateSnapshot(value.configSnapshot);
