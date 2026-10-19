@@ -66,7 +66,7 @@ export async function buildCandidate(receiver, state, delivery) {
     const separator = object.indexOf(Buffer.from('\n\n'));
     if (separator < 0) fail('COMMIT_OBJECT_INVALID', '来源提交缺少有效消息边界。');
     const message = object.subarray(separator + 2);
-    const tree = await preservedTree(receiver.git, source, delivery.base.internal, delivery.id);
+    const tree = await preservedTree(receiver.git, source, delivery.base.internal, delivery.id, parents[0] ?? null);
     const env = {
       ...gitEnvironment(),
       GIT_AUTHOR_NAME: policy.identity.name,
