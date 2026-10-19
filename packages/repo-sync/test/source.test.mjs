@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { githubRepository, groupLandings } from '../src/github.mjs';
+import { splitLandingsOutsidePr } from '../src/github-landings.mjs';
 import { closureEvidence, issueReferences } from '../src/github-issues.mjs';
 import { attachIssueRequirements } from '../src/requirements.mjs';
 
@@ -27,6 +28,31 @@ test('rebase landings collect the actual contiguous main commits', () => {
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].boundaries, ['a', 'b', 'c']);
 });
+test('a squash-merged neighbour is split out instead of deadlocking the later PR', () => {
+  const later = pr('n1496', 'c');
+  const associations = { a: [later], b: [later], c: [later] };
+  const groups = groupLandings(['a', 'b', 'c'], associations, 'main');
+  assert.equal(groups.length, 1, '关联不稳定时先是并成一组');
+  // 该 PR 自己的提交只有 c，#1394(a) 与 #1494(b) 属于别的 landing
+  const split = splitLandingsOutsidePr(groups[0], ['c'], associations, 'main');
+  assert.deepEqual(
+    split.map((group) => [group.target, group.kind]),
+    [
+      ['a', 'commit'],
+      ['b', 'commit'],
+      ['c', 'pr'],
+    ],
+    '不属于该 PR 的边界必须拆成独立交付，否则无法先接收它们',
+  );
+});
+
+test('a rebase landing that owns every boundary keeps one delivery', () => {
+  const source = pr('one', 'c');
+  const associations = { a: [source], b: [source], c: [source] };
+  const groups = groupLandings(['a', 'b', 'c'], associations, 'main');
+  assert.equal(splitLandingsOutsidePr(groups[0], ['a', 'b', 'c'], associations, 'main').length, 1);
+});
+
 test('unknown commits, ambiguous PR ownership and a development head pause discovery', () => {
   for (const items of [[pr('one', 'a'), pr('two', 'a')], [pr('one', 'development-head')]]) {
     assert.throws(() => groupLandings(['a'], { a: items }, 'main'), { code: 'SOURCE_UNPROVEN' });

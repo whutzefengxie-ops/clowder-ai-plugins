@@ -3,7 +3,7 @@ import { phase } from './execution.mjs';
 import { api, withGithub } from './gh-api.mjs';
 import { requireGithubToken } from './github-auth.mjs';
 import { collectIssues } from './github-issues.mjs';
-import { groupLandings } from './github-landings.mjs';
+import { groupLandings, splitLandingsOutsidePr } from './github-landings.mjs';
 import { git } from './process.mjs';
 import { attachIssueRequirements } from './requirements.mjs';
 import { sourceTarget } from './source-target.mjs';
@@ -54,12 +54,25 @@ async function discoverLocked(receiver, selection, provider) {
     const associations = {};
     for (const sha of boundaries)
       associations[sha] = await provider.api(`repos/${repo}/commits/${sha}/pulls?per_page=100`, true);
-    const groups = groupLandings(
+    const grouped = groupLandings(
       boundaries,
       associations,
       receiver.config.sourceBranch,
       selection?.includeDirectCommits === true,
     );
+    // 只有该 PR 自己的提交才能算作它的 landing；其余边界拆成独立交付，避免死锁。
+    const groups = [];
+    for (const group of grouped) {
+      if (!group.pr || group.boundaries.length < 2) {
+        groups.push(group);
+        continue;
+      }
+      const commits = await provider.api(`repos/${repo}/pulls/${group.pr.number}/commits?per_page=100`, true);
+      const owned = new Set(
+        (Array.isArray(commits) ? commits : []).map((item) => item?.sha).filter((sha) => typeof sha === 'string'),
+      );
+      groups.push(...splitLandingsOutsidePr(group, owned, associations, receiver.config.sourceBranch));
+    }
     const plans = [];
     let base = state.accepted.upstream;
     for (const group of groups) {
