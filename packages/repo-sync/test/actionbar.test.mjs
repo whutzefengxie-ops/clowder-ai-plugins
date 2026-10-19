@@ -38,6 +38,25 @@ test('failures are presented as user work instead of a system wait', () => {
   }
 });
 
+test('a repair button never hides the round action (restart + auth dead end)', () => {
+  const html = actionBar(
+    { text: '修正后恢复原轮次', action: 'resume-sync', label: '恢复原同步 →' },
+    false,
+    {
+      state: {
+        automation: {
+          id: 'run-1',
+          status: 'FAILED',
+          error: { code: 'GITHUB_AUTH_REQUIRED', message: '需要 GitHub 读取令牌' },
+        },
+      },
+      config: {},
+    },
+  );
+  assert.match(html, /data-action="resume-sync"/, '恢复原同步必须与修复按钮同时存在，否则补完 token 无路可走');
+  assert.match(html, /data-repair="github"/);
+});
+
 test('record persistence and stop uncertainty are explicit user actions', () => {
   const policy = { text: '处理记录', action: 'persist-operation', label: '补存原任务记录' };
   assert.match(actionBar(policy, false, { operation: { persistence: { status: 'FAILED' } }, state: {} }), /需要你处理/);

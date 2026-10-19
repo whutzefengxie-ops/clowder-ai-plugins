@@ -24,13 +24,20 @@ export function createGithubAuthentication(snapshot, refresh) {
     if (!response.ok) throw Error(`${result.code}：${result.message}`);
     return result;
   }
-  function feedback(message) {
-    const panel = document.querySelector('#github-source-auth');
+  function feedback(message) {    const panel = document.querySelector('#github-source-auth');
     if (!panel) return;
     for (let parent = panel; parent; parent = parent.parentElement)
       if (parent.tagName === 'DETAILS') parent.open = true;
     panel.querySelector('[data-github-feedback]').textContent = message;
     panel.querySelector('[data-github-feedback]').scrollIntoView({ block: 'nearest' });
+  }
+  async function verifyNow() {
+    try {
+      await request('/api/github-check', {});
+      return true;
+    } catch {
+      return false;
+    }
   }
   async function submit(form) {
     const token = form.elements.namedItem('githubToken').value;
@@ -41,9 +48,14 @@ export function createGithubAuthentication(snapshot, refresh) {
     }
     try {
       await request('/api/github-auth', { token });
+      const checked = await verifyNow();
       await refresh();
       document.dispatchEvent(new CustomEvent('repo-sync-auth-provided', { detail: { kind: 'github' } }));
-      feedback('GitHub 读取令牌已提供，仅在当前服务内存。请只读验证，或重新读取目标版本的 PR 清单；尚未开始同步。');
+      feedback(
+        checked
+          ? 'GitHub 读取令牌已提供，并通过只读验证。可以回到同步工作台继续。'
+          : 'GitHub 读取令牌已提供，但只读验证未通过；请点“只读验证 GitHub 连接”查看原因后重试。',
+      );
     } catch (error) {
       feedback(error.message);
     }
@@ -61,8 +73,14 @@ export function createGithubAuthentication(snapshot, refresh) {
         if (field) field.value = '';
         if (!token) throw Error('请先输入 GitHub 读取 Token；空值不会覆盖已有认证。');
         await request('/api/github-auth', { token });
+        const checked = await verifyNow();
         await refresh();
-        feedback('✓ Token 已保存到本次服务。请点击旁边的只读验证按钮确认来源读取权限。');
+        document.dispatchEvent(new CustomEvent('repo-sync-auth-provided', { detail: { kind: 'github' } }));
+        feedback(
+          checked
+            ? '✓ Token 已保存到本次服务并通过只读验证。可以回到同步工作台继续。'
+            : 'Token 已保存，但只读验证未通过；请点“只读验证 GitHub 连接”查看原因。',
+        );
       } else if (clear) {
         await request('/api/github-auth', { token: '' });
         await refresh();

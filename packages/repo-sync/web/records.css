@@ -69,11 +69,16 @@
 }
 
 /* ---------- 本轮参数：常驻可见，不再两段折叠 ---------- */
+/* 操作带改为单列：参数区占满整行，不再挤在 260px 侧栏里 */
+.next-action.now { grid-template-columns: minmax(0, 1fr); }
 .next-action.now .run-options {
   border-top: 0;
-  margin-top: 18px;
+  margin-top: 20px;
   display: grid;
-  gap: 16px;
+  gap: 20px;
+  grid-column: 1 / -1;
+  grid-row: auto;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 .run-option h4 {
   font-size: var(--t-5);
@@ -87,8 +92,11 @@
   padding-top: 0;
 }
 .next-action.now .run-option + .run-option {
-  border-top: 1px dashed var(--line);
-  padding-top: 14px;
+  border-top: 0;
+  padding-top: 0;
+}
+@media (max-width: 900px) {
+  .next-action.now .run-options { grid-template-columns: 1fr; gap: 16px; }
 }
 
 /* ---------- 执行证据：不再单独折叠（层级从 3 层降到 2 层） ---------- */
