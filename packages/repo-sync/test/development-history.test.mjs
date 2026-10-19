@@ -107,6 +107,28 @@ test('an interleaved main landing is accepted only when its tree is already in t
   assert.notEqual(parallel, internal);
 });
 
+test('files a landing inherits from its parent are parallel main work, not this PR', async () => {
+  const f = await repositoriesWithoutClone();
+  const base = await f.commit('base.txt', 'base', 'base');
+  await git(f.repo, ['switch', '-c', 'feature']);
+  await f.commit('feature.txt', 'one', 'feature one');
+  await git(f.repo, ['switch', 'main']);
+  // 并行 main 提交：本 PR 的 head 线上没有它
+  const parallel = await f.commit('parallel.txt', 'accepted', 'parallel main');
+  await git(f.repo, ['merge', '--squash', 'feature']);
+  await git(f.repo, ['commit', '-m', 'squashed feature']);
+  const landing = await git(f.repo, ['rev-parse', 'HEAD']);
+  // head 从 base 另起一条线，只带 PR 自己的改动，不含 parallel.txt
+  await git(f.repo, ['switch', '-c', 'headline', base]);
+  await writeFile(join(f.repo, 'feature.txt'), 'one');
+  await git(f.repo, ['add', 'feature.txt']);
+  await git(f.repo, ['commit', '-m', 'feature one (head)']);
+  const head = await git(f.repo, ['rev-parse', 'HEAD']);
+  const receiver = { git: { directory: f.repo, sha: async () => base }, config: { internalPaths: [] } };
+  // landing==parent 的 parallel.txt 继承自并行 main，不得归因到本 PR
+  await assertReplayProjection(receiver, { base: {} }, { landingBase: parallel, head, landing, commits: [head] });
+});
+
 async function repositoriesWithoutClone() {
   const repo = await mkdtemp(join(process.cwd(), '.repo-sync-tests', 'projection-'));
   await mkdir(repo, { recursive: true });

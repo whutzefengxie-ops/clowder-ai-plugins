@@ -79,7 +79,14 @@ export async function assertReplayProjection(receiver, delivery, replay) {
   const preserved = (path) => (receiver.config.internalPaths ?? []).some((rule) => matches(path, rule));
   const mismatches = [];
   for (const path of sourceChanges) {
-    if (!preserved(path) && !equalEntry(headTree.get(path), landingTree.get(path))) mismatches.push(path);
+    // landing 相对其父提交没有变化 => 这个差异继承自并行 main，不是本 PR 改的，
+    // 交给 check #2（parentChanges vs internal 基线）去要求先接收，不在这里阻塞。
+    if (
+      !preserved(path) &&
+      !equalEntry(headTree.get(path), landingTree.get(path)) &&
+      !equalEntry(landingTree.get(path), parentTree.get(path))
+    )
+      mismatches.push(path);
   }
   for (const path of parentChanges) {
     if (!sourceChanges.has(path) && !preserved(path) && !equalEntry(parentTree.get(path), internalTree.get(path))) mismatches.push(path);
