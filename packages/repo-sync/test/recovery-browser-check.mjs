@@ -102,7 +102,6 @@ try {
     .locator('[data-attempt]')
     .filter({ hasText: '保存交付台账' })
     .filter({ hasText: 'LEDGER_WRITE_FAILED' });
-  await ledgerEvidence.locator(':scope > summary').click();
   await ledgerEvidence.getByText(/LEDGER_WRITE_FAILED/).waitFor();
   await failedReference.getByText('错误码与脱敏诊断摘要', { exact: true }).click();
   await failedReference

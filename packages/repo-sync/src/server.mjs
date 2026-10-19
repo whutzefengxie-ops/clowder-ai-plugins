@@ -94,6 +94,7 @@ const assets = new Map([
     'panorama.mjs',
     'panorama.css',
     'round.css',
+    'records.css',
     'flow-stage.mjs',
     'live-workflow.mjs',
     'continuation-view.mjs',

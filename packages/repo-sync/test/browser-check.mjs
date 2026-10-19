@@ -49,7 +49,7 @@ try {
   }
   for (let index = 0; index < 2; index++) {
     await page.locator('[data-action="start"]').click();
-    await page.locator('[data-flow-stage="2"][data-flow-state="current"]').waitFor();
+    await page.locator('[data-flow-stage="2"]').waitFor({ state: 'attached' });
     await openStage(page, 2);
     if (!index) {
       await page.getByLabel('内部 Issue 编号').fill('318');

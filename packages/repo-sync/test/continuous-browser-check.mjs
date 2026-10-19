@@ -110,12 +110,11 @@ try {
     assert.ok(active.issues.length, 'fixture must verify actual Issue associations');
     for (const issue of active.issues) {
       const label = `关联并回读内部 PR 与 Issue #${issue.number}`;
-      const evidence = issueLink.locator('details[data-attempt]').filter({ hasText: label });
+      const evidence = issueLink.locator('[data-attempt]').filter({ hasText: label });
       assert.ok(
         await evidence.count(),
         `the original Issue #${issue.number} association evidence must remain`,
       );
-      await evidence.last().locator(':scope > summary').click();
       assert.ok((await issueLink.innerText()).includes(label));
     }
     assert.equal(
@@ -136,10 +135,7 @@ try {
       await platform.edit({ loseUpdate: false });
       await page.getByRole('button', { name: '恢复原同步 →' }).click();
     }
-    await page.waitForFunction(
-      (index) => document.querySelectorAll('.record-list [data-record]').length >= index,
-      number,
-    );
+    await page.waitForFunction(() => document.querySelectorAll('[data-stage]').length === 5);
     for (
       let retry = 0;
       retry < 100 && (await receiver.status()).deliveries[number - 1].status !== 'COMPLETE';
@@ -148,12 +144,12 @@ try {
       await new Promise((done) => setTimeout(done, 200));
     assert.equal((await receiver.status()).deliveries.at(-1).status, 'COMPLETE');
     await openHistory(page);
-    await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
+    await page.locator(`.records-page [data-record="${active.id}"]`).click();
     await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
     await page.getByRole('button', { name: '展开全部阶段' }).click();
     await page.getByText('当时配置与来源', { exact: true }).click();
-    assert.ok((await page.locator('.record-detail').innerText()).includes('README.en.md'));
-    assert.equal(await page.locator('.record-detail [data-action]').count(), 0);
+    assert.ok((await page.locator('.records-detail').innerText()).includes('README.en.md'));
+    assert.equal(await page.locator('.records-detail [data-action]').count(), 0);
     await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   }
   const state = await receiver.status();

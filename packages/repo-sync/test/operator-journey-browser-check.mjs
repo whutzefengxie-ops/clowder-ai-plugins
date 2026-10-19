@@ -101,7 +101,7 @@ try {
   await page.locator('.record-list input[name="q"]').fill('v2');
   await page.locator('.record-list input[name="q"]').evaluate((element) => element.setSelectionRange(1, 1));
   await page.waitForTimeout(5500);
-  assert.equal(await page.locator('[data-stage="1"]').evaluate((element) => element.open), true);
+  assert.equal(await page.locator('.records-page').count(), 1);
   assert.equal(await page.evaluate(() => document.activeElement?.name), 'q');
   assert.equal(
     await page.locator('.record-list input[name="q"]').evaluate((element) => element.selectionStart),

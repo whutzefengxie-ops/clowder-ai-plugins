@@ -20,7 +20,7 @@ export function deliveryOverview(snapshot, _record, d, historical) {
     ${issueReferenceNotes(d.source)}
     <div class="delivery-objects"><details class="delivery-object-details" data-persist-details="issues"><summary><span class="delivery-object-title">关联 Issue · ${d.issues?.length ?? 0} 个</span><small>${issueGuide(d.issues?.length ?? 0, version)}</small></summary><p class="delivery-object-guide">展开后查看外部 Issue、内部映射、关联关系和合入后的关单条件。</p>${rowsForIssues(d, snapshot, historical, version)}</details>
     <details class="delivery-object-details" data-persist-details="commits"><summary><span class="delivery-object-title">${d.source.developmentReplay ? '逐条开发提交与内部 SHA' : '本笔提交与内部 SHA'} · ${rows.length} 条</span><small>${rows.length ? '展开后查看外部 SHA、内部 SHA 和提交标题。' : '提交清单尚未冻结。'}</small></summary><p class="delivery-object-guide">这里是业务对象映射；底层命令和重试记录请查看对应阶段的执行详情。</p>${rowsForCommits(d, rows, mappings)}</details></div>
-    <details class="delivery-more" data-persist-details="source-actions"><summary>更多来源与操作</summary>${d.source.number ? link(`${d.source.url}/commits`, '查看上游 PR 的完整开发提交 ↗') : ''}
+    <details class="delivery-more" data-persist-details="source-actions"><summary>来源追溯与撤销</summary>${d.source.number ? link(`${d.source.url}/commits`, '查看上游 PR 的完整开发提交 ↗') : ''}
     ${!historical && d.source.number && development === undefined ? '<button type="button" data-action="inspect-delivery-source">读取原 PR 开发提交数量与清单</button>' : ''}
     ${cancellationForm(d, historical)}</details></section>`;
 }
@@ -29,7 +29,7 @@ function issueRow(issue, snapshot, d, historical) {
   const mapping =
     d.issueMappings?.[issue.sourceId] ?? (!historical ? snapshot.state?.issues?.[issue.sourceId] : null);
   const result = d.issueResults?.[issue.sourceId];
-  return `<li><b>${link(issue.url, `#${issue.number} ${issue.title ?? '标题未记录'}`)}</b><details class="tech"><summary>为什么？</summary><div class="tech-copy">${issue.relation === 'closes' ? '上游有 PR 关闭事件：内部 PR 合入核验后关闭' : '上游仅引用 / 关联，保持内部 Issue 打开；如需随 PR 关闭，请在上游使用 closes、fixes 或 resolves'} · ${mapping ? link(mapping.url, `内部 #${mapping.internalId}`) : '内部 Issue 待创建 / 未记录'}${result ? ` · ${esc(result.state)}` : ''}</div></details></li>`;
+  return `<li><b>${link(issue.url, `#${issue.number} ${issue.title ?? '标题未记录'}`)}</b><p class="note-line">${issue.relation === 'closes' ? '上游有 PR 关闭事件：内部 PR 合入核验后关闭' : '上游仅引用 / 关联，保持内部 Issue 打开；如需随 PR 关闭，请在上游使用 closes、fixes 或 resolves'} · ${mapping ? link(mapping.url, `内部 #${mapping.internalId}`) : '内部 Issue 待创建 / 未记录'}${result ? ` · ${esc(result.state)}` : ''}</p></li>`;
 }
 function rowsForIssues(d, snapshot, historical, version) {
   const rows = (d.issues ?? []).map((issue) => issueRow(issue, snapshot, d, historical));

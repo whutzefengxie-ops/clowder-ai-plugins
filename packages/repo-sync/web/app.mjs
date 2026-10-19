@@ -8,7 +8,7 @@ import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
 import { configurationConfirmation, initializeSubmissions } from './form-submission.mjs';
 import { createGithubAuthentication } from './github-auth.mjs';
-import { createHistory } from './history.mjs';
+import { createHistory, recordList } from './history.mjs';
 import { createIssueAuthentication, updateIssueFields } from './issue-auth.mjs';
 import { updateLiveWorkflow } from './live-workflow.mjs';
 import { renderTask } from './operation-view.mjs';
@@ -28,12 +28,20 @@ import { button, esc, sha } from './ui.mjs';
 import { updateTagChoice } from './version.mjs';
 import { retainView } from './view-state.mjs';
 import { workbench } from './workbench.mjs';
+import { workflow } from './workflow.mjs';
+
+const VIEWS = ['workbench', 'records', 'configuration'];
+const requestedView = new URL(location.href).searchParams.get('view');
+let view =
+  requestedView && VIEWS.includes(requestedView)
+    ? requestedView
+    : new URL(location.href).searchParams.has('record')
+      ? 'records'
+      : 'workbench';
 
 const content = document.getElementById('content');
 const errorPanel = document.getElementById('error');
 let snapshot;
-let view =
-  new URL(location.href).searchParams.get('view') === 'configuration' ? 'configuration' : 'workbench';
 let mobileDetail = !!new URL(location.href).searchParams.get('record');
 let availableTags = [];
 const projectNavigation = createProjectNavigation(() => snapshot, saveDraft);
@@ -104,7 +112,9 @@ function render({ keepScroll = false } = {}) {
   content.innerHTML =
     view === 'configuration'
       ? configuration(snapshot, esc, sha, button, setup.state())
-      : workbench(snapshot, records.get(), availableTags, mobileDetail);
+      : view === 'records'
+        ? recordsPage(snapshot, records.get(), mobileDetail)
+        : workbench(snapshot, records.get(), availableTags, mobileDetail);
   if (view === 'workbench') content.insertAdjacentHTML('afterbegin', roundView.render());
   transfers.render(content, view);
   updateShell(snapshot, view);
@@ -240,12 +250,29 @@ document.addEventListener('click', async (event) => {
     showActionResult(element.dataset.action, result);
   }
 });
+function recordsPage(snapshot, records, mobileDetail) {
+  if (!snapshot.state)
+    return `<section class="card task"><h2>还没有同步记录</h2><p>完成首次配置并同步一笔之后，这里会按时间列出每笔的版本、PR、阶段与结果。</p><button type="button" data-view="configuration" class="primary">配置仓库 →</button></section>`;
+  const active = snapshot.state.active ?? null;
+  const selected = records.selected ?? 'current';
+  const historical = selected !== 'current' && selected !== active?.id;
+  const list = recordList(records, active);
+  const shown =
+    records.error && !historical
+      ? `<p class="record-gap bad" role="alert">× ${esc(records.error)}<br>记录读取失败，原选择保留。</p><button type="button" data-reload-record>重新读取记录</button>`
+      : historical && records.detail
+        ? `<div class="records-detail-body">${workflow(snapshot, records.detail, true)}</div>`
+        : historical
+          ? '<p role="status">正在读取所选记录…</p>'
+          : '<p class="records-hint" role="status">从左侧选择一笔记录，这里会显示它当时的五阶段过程、对象与时间；当前这一笔请回同步工作台查看。</p>';
+  return `<div class="records-page${mobileDetail ? ' mobile-detail' : ''}">${list}<section class="records-detail" aria-label="所选同步记录">${shown}</section></div>`;
+}
 function changeView(next) {
   saveDraft();
   view = next;
   const url = new URL(location.href);
-  if (view === 'configuration') url.searchParams.set('view', view);
-  else url.searchParams.delete('view');
+  if (view === 'workbench') url.searchParams.delete('view');
+  else url.searchParams.set('view', view);
   history.replaceState(null, '', url);
   render();
 }
@@ -263,6 +290,10 @@ async function navigate(element) {
     saveDraft();
     mobileDetail = true;
     await records.select(element.dataset.record);
+    if (element.dataset.record === 'current') {
+      changeView('workbench');
+      return;
+    }
   }
   if (element.hasAttribute('data-record-back')) {
     mobileDetail = false;

@@ -64,7 +64,7 @@ export function createSettingsController(snapshot, refresh) {
       feedback = {
         project: pageProjectId,
         binding,
-        html: `<h3>${result.checks.some((c) => c.status === 'FAILED') ? '配置已保存，部分项目需处理' : '设置已保存'}</h3>${result.checks.map((c) => `<details class="tech"><summary>为什么？</summary><div class="tech-copy class="${c.status === 'FAILED' ? 'bad' : 'good'}"">${c.status === 'FAILED' ? '×' : '✓'} ${esc(c.label)}：${esc(c.error?.message ?? c.message)}</div></details>`).join('')}`,
+        html: `<h3>${result.checks.some((c) => c.status === 'FAILED') ? '配置已保存，部分项目需处理' : '设置已保存'}</h3>${result.checks.map((c) => `<p class="note-line ${c.status === 'FAILED' ? 'bad' : 'good'}">${c.status === 'FAILED' ? '×' : '✓'} ${esc(c.label)}：${esc(c.error?.message ?? c.message)}</p>`).join('')}`,
       };
       if (snapshot().config?.bindingId !== binding) return;
       await refresh();

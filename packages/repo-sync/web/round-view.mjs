@@ -7,7 +7,7 @@ export function roundView(round, error = '') {
   if (!round) return '<p role="status">正在读取本轮目标与逐笔进展…</p>';
   const c = round.counts,
     kind = { commit: 'commit', tag: 'tag', latest: '最新分支', queue: '已冻结清单' }[round.selection?.kind];
-  return `<div class="round-heading"><h2>本轮同步进度 <span>${c.complete} / ${round.total ?? '待确定'} 笔已完成</span></h2><details class="tech"><summary>为什么？</summary><div class="tech-copy data-round-current">${round.current ? `当前：${esc(sourceTitle(round.current))}` : round.status === 'COMPLETE' ? '本轮已全部接收' : '当前没有正在同步的交付'}</div></details></div><div class="round-target">目标 ${esc(kind)} · ${shortSha(round.selection?.value ?? round.target ?? '来源扫描后确定')}<span>同步中 ${c.current} · 未同步 ${c.pending} · 已撤销 ${c.cancelled}</span></div><div class="round-filter" role="group" aria-label="本轮进度筛选">${Object.entries(
+  return `<div class="round-heading"><h2>本轮同步进度 <span>${c.complete} / ${round.total ?? '待确定'} 笔已完成</span></h2><p class="note-line" data-round-current>${round.current ? `当前：${esc(sourceTitle(round.current))}` : round.status === 'COMPLETE' ? '本轮已全部接收' : '当前没有正在同步的交付'}</p></div><div class="round-target">目标 ${esc(kind)} · ${shortSha(round.selection?.value ?? round.target ?? '来源扫描后确定')}<span>同步中 ${c.current} · 未同步 ${c.pending} · 已撤销 ${c.cancelled}</span></div><div class="round-filter" role="group" aria-label="本轮进度筛选">${Object.entries(
     labels,
   )
     .map(

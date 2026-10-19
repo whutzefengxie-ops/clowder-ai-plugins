@@ -127,15 +127,15 @@ try {
   assert.equal(await otherTab.getByLabel('当前同步项目').inputValue(), 'default');
   assert.equal(await page.getByLabel('当前同步项目').inputValue(), id);
   await otherTab.close();
-  await page.locator('.history-disclosure > summary').click();
-  await page.locator(`.history-disclosure [data-record="${completed.id}"]`).click();
+  page.locator('.shell-nav [data-view="records"]').click();
+  await page.locator(`.records-page [data-record="${completed.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   await page.locator('.delivery-boundary > summary').click();
-  assert.ok((await page.locator('.record-detail').innerText()).includes(b.u2));
+  assert.ok((await page.locator('.records-detail').innerText()).includes(b.u2));
   await page.locator('.project-sidebar-list [data-project-enter="default"]').click();
-  await page.getByRole('heading', { name: '原操作需要处理', exact: true }).waitFor();
+  await page.getByText('需要你处理', { exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.has('record'), false);
-  assert.equal(await page.locator(`.history-disclosure [data-record="${completed.id}"]`).count(), 0);
+  assert.equal(await page.locator(`.records-page [data-record="${completed.id}"]`).count(), 0);
   assert.equal((await ra.status()).accepted.upstream, a.u0);
   release();
   for (let count = 0; count < 100; count++) {

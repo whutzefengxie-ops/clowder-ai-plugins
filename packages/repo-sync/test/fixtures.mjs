@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
-import { command, git } from '../src/process.mjs';
+import { join } from 'node:path';
+import { git } from '../src/process.mjs';
 
 export async function repositories() {
   const temporary = join(process.cwd(), '.repo-sync-tests');
@@ -22,7 +22,14 @@ export async function repositories() {
   const u0 = await commit('initial');
   await mkdir(internal);
   await git(internal, ['init', '--bare', '-b', 'main']);
-  await command('git', ['clone', relative(process.cwd(), internal), review]);
+  // Do not clone a Windows drive-letter path here. Git can interpret the colon
+  // in `G:\...` as an scp-style remote and fall through to SSH authentication;
+  // an initialized working repository with an explicit local origin is stable
+  // across Windows and POSIX test runners.
+  await mkdir(review);
+  await git(review, ['init', '-b', 'main']);
+  await git(review, ['config', 'protocol.file.allow', 'always']);
+  await git(review, ['remote', 'add', 'origin', internal.replaceAll('\\', '/')]);
   await git(review, ['config', 'user.name', 'Synthetic Review']);
   await git(review, ['config', 'user.email', 'review@example.invalid']);
   await writeFile(join(review, 'core.txt'), 'initial');

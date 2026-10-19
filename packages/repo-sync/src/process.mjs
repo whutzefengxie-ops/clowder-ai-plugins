@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { commandFailure } from './command-errors.mjs';
 import { fail } from './config.mjs';
@@ -86,6 +88,14 @@ export async function command(executable, args, options = {}) {
 }
 export function gitEnvironment() {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' };
+  if (process.platform === 'win32') {
+    const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+    const pathEntries = (env[pathKey] ?? '').split(delimiter).filter(Boolean);
+    const gitCmd = pathEntries.find((entry) => /[\\/]git[\\/]cmd$/i.test(entry));
+    const gitBin = gitCmd && join(gitCmd, '..', 'mingw64', 'bin');
+    if (gitBin && existsSync(gitBin) && !pathEntries.some((entry) => entry.toLowerCase() === gitBin.toLowerCase()))
+      env[pathKey] = [gitBin, ...pathEntries].join(delimiter);
+  }
   if (!env.GIT_SSH_COMMAND && !env.GIT_SSH) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes';
   return env;
 }

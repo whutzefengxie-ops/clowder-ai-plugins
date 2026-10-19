@@ -1,7 +1,8 @@
 export async function openHistory(page) {
-  const history = page.locator('.history-disclosure');
-  await history.waitFor({ state: 'attached' });
-  if (!(await history.evaluate((node) => node.open))) await history.locator(':scope > summary').click();
+  const already = await page.locator('.records-page').count();
+  if (already) return;
+  await page.locator('.shell-nav [data-view="records"]').click();
+  await page.locator('.records-page').waitFor({ state: 'attached' });
 }
 
 export async function openStage(page, stage) {
@@ -14,7 +15,6 @@ export async function openStage(page, stage) {
 }
 
 export async function openAutoMerge(page) {
-  const detail = page.locator('.auto-merge-options');
-  if (await detail.count() && !(await detail.evaluate((node) => node.open)))
-    await detail.locator(':scope > summary').click();
+  // 本轮参数改为常驻可见，不再需要展开折叠
+  await page.locator('.auto-merge-choice').first().waitFor({ state: 'attached' });
 }

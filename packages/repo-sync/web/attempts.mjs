@@ -199,7 +199,7 @@ function stepView(group, stage, historical) {
 }
 
 function evidence({ task, step }, index) {
-  return `<details data-attempt="${esc(`${task.id}:${step.id}`)}" data-attempt-task="${esc(task.id)}"><summary>执行详情 ${index + 1} · ${labels[step.status] ?? '状态未记录'}</summary><small>${esc(step.label)}<br>任务 ${esc(task.id)} · 开始 ${when(step.startedAt)} · 结束 ${when(step.finishedAt)}</small>${taskProgress(step, esc, Date.now(), true)}${step.error ? `<p class="bad">× ${esc(step.error.code)}：${esc(step.error.message)}</p>` : ''}</details>`;
+  return `<div class="attempt" data-attempt="${esc(`${task.id}:${step.id}`)}" data-attempt-task="${esc(task.id)}"><p class="attempt-h">执行记录 ${index + 1} · ${labels[step.status] ?? '状态未记录'}</p><small>${esc(step.label)}<br>任务 ${esc(task.id)} · 开始 ${when(step.startedAt)} · 结束 ${when(step.finishedAt)}</small>${taskProgress(step, esc, Date.now(), true)}${step.error ? `<p class="bad">× ${esc(step.error.code)}：${esc(step.error.message)}</p>` : ''}</div>`;
 }
 
 function addUnscopedFailure(groups, tasks, stage, delivery) {

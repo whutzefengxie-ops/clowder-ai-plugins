@@ -249,7 +249,7 @@ try {
   assert.equal(await receiver.git.remoteBranch(original.branch), original.candidate);
   await page.reload();
   await openHistory(page);
-  await page.locator(`.history-disclosure [data-record="${original.id}"]`).click();
+  await page.locator(`.records-page [data-record="${original.id}"]`).click();
   await page.locator('[data-delivery-overview]').waitFor();
   assert.equal(
     await page.locator('[data-form="cancel-delivery"]').count(),

@@ -188,7 +188,7 @@ try {
   );
   await page.reload();
   await page.getByText(/已设置：本笔完成后暂停/).waitFor();
-  await page.locator('.next-action .run-options > details:not(.auto-merge-options) > summary').click();
+  await page.locator('.next-action .continuation-controls').waitFor({ state: 'visible' });
   const continuation = page.locator('form[data-form="configure-continuation"]');
   await continuation.locator('[name="continuation"]').selectOption('after-each');
   await continuation.getByRole('button').click();

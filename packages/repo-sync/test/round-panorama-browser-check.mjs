@@ -137,7 +137,7 @@ try {
   await page.reload();
   await page.locator('[data-stage="4"][open]').waitFor();
   await page.screenshot({ path: join(evidence, 'panorama-current.png'), fullPage: true });
-  await page.locator('.auto-merge-options > summary').click();
+  await page.locator('.auto-merge-choice').first().waitFor({ state: 'visible' });
   await page.locator('.auto-merge-choice [name="autoMerge"]').check();
   await page.getByRole('button', { name: '保存自动合入选择', exact: true }).click();
   await until(async () => (await receiver.status()).active?.autoMerge?.status === 'WAITING');

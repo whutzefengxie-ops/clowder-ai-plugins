@@ -79,8 +79,7 @@ try {
   const keys = await page.locator('[data-step-key]').evaluateAll((n) => n.map((i) => i.dataset.stepKey));
   await page.reload();
   await page.locator('[data-flow-stage="4"][data-flow-state="waiting-system"]').waitFor();
-  if (await page.locator('.auto-merge-options').evaluate((e) => e.open))
-    await page.locator('.auto-merge-options > summary').click();
+  await page.locator('.auto-merge-choice').first().waitFor({ state: 'visible' });
   assert.deepEqual(
     await page.locator('[data-step-key]').evaluateAll((n) => n.map((i) => i.dataset.stepKey)),
     keys,

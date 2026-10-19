@@ -66,7 +66,7 @@ function cards(snapshot, record, historical) {
         .map((g) => {
           const projected = projectStep(g),
             s = projected.status;
-          return `<li><button type="button" class="flow-node" data-flow-parent="${stage}" data-flow-node="${esc(g.key)}" data-flow-node-status="${s}" aria-label="${stage} · ${esc(g.label)} · ${labels[s]}"><span class="flow-state-mark">${marks[s]}</span><span><b>${esc(g.label)}</b><small>${labels[s]}</small></span></button></li>`;
+          return `<li><button type="button" class="flow-node" data-flow-parent="${stage}" data-flow-node="${esc(g.key)}" data-flow-node-status="${s}" aria-label="${stage} · ${esc(g.label)} · ${labels[s]}"><span class="flow-state-mark">${marks[s]}</span><span><b>${esc(g.label)}</b></span></button></li>`;
         })
         .join('')}</ol></details></article>`;
     })

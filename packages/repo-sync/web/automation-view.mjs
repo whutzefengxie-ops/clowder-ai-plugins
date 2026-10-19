@@ -29,7 +29,7 @@ export function automationBanner(snapshot) {
         : '';
   const progress = snapshot.journeyProgress;
   const count = progress
-    ? `<details class="tech"><summary>为什么？</summary><div class="tech-copy">${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</div></details>`
+    ? `<p class="note-line">${progress.total === null ? `已完整接收 ${esc(progress.completed)} 笔；总数尚未确定` : `已完整接收 ${esc(progress.completed)} / ${esc(progress.total)} 笔`} · 创建 PR 或代码已接收但元数据待处理不计完成。</p>`
     : '';
   return `<section class="card automation-status" role="status"><h3>${labels[run.status]}</h3>${currentLabel}<p>同步轮次 ${esc(run.id)} · 开始 ${when(run.startedAt)}<br>${path}</p>${count}${run.status === 'WAITING_REVIEW' ? `<p>后台每 10 秒观察内部合入分支；无需手动核验，关闭页面仍会继续。最近检查 ${when(snapshot.observation?.lastCheckedAt)}</p>` : ''}${error ? `<p class="bad">× ${esc(error.code)}：${esc(error.message)}</p>` : ''}</section>`;
 }

@@ -15,7 +15,8 @@ test('pause-after-current-delivery is a primary visible workbench action while a
   assert.match(html, /本笔完成后暂停/);
   assert.match(html, /class="next-action now"/);
   assert.match(html, /轮到你了/);
-  assert.match(html, /data-persist-details="continuation"/);
+  assert.match(html, /<section class="run-option"><section class="continuation-controls">/);
+  assert.doesNotMatch(html, /data-persist-details="continuation"/, '接收节奏常驻可见，不再折叠');
   assert.equal((html.match(/data-action="pause-sync"/g) ?? []).length, 1);
 });
 

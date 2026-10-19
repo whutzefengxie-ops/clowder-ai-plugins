@@ -365,6 +365,7 @@ body[data-view="workbench"] .app-shell main {
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+.next-action.now .task-actions { position: relative; z-index: 1; }
 .next-action.now .run-options > details { min-width: 220px; margin: 0; }
 .next-action.now .run-options > details > summary { min-height: 32px; color: var(--muted); font-size: var(--t-5); }
 .workflow-controls-hint { flex: 1 1 260px; color: var(--muted); font-size: var(--t-5); }

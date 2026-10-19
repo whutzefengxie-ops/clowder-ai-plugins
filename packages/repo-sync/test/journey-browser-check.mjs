@@ -42,16 +42,16 @@ try {
   const completedTasks = (await receiver.status()).deliveries[0].taskIds.slice();
   assert.equal(accepted.tag, 'v2.0.0');
   await openHistory(page);
-  await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
+  await page.locator(`.records-page [data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
-  assert.equal(await page.locator('.record-detail [data-action]').count(), 0);
+  assert.equal(await page.locator('.records-detail [data-action]').count(), 0);
   await page.locator('.delivery-boundary > summary').click();
-  assert.ok((await page.locator('.record-detail').innerText()).includes(accepted.internal));
-  assert.ok((await page.locator('.record-detail').innerText()).includes(f.u0));
+  assert.ok((await page.locator('.records-detail').innerText()).includes(accepted.internal));
+  assert.ok((await page.locator('.records-detail').innerText()).includes(f.u0));
   await page.getByRole('button', { name: '展开全部阶段' }).click();
   assert.ok((await page.locator('[data-attempt]').count()) >= 2);
   await page.getByText('当时配置与来源', { exact: true }).click();
-  assert.ok((await page.locator('.record-detail').innerText()).includes('releases'));
+  assert.ok((await page.locator('.records-detail').innerText()).includes('releases'));
   await page.reload();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get('record'), active.id);
@@ -61,7 +61,7 @@ try {
     if (width <= 768) {
       await page.getByRole('button', { name: '返回同步记录' }).click();
       await openHistory(page);
-      await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
+      await page.locator(`.records-page [data-record="${active.id}"]`).click();
     }
     if ([1440, 390].includes(width))
       await page.screenshot({
@@ -111,7 +111,7 @@ try {
   await page.locator('[data-flow-stage="2"][data-flow-state="failed"]').waitFor({ timeout: 30000 });
   const failedCandidate = (await receiver.status()).active.candidate;
   await openHistory(page);
-  await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
+  await page.locator(`.records-page [data-record="${active.id}"]`).click();
   await page.getByRole('button', { name: '返回当前同步', exact: true }).click();
   await page.locator('[data-flow-stage="2"][data-flow-state="failed"]').waitFor({ timeout: 30000 });
   await page.reload();
@@ -132,7 +132,7 @@ try {
   await page.getByRole('button', { name: '恢复原同步 →' }).click();
   await page.waitForFunction(() => document.querySelector('[data-operation-state="RUNNING"]'));
   await openHistory(page);
-  await page.locator(`.history-disclosure [data-record="${active.id}"]`).click();
+  await page.locator(`.records-page [data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
   assert.equal(await page.locator('.record-list input[name="q"]').isDisabled(), false);
   for (let retry = 0; retry < 100 && !checking; retry++) await new Promise((done) => setTimeout(done, 100));
