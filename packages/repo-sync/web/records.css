@@ -69,14 +69,25 @@
 }
 
 /* ---------- 本轮参数：常驻可见，不再两段折叠 ---------- */
-/* 操作带改为单列：参数区占满整行，不再挤在 260px 侧栏里 */
-.next-action.now { grid-template-columns: minmax(0, 1fr); }
+/* 操作带用普通块流，保证 DOM 顺序即视觉顺序：
+   轮到你了 → 标题 → 说明 → 按钮 → 本轮参数。
+   之前用单列 grid，显式列定位把参数区排到了标题上面。 */
+.next-action.now {
+  display: block;
+  grid-template-columns: none;
+}
+.next-action.now .now-kicker,
+.next-action.now h2,
+.next-action.now .now-description,
+.next-action.now .failure-summary,
+.next-action.now .task-actions { grid-column: auto; grid-row: auto; }
 .next-action.now .run-options {
-  border-top: 0;
+  border-top: 1px solid var(--line);
   margin-top: 20px;
+  padding-top: 18px;
   display: grid;
   gap: 20px;
-  grid-column: 1 / -1;
+  grid-column: auto;
   grid-row: auto;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
