@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { buildCandidate } from '../src/commit-policy.mjs';
@@ -9,6 +9,7 @@ import { mappedCommit } from '../src/commit-policy.mjs';
 import { git } from '../src/process.mjs';
 import { requiredCommits } from '../src/transfer-objects.mjs';
 import { developmentFixture } from './development-history-fixture.mjs';
+import { assertReplayProjection } from '../src/development-history.mjs';
 
 test('squashed PR restores all 18 commits with unified identity, exact messages, paths and stable mappings', async () => {
   const f = await developmentFixture();
@@ -81,3 +82,42 @@ test('a landing with extra conflict-resolution changes pauses instead of adding 
   await assert.rejects(() => discover(f.receiver, { kind: 'latest' }, f.provider), { code: 'PR_REPLAY_TREE_MISMATCH' });
   assert.equal((await f.receiver.status()).queue.length, 0);
 });
+
+test('an interleaved main landing is accepted only when its tree is already in the internal baseline', async () => {
+  const f = await repositoriesWithoutClone();
+  const base = await f.commit('base.txt', 'base', 'base');
+  await git(f.repo, ['switch', '-c', 'feature']);
+  await f.commit('feature.txt', 'one', 'feature one');
+  const head = await f.commit('feature.txt', 'two', 'feature two');
+  await git(f.repo, ['switch', 'main']);
+  const parallel = await f.commit('parallel.txt', 'accepted', 'parallel main');
+  await git(f.repo, ['merge', '--squash', 'feature']);
+  await git(f.repo, ['commit', '-m', 'squashed feature']);
+  const landing = await git(f.repo, ['rev-parse', 'HEAD']);
+  await git(f.repo, ['switch', '-c', 'internal', base]);
+  const internal = await f.commit('parallel.txt', 'accepted', 'internal parallel');
+  const receiver = { git: { directory: f.repo, sha: async () => internal }, config: { internalPaths: [] } };
+  const replay = { landingBase: base, head, landing, commits: [head] };
+  await assertReplayProjection(receiver, { base: { internal } }, replay);
+  await assertReplayProjection(receiver, { base: {} }, replay);
+  await assert.rejects(
+    () => assertReplayProjection(receiver, { base: { internal: base } }, replay),
+    { code: 'PR_REPLAY_TREE_MISMATCH' },
+  );
+  assert.notEqual(parallel, internal);
+});
+
+async function repositoriesWithoutClone() {
+  const repo = await mkdtemp(join(process.cwd(), '.repo-sync-tests', 'projection-'));
+  await mkdir(repo, { recursive: true });
+  await git(repo, ['init', '-b', 'main']);
+  await git(repo, ['config', 'user.name', 'Projection Test']);
+  await git(repo, ['config', 'user.email', 'projection@example.invalid']);
+  const commit = async (path, content, message) => {
+    await writeFile(join(repo, path), content);
+    await git(repo, ['add', path]);
+    await git(repo, ['commit', '-m', message]);
+    return git(repo, ['rev-parse', 'HEAD']);
+  };
+  return { repo, commit };
+}

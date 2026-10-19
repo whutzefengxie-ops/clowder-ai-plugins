@@ -1,7 +1,8 @@
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
+import { matches } from './policy.mjs';
 import { git } from './process.mjs';
-import { assertProjection } from './trees.mjs';
+import { entries, equalEntry } from './trees.mjs';
 
 const sha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export async function developmentHistory(receiver, provider, repo, pr, introduced, base) {
@@ -49,7 +50,47 @@ export async function verifyDevelopmentHistory(receiver, delivery) {
   const sources = output ? output.split('\n') : [];
   if (sources.length !== replay.commits.length || sources.some((item) => !replay.commits.includes(item)) || sources.at(-1) !== replay.head)
     fail('PR_HISTORY_INCOMPLETE', 'PR API 清单与实际 Git 范围不一致；不能重复搬运已接受的主干提交或漏掉开发提交。');
-  await assertProjection(receiver.git.directory, delivery.target, replay.head,
-    { internalPaths: receiver.config.internalPaths ?? [], mergePaths: [] }, 'PR_REPLAY_TREE_MISMATCH');
+  await assertReplayProjection(receiver, delivery, replay);
   return sources;
+}
+
+async function changedPaths(directory, before, after) {
+  const output = await git(directory, ['diff', '--name-only', before, after]);
+  return new Set(output.split('\n').filter(Boolean));
+}
+
+export async function assertReplayProjection(receiver, delivery, replay) {
+  const directory = receiver.git.directory;
+  const parents = (await git(directory, ['show', '-s', '--format=%P', replay.landing])).split(' ').filter(Boolean);
+  const landingParent = parents[0];
+  if (!landingParent) fail('PR_REPLAY_TREE_MISMATCH', 'PR landing commit 缺少可核对的 main 父提交；未发布候选。');
+  const internal = delivery.base.internal ?? (await receiver.git.sha('refs/sync/internal'));
+  const [headTree, landingTree, parentTree, internalTree] = await Promise.all([
+    entries(directory, replay.head),
+    entries(directory, replay.landing),
+    entries(directory, landingParent),
+    entries(directory, internal),
+  ]);
+  const [sourceChanges, parentChanges, landingChanges] = await Promise.all([
+    changedPaths(directory, replay.landingBase, replay.head),
+    changedPaths(directory, replay.landingBase, landingParent),
+    changedPaths(directory, landingParent, replay.landing),
+  ]);
+  const preserved = (path) => (receiver.config.internalPaths ?? []).some((rule) => matches(path, rule));
+  const mismatches = [];
+  for (const path of sourceChanges) {
+    if (!preserved(path) && !equalEntry(headTree.get(path), landingTree.get(path))) mismatches.push(path);
+  }
+  for (const path of parentChanges) {
+    if (!sourceChanges.has(path) && !preserved(path) && !equalEntry(parentTree.get(path), internalTree.get(path))) mismatches.push(path);
+  }
+  for (const path of landingChanges) {
+    if (!sourceChanges.has(path) && !preserved(path) && !equalEntry(landingTree.get(path), internalTree.get(path))) mismatches.push(path);
+  }
+  if (mismatches.length)
+    fail('PR_REPLAY_TREE_MISMATCH', 'PR landing 包含未在 PR head 或内部基线中证明的核心文件变化；请先接收并行 main 提交或核对冲突处理。', {
+      paths: [...new Set(mismatches)],
+      upstream: replay.landing,
+      internal,
+    });
 }
