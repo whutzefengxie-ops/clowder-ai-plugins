@@ -44,6 +44,7 @@ const assets = new Map([
     'history.mjs',
     'workflow.mjs',
     'delivery-overview.mjs',
+    'candidate-recovery.mjs',
     'delivery-overview.css',
     'app-shell.mjs',
     'app-shell.css',

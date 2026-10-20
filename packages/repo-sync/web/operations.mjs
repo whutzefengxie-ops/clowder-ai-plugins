@@ -27,6 +27,8 @@ const longActions = new Set([
   'receipts',
   'cancel-version',
   'cancel-delivery',
+  'inspect-exit', 'preview-repair', 'prepare-repair', 'link-repair', 'check-repair',
+  'inspect-repair-exit', 'retire-repair',
   'inspect-delivery-source',
   'configure-auto-merge',
 ]);

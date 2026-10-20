@@ -5,7 +5,7 @@ const guides = [
   [
     /^CANDIDATE_TREE_MISMATCH$/,
     '原候选内容与上游落地版本不一致',
-    '在“本笔同步内容 → 来源追溯与撤销 → 放弃本笔并重新同步”撤销未合入的交付，再明确继续。原候选、Issue、映射和历史保留；已合入的交付需先核对内部修复 PR，不回退 main。',
+    '在本笔同步内容的“退出或修复本笔同步”检查原对象。未合入的关闭后退出，再明确继续；已合入的预览并创建修复 PR。原候选、Issue、映射和历史保留，不回退 main。',
   ],
   [
     /BASELINE_MISMATCH|TREE_MISMATCH|UNAPPROVED_DIFFERENCE|CORE_DRIFT/,

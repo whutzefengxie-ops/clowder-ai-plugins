@@ -1,10 +1,11 @@
 import { automaticPolicy } from './automation-view.mjs';
 import { stageOf } from './ui.mjs';
+import { recoveryPolicy } from './candidate-recovery.mjs';
 
 export function nextAction(snapshot, delivery, historical = false) {
   if (historical) return { stage: 0, text: '此记录只读，可展开各阶段查看当时信息。' };
   const policy =
-    taskPolicy(snapshot, delivery) ?? cancellationPolicy(delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
+    taskPolicy(snapshot, delivery) ?? recoveryPolicy(delivery) ?? cancellationPolicy(delivery) ?? automaticPolicy(snapshot, delivery) ?? deliveryPolicy(snapshot, delivery);
   const task = snapshot.operation;
   const owns = ownsTask(task, delivery) || task?.deliveryIds?.includes(delivery?.id);
   const failed =

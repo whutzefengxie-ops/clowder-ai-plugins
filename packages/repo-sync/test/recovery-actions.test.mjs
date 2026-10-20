@@ -30,8 +30,8 @@ test('authentication shows the exact API recipient before asking for a Token fro
 
 test('a frozen candidate tree mismatch explains withdrawal without suggesting a baseline reset', () => {
   const html = errorGuide({ code: 'CANDIDATE_TREE_MISMATCH', message: '原候选保留' });
-  assert.match(html, /来源追溯与撤销/);
-  assert.match(html, /放弃本笔并重新同步/);
-  assert.match(html, /已合入的交付需先核对内部修复 PR/);
+  assert.match(html, /退出或修复本笔同步/);
+  assert.match(html, /未合入的关闭后退出/);
+  assert.match(html, /已合入的预览并创建修复 PR/);
   assert.doesNotMatch(html, /启用前明确保留路径/);
 });

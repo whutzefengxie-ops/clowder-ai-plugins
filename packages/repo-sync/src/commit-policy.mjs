@@ -21,6 +21,8 @@ export function commitPolicy(config) {
 }
 export function mappedCommit(state, source) {
   for (const delivery of [...state.deliveries].reverse()) {
+    const repaired = delivery.repair?.status === 'COMPLETE' && delivery.repair.mappings?.find((item) => item.source === source);
+    if (repaired) return repaired.internal;
     const mapped = delivery.commitMappings?.find((item) => item.source === source);
     if (mapped) return mapped.internal;
     const development = delivery.developmentMappings?.find((item) => item.source === source);

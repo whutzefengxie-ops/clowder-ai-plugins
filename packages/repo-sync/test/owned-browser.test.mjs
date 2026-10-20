@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
-function fixture({ exits = true, connectFails = false } = {}) {
+function fixture({ exits = true, connectFails = false, closeHangs = false } = {}) {
   const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
   const destroyed = new Set();
   let finishPipes;
@@ -37,6 +37,7 @@ function fixture({ exits = true, connectFails = false } = {}) {
     wsEndpoint: () => 'ws://test.invalid/browser',
     async close() {
       closed = true;
+      if (closeHangs) return new Promise((done) => child.once('exit', done));
       if (!exits) return;
       child.exitCode = 0;
       child.emit('exit', 0, null);
@@ -98,6 +99,15 @@ test('owned cleanup cannot report success while its browser process is still run
 test('failed browser connection cleans up its own BrowserServer and preserves the failure', async () => {
   const f = fixture({ connectFails: true });
   await assert.rejects(launchOwnedBrowser(f.type), /fixture connect failure/);
+  assert.equal(f.wasKilled(), true);
+  assert.equal(f.destroyed.size, 3);
+});
+
+test('a stuck graceful browser close kills only the owned server and verifies its exit', async () => {
+  const f = fixture({ closeHangs: true });
+  const owner = await launchOwnedBrowser(f.type, { closeTimeoutMs: 10 });
+  await owner.close();
+  assert.equal(f.wasClosed(), true);
   assert.equal(f.wasKilled(), true);
   assert.equal(f.destroyed.size, 3);
 });

@@ -1,6 +1,7 @@
 // Shared by the runtime event recorder and browser; no environment-specific imports.
 export const workflowPlanVersion = 2;
 export function phaseStage(key) {
+  if (key.startsWith('repair-')) return 5;
   for (let stage = 1; stage <= 5; stage++)
     if (plannedSteps(stage, false).some(([id]) => id === key)) return stage;
   if (['merge-policy', 'merge-intent', 'platform-merge', 'merge-observe'].includes(key)) return 4;

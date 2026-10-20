@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { appendFile, readFile } from 'node:fs/promises';
+import { terminateTree } from '../src/terminate.mjs';
 // Test-only lifecycle evidence; never print page contents, credentials or configuration.
 export async function traceLifecycle(label, operation) {
   console.log(`[browser-test] ${label}: start`);
@@ -14,11 +15,21 @@ export async function traceLifecycle(label, operation) {
 }
 
 export async function launchOwnedBrowser(browserType, options = {}) {
-  const server = await browserType.launchServer(options);
+  const { closeTimeoutMs = 5000, ...launchOptions } = options;
+  const server = await browserType.launchServer(launchOptions);
   const child = server.process();
   if (!child) throw new Error('Test browser server did not expose its owned child process');
+  let confirmedGone = false;
+  const processExited = () => confirmedGone || child.exitCode !== null || child.signalCode !== null;
+  function probeExit() {
+    if (processExited()) return true;
+    if (!child.pid) return false;
+    try { process.kill(child.pid, 0); }
+    catch (error) { if (error.code === 'ESRCH') confirmedGone = true; }
+    return processExited();
+  }
   const releaseExitedPipes = () => {
-    if (child.exitCode === null && child.signalCode === null) return;
+    if (!processExited()) return;
     // Windows descendants can retain inherited stdio after the browser itself exits.
     // Only release this test-owned, confirmed-exited child's public Node streams.
     for (const stream of new Set([...(child.stdio ?? []), child.stdin, child.stdout, child.stderr]))
@@ -72,14 +83,33 @@ export async function launchOwnedBrowser(browserType, options = {}) {
         } finally {
           releaseExitedPipes();
           try {
-            await traceLifecycle('owned-browser-server-close', () => server.close());
+            await traceLifecycle('owned-browser-server-close', async () => {
+              let timer;
+              try {
+                const shutdown = server.close();
+                const closed = await Promise.race([
+                  shutdown.then(() => true),
+                  new Promise((done) => { timer = setTimeout(() => done(false), closeTimeoutMs); }),
+                ]);
+                if (!closed) {
+                  if (probeExit()) releaseExitedPipes();
+                  else if (process.platform === 'win32' && child.pid) {
+                    await traceLifecycle('owned-browser-close-timeout-tree', () => terminateTree(child)).catch((error) => {
+                      if (!probeExit()) throw error;
+                    });
+                    if (probeExit()) releaseExitedPipes();
+                  } else await traceLifecycle('owned-browser-close-timeout-kill', () => server.kill());
+                  await shutdown;
+                }
+              } finally { clearTimeout(timer); }
+            });
           } finally {
             releaseExitedPipes();
-            if (child.exitCode === null && child.signalCode === null)
+            if (!probeExit())
               await traceLifecycle('owned-browser-server-kill', () => server.kill());
           }
         }
-        if (child.exitCode === null && child.signalCode === null)
+        if (!probeExit())
           throw new Error('Owned test browser cleanup returned before its process exited');
         await record('stopped');
       })();

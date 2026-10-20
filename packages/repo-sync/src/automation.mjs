@@ -35,6 +35,8 @@ export function validateAutomation(value) {
 }
 export async function synchronize(receiver, input, options = {}) {
   const state = await receiver.read();
+  if (state && receiver.active(state)?.repair && receiver.active(state).repair.status !== 'COMPLETE')
+    fail('REPAIR_PENDING', '修复 PR 尚未核验完成；本轮保持暂停，请继续原修复流程。');
   if (state && receiver.active(state)?.cancellation?.status === 'REQUESTED')
     fail('CANCELLATION_PENDING', '原 PR 撤销尚未完成，请继续回读原撤销结果，不恢复普通同步。');
   validateRequest(state, input);

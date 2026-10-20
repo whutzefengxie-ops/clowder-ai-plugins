@@ -15,6 +15,7 @@ export function configureAutoMerge(receiver, input) {
     if (!run || run.id !== input.runId || run.status === 'COMPLETE')
       fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
     const active = receiver.active(state);
+    if (active?.repair && active.repair.status !== 'COMPLETE') fail('REPAIR_PENDING', '修复 PR 需要明确审核合入；原轮次保持暂停。');
     if (active?.id !== (input.deliveryId || undefined))
       fail('DELIVERY_CHANGED', '当前 PR 已变化，请刷新后再设置自动合入。');
     if (active?.cancellation?.status === 'REQUESTED') fail('CANCELLATION_PENDING', '先完成原 PR 撤销。');

@@ -48,7 +48,7 @@ export function initializeSubmissions(context) {
     }
     if (input.action === 'issue') input.sourceId = form.dataset.source;
     if (input.action === 'configure-closure') input.confirmed = fields.confirmed === 'on';
-    if (input.action === 'cancel-delivery') input.confirmed = fields.confirmed === 'on';
+    if (['cancel-delivery', 'prepare-repair', 'link-repair', 'retire-repair'].includes(input.action)) input.confirmed = fields.confirmed === 'on';
     if (['synchronize', 'configure-auto-merge'].includes(input.action))
       input.autoMerge = fields.autoMerge === 'on';
     const resumeAutomaticMerge =

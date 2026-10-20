@@ -131,6 +131,8 @@ export function validateRecording(delivery) {
       fail('RECORD_INVALID', '同步历史时间无效');
 }
 export function phaseLocation(action, key, parent) {
+  if (['preview-repair', 'prepare-repair', 'link-repair', 'check-repair', 'inspect-repair-exit', 'retire-repair'].includes(action))
+    return { stage: 5, group: 'repair' };
   if (
     parent?.stage === 5 &&
     !['merge-intent', 'platform-merge', 'merge-readiness', 'platform-review', 'merge-observe'].includes(key)
@@ -160,6 +162,13 @@ export function phaseLocation(action, key, parent) {
       resolve: 2,
       'cancel-version': 2,
       'cancel-delivery': 4,
+      'inspect-exit': 4,
+      'preview-repair': 5,
+      'prepare-repair': 5,
+      'link-repair': 5,
+      'check-repair': 5,
+      'inspect-repair-exit': 5,
+      'retire-repair': 5,
       'configure-auto-merge': 4,
       'inspect-delivery-source': 1,
       pr: 3,

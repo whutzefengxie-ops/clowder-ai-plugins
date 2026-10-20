@@ -141,7 +141,7 @@ async function mergeCollection(state, f, web, req, value) {
       status: state.pipelineStatus ?? 'success',
     };
     state.mrs.push(mr);
-    return mr;
+    return loseOnce(state, 'pr-create', mr);
   }
   const branch = new URL(req.url, 'http://localhost').searchParams.get('source_branch');
   return state.mrs.filter((mr) => !branch || mr.source_branch === branch);

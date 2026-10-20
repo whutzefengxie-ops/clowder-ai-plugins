@@ -187,6 +187,8 @@ export class Receiver {
     if (!active) fail('NO_ACTIVE_DELIVERY', '没有未完成交付');
     if (active.cancellation?.status === 'REQUESTED')
       fail('CANCELLATION_PENDING', '原 PR 撤销结果待回读，请继续完成撤销；不能恢复普通同步或创建新对象。');
+    if (active.repair && active.repair.status !== 'COMPLETE')
+      fail('REPAIR_PENDING', '修复流程尚未完成，请继续原修复 PR，不能重新执行旧候选。');
     return active;
   }
   prepare() {

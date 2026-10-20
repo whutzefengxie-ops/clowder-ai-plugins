@@ -5,6 +5,8 @@ import { discover } from './github.mjs';
 import { inspectBaseline, previewSync } from './journey-preview.mjs';
 import { cancelDelivery } from './cancel-delivery.mjs';
 import { inspectDeliverySource } from './inspect-delivery-source.mjs';
+import { inspectExit } from './exit-inspection.mjs';
+import { checkRepair, linkRepair, prepareRepair, previewRepair, retireRepair } from './repair-delivery.mjs';
 
 export async function dispatch(receiver, input, options = {}) {
   if (
@@ -20,6 +22,8 @@ export async function dispatch(receiver, input, options = {}) {
       'receipts',
       'cancel-version',
       'cancel-delivery',
+      'inspect-exit', 'preview-repair', 'prepare-repair', 'link-repair', 'check-repair',
+      'inspect-repair-exit', 'retire-repair',
       'inspect-delivery-source',
     ].includes(input.action) &&
     (await receiver.status())?.active?.id !== input.deliveryId
@@ -58,6 +62,13 @@ export async function dispatch(receiver, input, options = {}) {
     'select-tag': () => receiver.selectTag(input.tag),
     'cancel-version': () => receiver.cancelVersion(),
     'cancel-delivery': () => cancelDelivery(receiver, input),
+    'inspect-exit': () => inspectExit(receiver),
+    'preview-repair': () => previewRepair(receiver),
+    'prepare-repair': () => prepareRepair(receiver, input),
+    'link-repair': () => linkRepair(receiver, input),
+    'check-repair': () => checkRepair(receiver),
+    'inspect-repair-exit': () => inspectExit(receiver, true),
+    'retire-repair': () => retireRepair(receiver, input),
     'inspect-delivery-source': () => inspectDeliverySource(receiver),
     'baseline-file': () => receiver.store.locked(() => baselineFile(receiver, input)),
   };

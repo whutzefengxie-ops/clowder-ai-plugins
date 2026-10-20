@@ -161,6 +161,11 @@ export function createRecoveryNavigation({ snapshot, changeView, action }) {
       runId = pending.runId;
     if (!pending.provided || !runId || ['IMPORTED', 'EXPORTED'].includes(current.transfer?.status)) return;
     changeView('workbench');
+    if (current.state?.active?.repair && current.state.active.repair.status !== 'COMPLETE') {
+      // Repair confirmations belong to their frozen plan, never to a generic resume.
+      document.getElementById('candidate-recovery')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     await action(
       current.state?.active?.cancellation?.status === 'REQUESTED'
         ? {

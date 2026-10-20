@@ -1,5 +1,6 @@
 import { issueReferenceNotes } from './issue-reference-notes.mjs';
 import { esc, shortSha } from './ui.mjs';
+import { candidateRecovery } from './candidate-recovery.mjs';
 
 export function deliveryOverview(snapshot, _record, d, historical) {
   const version = d.mode === 'version';
@@ -22,7 +23,7 @@ export function deliveryOverview(snapshot, _record, d, historical) {
     <details class="delivery-object-details" data-persist-details="commits"><summary><span class="delivery-object-title">${d.source.developmentReplay ? '逐条开发提交与内部 SHA' : '本笔提交与内部 SHA'} · ${rows.length} 条</span><small>${rows.length ? '展开后查看外部 SHA、内部 SHA 和提交标题。' : '提交清单尚未冻结。'}</small></summary><p class="delivery-object-guide">这里是业务对象映射；底层命令和重试记录请查看对应阶段的执行详情。</p>${rowsForCommits(d, rows, mappings)}</details></div>
     <details class="delivery-more" data-persist-details="source-actions"><summary>来源追溯与撤销</summary>${d.source.number ? link(`${d.source.url}/commits`, '查看上游 PR 的完整开发提交 ↗') : ''}
     ${!historical && d.source.number && development === undefined ? '<button type="button" data-action="inspect-delivery-source">读取原 PR 开发提交数量与清单</button>' : ''}
-    ${cancellationForm(d, historical)}</details></section>`;
+    </details>${candidateRecovery(d, historical)}</section>`;
 }
 
 function issueRow(issue, snapshot, d, historical) {
@@ -55,8 +56,4 @@ function link(url, text) {
   return /^https?:\/\//.test(url ?? '')
     ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`
     : esc(text);
-}
-function cancellationForm(d, historical) {
-  if (historical || d.acceptedInternal || ['COMPLETE', 'CANCELLED'].includes(d.status)) return '';
-  return `<details class="delivery-cancel" ${d.cancellation?.status === 'REQUESTED' ? 'open' : ''}><summary>放弃本笔并重新同步</summary><p>关闭未合入的旧 PR，保留 Issue、候选分支和历史，接受基线不变。本轮会暂停；明确继续后重新读取原目标并创建新 PR，不会强推旧分支或回退 main。</p><form id="cancel-delivery-form" data-form="cancel-delivery" data-edit-baseline="${esc(JSON.stringify([d.id, d.prUrl, d.candidate, d.status, d.cancellation?.requestedAt]))}"><input type="hidden" name="deliveryId" value="${esc(d.id)}"><input type="hidden" name="previousUrl" value="${esc(d.prUrl ?? '')}"><label><input type="checkbox" name="confirmed" required>我确认关闭旧 PR，并保留原 Issue 与历史</label><small>勾选仅保留在本页；刷新或 PR 变化后需要重新确认。</small><button type="submit">${d.cancellation?.status === 'REQUESTED' ? '回读并完成原 PR 撤销' : '关闭旧 PR 并撤销本笔'}</button></form></details>`;
 }

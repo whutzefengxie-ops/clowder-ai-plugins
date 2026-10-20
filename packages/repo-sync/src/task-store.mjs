@@ -31,6 +31,8 @@ export const taskActions = new Set([
   'resolve',
   'cancel-version',
   'cancel-delivery',
+  'inspect-exit', 'preview-repair', 'prepare-repair', 'link-repair', 'check-repair',
+  'inspect-repair-exit', 'retire-repair',
   'inspect-delivery-source',
 ]);
 const keys = new Set([
@@ -61,8 +63,14 @@ const keys = new Set([
   'content',
   'confirmed',
   'autoMerge',
+  'inspectionId', 'manualDisposition', 'planId',
 ]);
 export function taskInput(input) {
+  if (input?.manualDisposition !== undefined && (!['cancel-delivery', 'retire-repair'].includes(input.action) || !['closed', 'no-pr'].includes(input.manualDisposition)))
+    fail('INVALID_TASK_INPUT', '退出确认只接受原 PR 已关闭或确认未创建 PR。');
+  for (const key of ['inspectionId', 'planId'])
+    if (input?.[key] !== undefined && !/^[a-f0-9]{64}$/.test(input[key]))
+      fail('INVALID_TASK_INPUT', '退出检查或修复预览身份无效，请刷新核对。');
   if (input?.autoMerge !== undefined && (!['synchronize', 'configure-auto-merge'].includes(input.action) || typeof input.autoMerge !== 'boolean'))
     fail('INVALID_AUTO_MERGE', '自动合入必须是本轮明确选择的布尔值。');
   if (
@@ -124,6 +132,14 @@ export function taskPlan(action) {
     resolve: [['conflict-resolution', '保存当前交付的冲突处理']],
     'cancel-version': [['version-cancel', '撤销当前未发布版本交付']],
     'cancel-delivery': [['cancel-intent', '保存撤销意图'], ['cancel-pr', '关闭原 PR 并回读']],
+    'inspect-exit': [['exit-inspect', '核对内部 main、原候选与 PR']],
+    'preview-repair': [['exit-inspect', '核对原合入与修复差异']],
+    'prepare-repair': [['exit-inspect', '核对修复基线'], ['repair-build', '构造 landing 修复提交'],
+      ['repair-check', '检查修复候选'], ['repair-publish', '发布独立修复分支'], ['platform-pr', '创建或回读修复 PR']],
+    'link-repair': [['exit-inspect', '核对并登记修复 PR']],
+    'check-repair': [['repair-verify', '核验修复 PR 合入结果'], ['issue-state', '回读原 Issue 并完成接收']],
+    'inspect-repair-exit': [['exit-inspect', '核对修复候选与 PR']],
+    'retire-repair': [['cancel-intent', '保存修复退出意图'], ['cancel-pr', '关闭原修复 PR 并回读']],
     'configure-auto-merge': [['merge-policy', '保存本轮自动合入选择']],
       'inspect-delivery-source': [['pr-history', '读取原 PR 开发提交清单']],
   };
