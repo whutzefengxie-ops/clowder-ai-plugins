@@ -1,3 +1,4 @@
+import { candidateRecovery } from './candidate-recovery.mjs';
 import { continuationControls } from './continuation-view.mjs';
 import { failureSummary } from './error-guide.mjs';
 import { esc } from './ui.mjs';
@@ -35,7 +36,8 @@ export function actionBar(policy, historical, snapshot = {}) {
   const actionLabel = needsHuman ? '需要你处理' : (failure || policy.href || policy.action || policy.anchor || policy.secondary) ? '轮到你了' : '系统正在处理';
   const fallback = failure && !failure.repair ? '<a class="button" href="#flow-inspector" data-reveal="flow-inspector">查看失败步骤 →</a>' : '';
   const description = needsHuman ? '先完成下面的修复动作；原对象和已完成结果会保留。' : policy.href ? '完成后系统会自动回到本轮流程并继续核验。' : '当前阶段会在此处更新，页面刷新后仍可继续。';
-  return `<section class="next-action now" data-policy="${esc(actionSignature(policy, snapshot))}" aria-label="当前操作区"><p class="now-kicker">${actionLabel}</p><h2>${esc(policy.text)}</h2><p class="now-description" role="status">${description}${pauseStatus}</p>${failure?.html ?? ''}<div class="task-actions">${control(policy, true)}${failure?.repair ?? ''}${failure && !failure.repair ? fallback : ''}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${run && run.status !== 'COMPLETE' ? `<section class="run-option"><h4>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'}</h4>${autoMergeControls(snapshot)}</section>` : ''}<section class="run-option">${continuationControls(snapshot)}</section></div></section>`;
+  const deliveryActions = snapshot.state?.active ? candidateRecovery(snapshot.state.active, false, true) : '';
+  return `<section class="next-action now" data-policy="${esc(actionSignature(policy, snapshot))}" aria-label="当前操作区"><p class="now-kicker">${actionLabel}</p><h2>${esc(policy.text)}</h2><p class="now-description" role="status">${description}${pauseStatus}</p>${failure?.html ?? ''}<div class="task-actions">${control(policy, true)}${failure?.repair ?? ''}${failure && !failure.repair ? fallback : ''}${policy.secondary ? control(policy.secondary, false) : ''}${pause ? '<button type="button" data-action="pause-sync">本笔完成后暂停</button>' : ''}</div><div class="run-options">${deliveryActions ? `<section class="run-option delivery-actions"><h4>本笔操作 <span class="delivery-scope">仅当前交付</span></h4>${deliveryActions}</section>` : ''}${run && run.status !== 'COMPLETE' ? `<section class="run-option"><h4>本轮自动合入：${run.autoMerge ? '已开启' : '关闭'}</h4>${autoMergeControls(snapshot)}</section>` : ''}<section class="run-option">${continuationControls(snapshot)}</section></div></section>`;
 }
 function autoMergeControls(snapshot) {
   const run = snapshot.state?.automation;

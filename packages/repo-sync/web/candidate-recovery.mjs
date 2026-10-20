@@ -4,18 +4,19 @@ const labels = { LOCAL_ONLY: '仅本地候选，可保留历史并退出', BRANC
   OPEN_PR: '原 PR 未合入，退出时将关闭并回读', CLOSED_PR: '原 PR 已关闭，可完成退出',
   MANUAL_REQUIRED: '当前方式不能查询关闭状态，需要人工确认', UNKNOWN: '创建结果不明，先核对原 PR，不能假设未创建',
   MERGED: '原候选已合入，使用新修复 PR，不能撤销 main' };
-export function candidateRecovery(d, historical) {
+export function candidateRecovery(d, historical, embedded = false) {
   if (historical) return d.repair || d.repairHistory?.length ? `<section class="candidate-recovery"><h3>原交付的修复记录</h3>${repairSummary(d)}${archivedRepairs(d)}</section>` : '';
   if (['COMPLETE', 'CANCELLED'].includes(d.status)) return '';
   const report = d.exitInspection, merged = report?.kind === 'MERGED' || Boolean(d.repair);
   const prePublish = !d.prUrl;
-  return `<section class="candidate-recovery" id="candidate-recovery" aria-label="退出与修复当前同步">
-    <h3>撤销或修复本笔同步</h3><p>冻结错了、候选有误时从这里处理。退出检查只读取内部仓库和原 PR，不要求旧候选通过内容检查，也不读取 GitHub。</p>
+  const content = `<p>冻结错了、候选有误时从这里处理。退出检查只读取内部仓库和原 PR，不要求旧候选通过内容检查，也不读取 GitHub。</p>
     <button type="button" data-action="inspect-exit">检查原候选与 PR 状态</button>
     ${report ? `<p role="status"><b>${esc(labels[report.kind])}</b></p><p>检查时间 ${esc(report.observedAt)} · 内部 main ${shortSha(report.internal)}</p>` : '<p>先检查当前状态，再决定撤销或修复。原 Issue、映射和历史始终保留。</p>'}
     ${merged ? repairControls(d) + retireControls(d) : exitControls(d, { prePublish })}
-    ${archivedRepairs(d)}
-    </section>`;
+    ${archivedRepairs(d)}`;
+  return embedded
+    ? `<div class="candidate-recovery embedded">${content}</div>`
+    : `<section class="candidate-recovery" id="candidate-recovery" aria-label="退出与修复当前同步"><h3>撤销或修复本笔同步</h3>${content}</section>`;
 }
 function fields(d, ownerId = d.id) {
   return `<input type="hidden" name="deliveryId" value="${esc(ownerId)}"><input type="hidden" name="previousUrl" value="${esc(d.prUrl ?? '')}">`;

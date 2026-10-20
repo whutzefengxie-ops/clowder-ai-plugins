@@ -24,8 +24,9 @@ export function deliveryOverview(snapshot, _record, d, historical, meta = '') {
     <div class="delivery-objects"><details class="delivery-object-details" data-persist-details="issues"><summary><span class="delivery-object-title">关联 Issue · ${d.issues?.length ?? 0} 个</span><small>${issueGuide(d.issues?.length ?? 0, version)}</small></summary><p class="delivery-object-guide">展开后查看外部 Issue、内部映射、关联关系和合入后的关单条件。</p>${rowsForIssues(d, snapshot, historical, version)}</details>
     <details class="delivery-object-details" data-persist-details="commits"><summary><span class="delivery-object-title">${d.source.developmentReplay ? '逐条开发提交与内部 SHA' : '本笔提交与内部 SHA'} · ${rows.length} 条</span><small>${rows.length ? '展开后查看外部 SHA、内部 SHA 和提交标题。' : '提交清单尚未冻结。'}</small></summary><p class="delivery-object-guide">这里是业务对象映射；底层命令和重试记录请查看对应阶段的执行详情。</p>${rowsForCommits(d, rows, mappings)}</details></div>
     <details class="delivery-more" data-persist-details="source-actions"><summary>来源追溯与撤销</summary>${d.source.number ? link(`${d.source.url}/commits`, '查看上游 PR 的完整开发提交 ↗') : ''}
+    ${!historical && d.id === snapshot.state?.active?.id ? '<p class="delivery-note">本笔的撤销 / 修复操作已移到右侧「本笔操作」区（仅当前交付显示）。</p>' : ''}
     ${!historical && d.source.number && development === undefined ? '<button type="button" data-action="inspect-delivery-source">读取原 PR 开发提交数量与清单</button>' : ''}
-    </details>${candidateRecovery(d, historical)}</section>`;
+    </details>${historical ? candidateRecovery(d, true) : ''}</section>`;
 }
 
 function issueRow(issue, snapshot, d, historical) {

@@ -949,6 +949,21 @@ textarea:focus {
 .candidate-recovery p { font-size: 11.5px; line-height: 1.6; margin: 3px 0; }
 .candidate-recovery > button { font-size: 11.5px; min-height: 30px; }
 .candidate-recovery form { gap: 7px; margin-top: 8px; }
+/* Delivery-scoped actions live in the right-hand action dock, not in the record body. */
+.next-action .delivery-actions .candidate-recovery {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.next-action .delivery-actions .candidate-recovery > p:first-child { margin-top: 0; }
+.next-action .delivery-actions .candidate-recovery > button { width: 100%; }
+.next-action .delivery-actions .delivery-scope {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--v3-muted);
+  font-size: 11px;
+}
 .delivery-cancel {
   margin-top: 8px;
   padding: 8px 10px 10px;

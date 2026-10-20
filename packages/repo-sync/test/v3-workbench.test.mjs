@@ -74,4 +74,32 @@ test('pre-publish cancel is visible before any PR exists', () => {
   assert.match(html, /data-form="cancel-delivery"/);
   assert.match(html, /放弃本笔并重新同步/);
   assert.doesNotMatch(html, /<details class="delivery-cancel" open>/);
+});import { actionBar } from '../web/actionbar.mjs';
+
+test('delivery-scoped actions render in the right action dock only for the current delivery', () => {
+  const delivery = {
+    id: 'd1',
+    status: 'ISSUES_REQUIRED',
+    prUrl: null,
+    candidate: null,
+    issues: [],
+    base: { internal: 'aaaa1111' },
+    source: { number: 1 },
+  };
+  const snapshot = {
+    state: {
+      automation: { id: 'run-1', status: 'RUNNING', autoMerge: false, continuation: 'automatic' },
+      active: delivery,
+    },
+    operation: null,
+    config: {},
+  };
+  const policy = { text: '继续同步', label: '继续同步', action: 'resume-sync', stage: 2 };
+  const html = actionBar(policy, false, snapshot);
+  assert.match(html, /本笔操作/);
+  assert.match(html, /仅当前交付/);
+  assert.match(html, /data-action="inspect-exit"/);
+  assert.match(html, /撤销本笔（尚未发布）/);
+  assert.match(html, /class="run-option delivery-actions"/);
+  assert.equal(actionBar(policy, true, snapshot), '');
 });
