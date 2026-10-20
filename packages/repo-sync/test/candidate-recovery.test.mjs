@@ -57,6 +57,8 @@ test('a merged wrong candidate gets one resumable repair PR while original mappi
   f.platform.state.mrs[0].state = 'merged';
   await act(f.receiver, 'inspect-exit');
   assert.equal((await f.receiver.status()).active.exitInspection.kind, 'MERGED');
+  assert.equal((await f.receiver.status()).active.mergeObservation.head, f.original.candidate);
+  assert.equal((await f.receiver.status()).active.acceptedInternal, undefined, 'merge observation is not tree acceptance');
   await act(f.receiver, 'preview-repair');
   let s = await f.receiver.status();
   await act(f.receiver, 'prepare-repair', { confirmed: true, planId: s.active.repairPlan.id });

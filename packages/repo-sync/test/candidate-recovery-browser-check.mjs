@@ -90,6 +90,7 @@ try {
   await f.merge(f.original); f.platform.state.mrs[0].state = 'merged';
   await start(); await visit();
   await page.locator('[data-action="inspect-exit"]').click(); await task('inspect-exit');
+  await page.waitForFunction(() => document.querySelector('[data-flow-stage="4"]')?.dataset.flowState === 'done');
   await page.locator('[data-action="preview-repair"]').click(); await task('preview-repair');
   const repairForm = page.locator('[data-form="prepare-repair"]');
   await repairForm.getByRole('checkbox').check();

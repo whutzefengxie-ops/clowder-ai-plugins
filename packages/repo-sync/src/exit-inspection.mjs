@@ -47,7 +47,11 @@ export async function inspectCandidate(receiver, d) {
   const internal = await internalHead(receiver);
   const remote = await receiver.git.remoteBranch(d.branch);
   if (remote && remote !== d.candidate) fail('CANDIDATE_CONFLICT', '原候选分支已变化，保留对象，未关闭任何 PR。');
-  const merged = d.acceptedInternal || (d.candidate && await receiver.git.isAncestor(d.candidate, internal));
+  const containsCandidate = d.candidate && await receiver.git.isAncestor(d.candidate, internal);
+  const merged = d.acceptedInternal || containsCandidate;
+  if (containsCandidate && d.prUrl) d.mergeObservation ??= {
+    source: 'git', head: d.candidate, url: d.prUrl, observedAt: new Date().toISOString(),
+  };
   const published = Boolean(remote || d.prUrl || d.prCreation || d.gitPr);
   const pr = published && !merged ? await originalPr(receiver, d) : null;
   const kind = merged || pr?.state === 'merged' ? 'MERGED'
