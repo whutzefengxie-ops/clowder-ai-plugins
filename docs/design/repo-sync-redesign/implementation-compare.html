@@ -34,7 +34,8 @@
   .full { margin-top:18px; }
   .full img { display:block; width:100%; border:1px solid var(--line); border-radius:12px; background:#fff; }
   .foot { margin-top:28px; padding-top:10px; border-top:1px solid var(--line); color:var(--faint); font-size:9px; display:flex; justify-content:space-between; }
-  @media (max-width:900px) { .pair,.notes { grid-template-columns:1fr; } h1 { font-size:27px; } }
+  .sidebar-pair { grid-template-columns: 210px 210px; justify-content: center; }
+  @media (max-width:900px) { .pair,.notes { grid-template-columns:1fr; } .sidebar-pair { grid-template-columns:210px; } h1 { font-size:27px; } }
 </style>
 </head>
 <body>
@@ -66,7 +67,17 @@
     <div class="note"><b>V3 对齐</b><ul><li>标题不再被旧 CSS 隐藏</li><li>基线段与交付卡使用同一套边框、圆角和字号</li><li>展开 / 收起按钮和状态提示同排，不再散落</li></ul></div>
   </div>
 
-  <h2>3 · 整页效果</h2>
+  <h2>3 · 左侧栏「查看项目状态」：去掉横向滚动条</h2>
+  <div class="pair small sidebar-pair">
+    <section class="panel"><div class="ph"><b>优化前</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-projects.png" alt=""></section>
+    <section class="panel"><div class="ph"><b>优化后</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-projects.png" alt=""></section>
+  </div>
+  <div class="notes" style="margin-top:10px">
+    <div class="note"><b>不再横向滚动</b><ul><li>侧栏强制单列项目卡，取消 auto-fit 多列在 185px 内撑宽</li><li>侧栏与项目面板 `overflow-x: hidden`，不再出现宽横向滚动条</li><li>长项目名、状态、SHA 全部 `overflow-wrap:anywhere`</li></ul></div>
+    <div class="note"><b>窄栏也能读</b><ul><li>最后接收 / 时间从两列定义表改为纵向标签 + 值</li><li>项目标题、状态、按钮字号收紧到侧栏尺度</li><li>筛选按钮压缩为同一行，不再挤出容器</li></ul></div>
+  </div>
+
+  <h2>4 · 整页效果</h2>
   <div class="pair full">
     <section class="panel"><div class="ph"><b>优化前整页</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-full.png" alt=""></section>
     <section class="panel"><div class="ph"><b>优化后整页</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-full.png" alt=""></section>
