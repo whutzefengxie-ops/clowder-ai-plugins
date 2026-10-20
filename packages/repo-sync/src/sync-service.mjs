@@ -139,6 +139,7 @@ const autoRetryCodes = new Set([
   'NETWORK_FAILED',
   'ISSUE_API_UNAVAILABLE',
   'PR_API_UNAVAILABLE',
+  'PR_API_REJECTED',
   'PUSH_RESULT_UNKNOWN',
 ]);
 export function automaticRetry(run, deliveryId, memory, now = Date.now()) {

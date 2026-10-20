@@ -139,3 +139,11 @@ test('auto-retry starts a real resume task instead of a no-op observe-only task'
   assert.equal(started[0].action, 'resume-sync');
   assert.equal(started[0].observeOnly, false);
 });
+test('a transient PR API rejection is retried, while a non-transient failure is not', () => {
+  const run = { id: 'r'.repeat(32), status: 'FAILED', error: { code: 'PR_API_REJECTED' } };
+  assert.equal(automaticRetry(run, 'delivery-1', null, 1000).start, true);
+  assert.equal(
+    automaticRetry({ ...run, error: { code: 'DELIVERY_CHANGED' } }, 'delivery-1', null, 1000).start,
+    false,
+  );
+});
