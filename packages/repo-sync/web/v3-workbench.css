@@ -434,7 +434,7 @@ section.card,
 }
 .target-kind-row {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
+  grid-template-columns: minmax(210px, max-content) minmax(0, 1fr);
   gap: 8px;
   align-items: end;
 }
@@ -446,26 +446,49 @@ section.card,
 .target-kind-row select {
   width: 100%;
 }
+/* 目标输入与“读取可用 tag”按钮同排：按钮使用与输入框相同的字号和纵向内边距，
+   去掉 label 的外边距，底边才会和输入框对齐，而不是各高各的。 */
 .target-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: flex-start;
+  align-items: end;
 }
 .target-row label {
-  flex: 1;
   min-width: 0;
-  margin: 0;
   font-size: 12px;
   color: var(--v3-muted);
+}
+.v3-target-fold .target-row > label {
+  margin: 0;
 }
 .target-row input {
   width: 100%;
   margin-top: 3px;
 }
+.target-row input,
 .target-row > button {
-  margin-top: 22px;
-  flex: 0 0 auto;
-  min-height: 38px;
+  line-height: 1.35;
+}
+.target-row > button {
+  margin: 0;
+  align-self: end;
+  padding: 8px 16px;
+  font-size: 14px;
+  min-height: 0;
+}
+@media (max-width: 700px) {
+  .target-kind-row {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .target-row {
+    grid-template-columns: 1fr;
+  }
+  .target-row > button {
+    justify-self: start;
+  }
 }
 .target-help {
   font-size: 11.5px;
@@ -661,8 +684,6 @@ textarea:focus {
 }
 
 /* Alignment and V3 content surfaces */
-.target-row { align-items: flex-end; }
-.target-row > button { margin-top: 0; margin-bottom: 0; }
 .block-fold {
   border: 1px solid var(--v3-line);
   border-radius: 12px;
@@ -757,8 +778,6 @@ textarea:focus {
   grid-column: 1;
 }
 .record-detail:has(> .next-action) > * { order: 0 !important; }
-.target-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; }
-.target-row > button { margin: 0; align-self: end; }
 .record-detail:has(> .next-action) > .v3-run-hero { order: -3 !important; }
 .record-detail:has(> .next-action) > .flow-canvas { order: -2 !important; }
 .record-detail:has(> .next-action) > .delivery-overview { order: -1 !important; }
@@ -1063,16 +1082,20 @@ textarea:focus {
 .project-status-dot.bad { background: #d92d20; }
 .project-status-dot.idle { background: #98a2b3; }
 #project-sidebar .project-sidebar-row small {
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
-#project-sidebar .project-sidebar-meta {
+#project-sidebar .project-sidebar-state {
   display: block;
-  margin-top: 4px;
-  color: var(--v3-faint);
-  font-size: 10px;
-  line-height: 1.4;
+  margin-top: 2px;
+  color: var(--v3-ink-2);
+}
+#project-sidebar .project-sidebar-row small.project-sidebar-meta {
+  margin-top: 5px;
+  color: var(--v3-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* Records: filters live above the split view; page size is 10. */
@@ -1139,6 +1162,24 @@ textarea:focus {
   grid-template-columns: minmax(220px, 1fr) 180px auto;
   align-items: end;
   gap: 9px 12px;
+}
+/* 第一行的搜索、状态和“筛选记录”按钮共用同一控件高度；label 去掉外边距后
+   grid 的底部对齐才会落在输入框上，而不是把按钮再往下推 16px。 */
+#content .records-filters > label {
+  margin: 0;
+}
+#content .records-filters input,
+#content .records-filters select,
+#content .records-filters .rf-actions button {
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+}
+#content .records-filters .rf-actions button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 14px;
 }
 .records-filters .rf-search { grid-column: 1; grid-row: 1; }
 .records-filters .rf-status { grid-column: 2; grid-row: 1; }

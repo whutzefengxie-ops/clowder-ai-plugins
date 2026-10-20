@@ -35,6 +35,81 @@
   margin-top: 20px;
   padding-top: 16px;
 }
+.repo-binding {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 16px;
+}
+.repo-side {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--soft);
+  padding: 12px 14px;
+}
+.repo-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.repo-role {
+  font-weight: 600;
+}
+.repo-side .badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+}
+.repo-url {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.repo-facts {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+.repo-facts > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.repo-facts dt {
+  color: var(--muted);
+  font-size: var(--t-5);
+}
+.repo-facts dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.repo-facts .badge {
+  padding: 2px 8px;
+}
+.repo-arrow {
+  color: var(--muted);
+}
+@media (max-width: 800px) {
+  .repo-binding {
+    grid-template-columns: 1fr;
+  }
+  .repo-facts > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}
 form label:not(:has(input[type="checkbox"])) {
   display: flex;
   flex-direction: column;
@@ -55,8 +130,10 @@ form .task-actions,
 }
 .github-auth form > label,
 .github-auth form > p,
+.github-auth form > .token-actions,
 #issue-auth form > label,
-#issue-auth form > p {
+#issue-auth form > p,
+#issue-auth form > .token-actions {
   flex: 1 1 100%;
 }
 form button {

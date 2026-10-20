@@ -191,6 +191,19 @@
   padding: 16px;
   background: var(--canvas);
 }
+.auth-panels > section {
+  display: flex;
+  flex-direction: column;
+}
+/* 两个认证面板的内容行数不同（帮助文字可能折行）；按钮行统一贴底，保证同一水平线、同高。 */
+.auth-panels > section > .token-actions {
+  margin-top: auto;
+  padding-top: 12px;
+}
+.auth-panels > section > [data-auth-feedback],
+.auth-panels > section > [data-github-feedback] {
+  margin: 8px 0 0;
+}
 .auth-state {
   margin: 8px 0;
   line-height: 1.5;
@@ -211,10 +224,21 @@
 .token-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: 8px;
   margin-top: 10px;
 }
-.token-actions button { min-height: 40px; }
+.token-actions button {
+  min-height: 42px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 10px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
 .settings-lock { background: var(--soft); border-left: 4px solid var(--wait); padding: 10px 12px; }
 .auth-summary { margin: 12px 0; }
 .auth-summary button { margin-top: 8px; }

@@ -284,7 +284,11 @@ body[data-view="workbench"] .app-shell main {
 .flow-inspector [data-flow-inspector-hint] {
   margin: 8px 0;
 }
-.flow-inspector [data-stage]:not([open]) {
+/* 每个阶段收起后都保留横条：标题、状态可见，长摘要只在展开时显示。 */
+.flow-inspector [data-stage]:not([open]) > summary {
+  padding: 10px 0;
+}
+.flow-inspector [data-stage]:not([open]) [data-stage-detail] {
   display: none;
 }
 .flow-inspector .journey-flow {

@@ -79,7 +79,7 @@ export function restorePanorama(content, key) {
   } catch {}
   const open = [...content.querySelectorAll('[data-stage][open]')];
   const hint = content.querySelector('[data-flow-inspector-hint]');
-  if (hint) hint.hidden = open.length > 0;
+  if (hint) hint.hidden = open.length > 0 || Boolean(selection?.stage);
   for (const node of content.querySelectorAll('[data-flow-node]')) {
     const selected =
       open.some((d) => d.dataset.stage === node.dataset.flowParent) &&

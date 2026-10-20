@@ -18,6 +18,7 @@ export function setAllExpansion(content, key, open) {
   for (const stage of stages) stage.open = open;
   for (const step of content.querySelectorAll('[data-step-key]')) step.hidden = false;
   for (const node of content.querySelectorAll('[data-flow-node]')) node.setAttribute('aria-pressed', 'false');
+  // 每个阶段收起后仍保留横条，所以只切换正文，不隐藏阶段。
   const hint = content.querySelector('[data-flow-inspector-hint]');
   if (hint) hint.hidden = open;
 }
