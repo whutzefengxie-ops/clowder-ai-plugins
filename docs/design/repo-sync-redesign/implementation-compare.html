@@ -106,7 +106,21 @@
     <section class="panel"><div class="ph"><b>基线展开 · 优化后</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-expanded-baseline.png" alt=""></section>
   </div>
 
-  <h2>7 · 整页效果</h2>
+  <h2>7 · 异常阶段：点击流程步骤要能看到具体报错</h2>
+  <div class="pair small">
+    <section class="panel"><div class="ph"><b>异常态 · 优化前</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-error-top.png" alt=""></section>
+    <section class="panel"><div class="ph"><b>异常态 · 优化后</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-error-top.png" alt=""></section>
+  </div>
+  <div class="notes" style="margin-top:10px">
+    <div class="note"><b>点击阶段</b><ul><li>优化前点击「准备交付」只展开 DOM，页面滚动位置仍是 0，看不到下面的报错</li><li>优化后点击阶段会自动展开并滚动到该阶段详情，顶部留 72px 给 sticky header</li><li>失败阶段、错误卡、恢复动作在同一屏内读到</li></ul></div>
+    <div class="note"><b>操作区</b><ul><li>右侧 dock 先给错误摘要与恢复入口</li><li>流程 rail 顶部提供「展开全部阶段 / 全部收起」，不再放在 PR 详情下方</li><li>详情块展开后仍能看到阶段标题与错误上下文</li></ul></div>
+  </div>
+  <div class="pair small" style="margin-top:10px">
+    <section class="panel"><div class="ph"><b>点击「准备交付」· 优化前</b><span class="badge before">BEFORE · 无滚动</span></div><img src="shots/impl-before-error-click.png" alt=""></section>
+    <section class="panel"><div class="ph"><b>点击「准备交付」· 优化后</b><span class="badge after">AFTER · 定位报错</span></div><img src="shots/impl-after-error-click.png" alt=""></section>
+  </div>
+
+  <h2>8 · 整页效果</h2>
   <div class="pair full">
     <section class="panel"><div class="ph"><b>优化前整页</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-full.png" alt=""></section>
     <section class="panel"><div class="ph"><b>优化后整页</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-full.png" alt=""></section>

@@ -27,7 +27,7 @@ const labels = {
   SKIPPED: '不适用',
 };
 export function panorama(snapshot, record, historical) {
-  return `<section class="flow-canvas" data-flow-canvas aria-label="五阶段同步流程全景"><div class="flow-canvas-heading"><h2>本笔同步流程</h2><p>点击阶段或子步骤，同页查看结果；执行详情用于排障。</p><div class="flow-legend">✓ 完成 · ◌ 执行 · ◷ 自动等待 · ! 人工 · × 异常</div></div><div class="panorama-grid">${cards(snapshot, record, historical)}</div></section>`;
+  return `<section class="flow-canvas" data-flow-canvas aria-label="五阶段同步流程全景"><div class="flow-canvas-heading"><h2>本笔同步流程</h2><p>点击阶段或子步骤，同页查看结果；执行详情用于排障。</p><div class="flow-legend">✓ 完成 · ◌ 执行 · ◷ 自动等待 · ! 人工 · × 异常</div><div class="flow-canvas-actions"><button type="button" data-expand-all>展开全部阶段</button><button type="button" data-collapse-all>全部收起</button></div></div><div class="panorama-grid">${cards(snapshot, record, historical)}</div></section>`;
 }
 function cards(snapshot, record, historical) {
   const delivery = record?.delivery ?? snapshot.state?.active;
@@ -133,6 +133,18 @@ export function initializePanorama(getKey) {
     states['flow:selection'] = { stage, node: button.dataset.flowNode ?? null };
     rememberExpansion(getKey(), states);
     restorePanorama(content, getKey());
+    const panel = content.querySelector(`[data-stage="${stage}"]`);
+    if (panel) {
+      panel.open = true;
+      requestAnimationFrame(() => {
+        panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        const node = button.dataset.flowNode;
+        if (node)
+          panel
+            .querySelector(`[data-flow-node="${CSS.escape(node)}"]`)
+            ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+    }
   });
 }
 export function retainPanoramaFocus(content) {

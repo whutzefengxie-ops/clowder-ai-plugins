@@ -1304,3 +1304,65 @@ textarea:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* PR metadata lives inside the delivery card, not in a second detail-head. */
+.v3-pr-meta {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--v3-line);
+}
+.v3-pr-meta > .badge { margin-bottom: 6px; display: inline-block; }
+.v3-pr-disclosures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.v3-pr-disclosures > details {
+  min-width: 0;
+  border: 1px solid var(--v3-line);
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+.v3-pr-disclosures > details > summary {
+  min-height: 30px;
+  padding: 5px 9px;
+  color: var(--v3-muted);
+  font-size: 11px;
+}
+.v3-pr-disclosures > details[open] {
+  flex: 1 1 100%;
+  padding: 8px 10px;
+  background: #fff;
+}
+.v3-pr-disclosures > details[open] > summary {
+  margin-bottom: 6px;
+  padding: 0 0 5px;
+  border-bottom: 1px solid var(--v3-line);
+  color: var(--v3-ink-2);
+}
+.v3-pr-disclosures > button {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+.flow-canvas-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.flow-canvas-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.flow-canvas-actions button {
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+[data-stage] { scroll-margin-top: 72px; }
+.flow-canvas { scroll-margin-top: 72px; }
