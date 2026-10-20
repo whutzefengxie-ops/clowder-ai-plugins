@@ -49,6 +49,9 @@ export function validateConfig(input) {
   )
     fail('INVALID_AUTO_MERGE', '自动合入等待时限需要在 1 秒至 24 小时之间');
   commitPolicy(config);
+  if (config.conflictPolicy !== undefined && !['confirm', 'auto', 'block'].includes(config.conflictPolicy))
+    fail('INVALID_CONFLICT_POLICY', '冲突解决 PR 的处理方式无效');
+  config.conflictPolicy ??= 'confirm';
   config.sourceUrl = safeUrl(config.sourceUrl, config.allowLocal === true);
   config.internalUrl = safeUrl(config.internalUrl, config.allowLocal === true);
   for (const branch of [config.sourceBranch, config.targetBranch]) {

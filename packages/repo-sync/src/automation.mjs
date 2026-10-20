@@ -43,6 +43,7 @@ export async function synchronize(receiver, input, options = {}) {
   if (input.autoMerge === true && !autoMergeSupported(receiver.config.pullRequests?.mode))
     fail('AUTO_MERGE_UNSUPPORTED', '当前平台创建方式没有可核验的合入 API；请先配置 GitLab v4 或 GitHub REST 创建方式，再开启自动合入，未开始任何新交付。');
   if (input.action === 'configure-auto-merge') return configureAutoMerge(receiver, input);
+  if (input.action === 'accept-conflict-snapshot') return acceptConflict(receiver, input);
   if (input.action === 'configure-continuation') return configureContinuation(receiver, input);
   if (input.action === 'pause-sync') return pause(receiver, input.runId);
   if (reuseRun(state, input)) return state;
@@ -102,8 +103,33 @@ function requireCapabilities(config) {
   if (config.mode !== 'version' && config.commitClosureVerified !== true)
     fail('PLATFORM_CLOSURE_UNVERIFIED', '请在仓库设置完成提交消息关单规则确认，然后恢复同步。');
 }
-function pause(receiver, id) {
-  return receiver.change((saved) => {
+function acceptConflict(receiver, input) {
+  return receiver.change((state) => {
+    const run = state.automation,
+      pending = state.pendingConflict;
+    if (!run || run.id !== input.runId) fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
+    if (!pending || !pending.landing) fail('CONFLICT_NOT_PENDING', '冲突解决待确认已变化，请刷新后核对。');
+    state.conflictSnapshots ??= {};
+    state.conflictSnapshots[pending.landing] = {
+      number: pending.number,
+      files: pending.files ?? [],
+      head: pending.head,
+      base: pending.base,
+      acceptedAt: new Date().toISOString(),
+    };
+    delete state.pendingConflict;
+    run.status = 'RUNNING';
+    delete run.error;
+    run.updatedAt = new Date().toISOString();
+    state.events.push({
+      time: run.updatedAt,
+      deliveryId: null,
+      message: `已确认 PR #${pending.number} 使用合并快照继续；${(pending.files ?? []).length} 个冲突解决文件，开发提交不逐条重放。`,
+    });
+  });
+}
+
+function pause(receiver, id) {  return receiver.change((saved) => {
     if (saved.automation?.id !== id) fail('AUTOMATION_CHANGED', '原同步轮次已改变。');
     const run = saved.automation,
       active = receiver.active(saved);

@@ -1,4 +1,5 @@
 import { candidateRecovery } from './candidate-recovery.mjs';
+import { conflictPanel } from './conflict-panel.mjs';
 import { continuationControls } from './continuation-view.mjs';
 import { failureSummary } from './error-guide.mjs';
 import { esc } from './ui.mjs';
@@ -21,6 +22,7 @@ export function actionSignature(policy, snapshot) {
 }
 export function actionBar(policy, historical, snapshot = {}) {
   if (historical) return '';
+  if (snapshot.state?.pendingConflict) return conflictPanel(snapshot.state.pendingConflict);
   const failure = failureSummary(snapshot);
   const run = snapshot.state?.automation;
   const pause = run && ['RUNNING', 'WAITING_REVIEW'].includes(run.status) && !run.pauseRequested;

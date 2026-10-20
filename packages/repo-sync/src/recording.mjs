@@ -18,7 +18,7 @@ const fields = [
   'prTransport',
   'commitClosureVerified',
 ];
-const optionalFields = ['commitStrategy', 'receivingIdentity', 'autoMergeWaitMs'];
+const optionalFields = ['commitStrategy', 'receivingIdentity', 'autoMergeWaitMs', 'conflictPolicy'];
 export function configSnapshot(config) {
   const snapshot = {};
   for (const key of [...fields, ...optionalFields])
@@ -63,7 +63,8 @@ export function validateSnapshot(snapshot) {
     !Number.isInteger(snapshot.checkCount) ||
     snapshot.checkCount < 0 ||
     !['manual', 'git', 'command', 'gitlab', 'github'].includes(snapshot.prTransport) ||
-    !['custom', 'git-integrity'].includes(snapshot.checkProfile)
+    !['custom', 'git-integrity'].includes(snapshot.checkProfile) ||
+    (snapshot.conflictPolicy !== undefined && !['confirm', 'auto', 'block'].includes(snapshot.conflictPolicy))
   )
     fail('RECORD_INVALID', '历史配置摘要损坏或版本不支持，保留原记录，不能用当前配置替代');
   for (const key of ['checkConfigId', 'prConfigId', 'issueConfigId'])

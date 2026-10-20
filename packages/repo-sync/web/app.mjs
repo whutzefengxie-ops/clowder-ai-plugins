@@ -2,6 +2,7 @@ import { guardRenderedScope, snapshotIdentity } from './action-scope.mjs';
 import { updateShell } from './app-shell.mjs';
 import { captureDraft, configuration, restoreDraft } from './connections.mjs';
 import { createBaselineViewer, diagnostics } from './diagnostics.mjs';
+import { initializeConflictDialog } from './conflict-panel.mjs';
 import { initializeExpansion, restoreExpansion, setAllExpansion } from './expansion.mjs';
 import { hydrateFileRules, initializeFileRules } from './file-rules.mjs';
 import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
@@ -237,7 +238,7 @@ document.addEventListener('click', async (event) => {
         ...(['synchronize', 'resume-sync', 'pause-sync'].includes(element.dataset.action)
           ? {}
           : { deliveryId: snapshot.state?.active?.id }),
-        ...(['resume-sync', 'pause-sync'].includes(element.dataset.action)
+        ...(['resume-sync', 'pause-sync', 'accept-conflict-snapshot'].includes(element.dataset.action)
           ? { runId: snapshot.state.automation.id }
           : {}),
         ...(['start', 'synchronize'].includes(element.dataset.action)
@@ -358,6 +359,7 @@ document.addEventListener('change', (event) => {
 });
 initializeExpansion(expandedKey);
 initializePanorama(expandedKey);
+initializeConflictDialog();
 projectNavigation
   .load()
   .then(refresh)

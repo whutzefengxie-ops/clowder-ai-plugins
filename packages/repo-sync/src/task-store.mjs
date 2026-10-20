@@ -34,6 +34,7 @@ export const taskActions = new Set([
   'inspect-exit', 'preview-repair', 'prepare-repair', 'link-repair', 'check-repair',
   'inspect-repair-exit', 'retire-repair',
   'inspect-delivery-source',
+  'accept-conflict-snapshot',
 ]);
 const keys = new Set([
   'runId',

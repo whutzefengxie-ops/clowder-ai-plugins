@@ -5,7 +5,7 @@ import { git } from './process.mjs';
 import { entries, equalEntry } from './trees.mjs';
 
 const sha = (value) => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
-export async function developmentHistory(receiver, provider, repo, pr, introduced, base) {
+export async function developmentHistory(receiver, provider, repo, pr, introduced, base, options = {}) {
   if (pr.commits === undefined) return {}; // Older injected providers do not claim a complete development list.
   if (!Number.isSafeInteger(pr.commits) || pr.commits < 1)
     fail('PR_HISTORY_INCOMPLETE', 'PR 开发提交数量无效，无法确认完整历史。');
@@ -18,7 +18,35 @@ export async function developmentHistory(receiver, provider, repo, pr, introduce
       new Set(items.map((item) => item.sha)).size !== items.length || !items.some((item) => item.sha === pr.head.sha))
     fail('PR_HISTORY_INCOMPLETE', 'PR 开发提交清单缺失、重复或被平台截断；未创建 Issue / PR，请核对来源读取权限和完整清单。');
   const replay = { schema: 1, head: pr.head.sha, commits: items.map((item) => item.sha), landingBase: base, landing: pr.merge_commit_sha };
-  await verifyDevelopmentHistory(receiver, { source: { number: pr.number, developmentReplay: replay }, base: { upstream: base }, target: pr.merge_commit_sha });
+  try {
+    await verifyDevelopmentHistory(receiver, { source: { number: pr.number, developmentReplay: replay }, base: { upstream: base }, target: pr.merge_commit_sha });
+  } catch (error) {
+    if (error.code !== 'PR_REPLAY_TREE_MISMATCH' || !error.details?.paths?.length) throw error;
+    const accepted = options.snapshots?.[pr.merge_commit_sha];
+    if (options.policy === 'block' || (options.policy !== 'auto' && !accepted))
+      fail(
+        'PR_REPLAY_CONFLICT',
+        'PR 合入时包含冲突解决；请确认是否使用合并快照继续，确认前不创建 Issue / PR。',
+        {
+          number: pr.number,
+          head: pr.head.sha,
+          landing: pr.merge_commit_sha,
+          base,
+          files: error.details.paths,
+        },
+      );
+    return {
+      ...summary,
+      conflictResolution: {
+        mode: 'snapshot',
+        files: error.details.paths,
+        head: pr.head.sha,
+        landing: pr.merge_commit_sha,
+        base,
+        acceptedBy: accepted ? 'user' : 'policy',
+      },
+    };
+  }
   return { ...summary, developmentReplay: replay };
 }
 

@@ -33,3 +33,11 @@ test('state is separate from local core repositories and source cannot equal des
     code: 'SAME_REPOSITORY',
   });
 });
+test('conflict resolution policy defaults to confirm and rejects unknown values', () => {
+  assert.equal(validateConfig({ ...configuration }).conflictPolicy, 'confirm');
+  assert.equal(validateConfig({ ...configuration, conflictPolicy: 'auto' }).conflictPolicy, 'auto');
+  assert.equal(validateConfig({ ...configuration, conflictPolicy: 'block' }).conflictPolicy, 'block');
+  assert.throws(() => validateConfig({ ...configuration, conflictPolicy: 'ignore' }), {
+    code: 'INVALID_CONFLICT_POLICY',
+  });
+});

@@ -79,8 +79,25 @@ test('a landing with extra conflict-resolution changes pauses instead of adding 
   await git(f.source, ['add', '.']);
   await git(f.source, ['commit', '--amend', '--no-edit']);
   f.pr.merge_commit_sha = await git(f.source, ['rev-parse', 'HEAD']);
-  await assert.rejects(() => discover(f.receiver, { kind: 'latest' }, f.provider), { code: 'PR_REPLAY_TREE_MISMATCH' });
-  assert.equal((await f.receiver.status()).queue.length, 0);
+  await assert.rejects(() => discover(f.receiver, { kind: 'latest' }, f.provider), { code: 'PR_REPLAY_CONFLICT' });
+  const state = await f.receiver.status();
+  assert.equal(state.queue.length, 0);
+  assert.equal(state.pendingConflict.number, 1405);
+  assert.deepEqual(state.pendingConflict.files, ['extra-core.txt']);
+});
+
+test('auto policy accepts a conflict-resolution landing as one snapshot delivery', async () => {
+  const f = await developmentFixture(3);
+  await writeFile(join(f.source, 'extra-core.txt'), 'landing-only resolution');
+  await git(f.source, ['add', '.']);
+  await git(f.source, ['commit', '--amend', '--no-edit']);
+  f.pr.merge_commit_sha = await git(f.source, ['rev-parse', 'HEAD']);
+  f.receiver.config.conflictPolicy = 'auto';
+  await discover(f.receiver, { kind: 'latest' }, f.provider);
+  const state = await f.receiver.status();
+  assert.equal(state.queue.length, 1);
+  assert.equal(state.queue[0].source.conflictResolution.mode, 'snapshot');
+  assert.equal(state.queue[0].source.developmentReplay, undefined);
 });
 
 test('an interleaved main landing is accepted only when its tree is already in the internal baseline', async () => {

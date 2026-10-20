@@ -20,6 +20,7 @@ const fields = [
   'pullRequests',
   'timeouts',
   'autoMergeWaitMs',
+  'conflictPolicy',
   'allowLocal',
 ];
 const apiFields = ['mode', 'apiUrl', 'projectId', 'authMode', 'tokenEnv', 'timeoutMs'];

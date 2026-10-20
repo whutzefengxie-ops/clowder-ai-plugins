@@ -103,3 +103,25 @@ test('delivery-scoped actions render in the right action dock only for the curre
   assert.match(html, /class="run-option delivery-actions"/);
   assert.equal(actionBar(policy, true, snapshot), '');
 });
+test('pending conflict resolution renders one explicit confirmation entry and dialog', () => {
+  const snapshot = {
+    state: {
+      automation: { id: 'run-1', status: 'FAILED' },
+      pendingConflict: {
+        number: 1599,
+        head: '3c0c6f92dcce6def060681e97a20a60308c0e7ea',
+        landing: '466d4549fe2d75c9cc5c96b9497f47e464d13cf2',
+        base: '7fca378fa010a288484e909446a2faeee5a7fbe2',
+        files: ['a/A.ts', 'a/B.ts', 'a/C.ts'],
+      },
+    },
+    operation: null,
+    config: {},
+  };
+  const html = actionBar({ text: '继续同步', label: '继续同步', action: 'resume-sync', stage: 1 }, false, snapshot);
+  assert.match(html, /PR 合入时包含冲突解决/);
+  assert.match(html, /data-open-conflict/);
+  assert.match(html, /data-action="accept-conflict-snapshot"/);
+  assert.match(html, /3 个差异文件/);
+  assert.equal(actionBar({ text: 'x', label: 'x', action: 'resume-sync', stage: 1 }, true, snapshot), '');
+});

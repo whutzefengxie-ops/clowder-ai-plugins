@@ -24,6 +24,7 @@ export function assertLedger(state) {
     fail('LEDGER_INVALID', '台账缺少接受版本、队列或映射等必要字段；暂停，不能重建空台账');
   if (state.activeId !== null && typeof state.activeId !== 'string')
     fail('LEDGER_INVALID', '活动交付身份无效');
+  validateConflicts(state);
   assertIssueLedger(state);
   const statuses = [
     'ISSUES_REQUIRED',
@@ -45,6 +46,44 @@ export function assertLedger(state) {
   const pending = state.deliveries.filter((delivery) => !['COMPLETE', 'CANCELLED'].includes(delivery.status));
   if (pending.length > 1 || (pending.length === 1 && pending[0].id !== state.activeId))
     fail('LEDGER_INVALID', '未完成交付与活动身份不一致，暂停以防丢失恢复任务');
+}
+function validateConflicts(state) {
+  const files = (value) =>
+    Array.isArray(value) && value.every((path) => typeof path === 'string' && path.length > 0);
+  if (state.pendingConflict !== undefined) {
+    const pending = state.pendingConflict;
+    if (
+      !pending ||
+      typeof pending !== 'object' ||
+      Array.isArray(pending) ||
+      !Number.isSafeInteger(pending.number) ||
+      !sha(pending.head) ||
+      !sha(pending.landing) ||
+      !sha(pending.base) ||
+      !files(pending.files) ||
+      !Number.isFinite(Date.parse(pending.detectedAt))
+    )
+      fail('LEDGER_INVALID', '冲突解决待确认记录无效，暂停并保留原台账');
+  }
+  if (state.conflictSnapshots !== undefined) {
+    if (
+      !state.conflictSnapshots ||
+      typeof state.conflictSnapshots !== 'object' ||
+      Array.isArray(state.conflictSnapshots)
+    )
+      fail('LEDGER_INVALID', '冲突解决快照记录无效，暂停并保留原台账');
+    for (const [landing, value] of Object.entries(state.conflictSnapshots))
+      if (
+        !sha(landing) ||
+        !value ||
+        typeof value !== 'object' ||
+        Array.isArray(value) ||
+        !Number.isSafeInteger(value.number) ||
+        !files(value.files) ||
+        !Number.isFinite(Date.parse(value.acceptedAt))
+      )
+        fail('LEDGER_INVALID', '冲突解决快照记录无效，暂停并保留原台账');
+  }
 }
 function assertDelivery(delivery, identities, statuses) {
   validateMergeObservation(delivery, fail);

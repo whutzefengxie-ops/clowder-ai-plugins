@@ -147,3 +147,7 @@ test('a transient PR API rejection is retried, while a non-transient failure is 
     false,
   );
 });
+test('GitHub read API unavailability is retried like the internal platform API', () => {
+  const run = { id: 'r'.repeat(32), status: 'FAILED', error: { code: 'GITHUB_API_UNAVAILABLE' } };
+  assert.equal(automaticRetry(run, 'delivery-1', null, 1000).start, true);
+});

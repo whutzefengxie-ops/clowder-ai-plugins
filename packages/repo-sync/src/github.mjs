@@ -74,11 +74,27 @@ async function discoverLocked(receiver, selection, provider) {
       groups.push(...splitLandingsOutsidePr(group, owned, associations, receiver.config.sourceBranch));
     }
     const plans = [];
+    const snapshots = state.conflictSnapshots ?? {};
     let base = state.accepted.upstream;
     for (const group of groups) {
       const { pr, source } = await landingSource(receiver, provider, repo, repository, group);
       const introduced = (await git(receiver.git.directory, ['rev-list', `${base}..${group.target}`])).split('\n');
-      if (pr) Object.assign(source, await developmentHistory(receiver, provider, repo, pr, introduced, base));
+      if (pr)
+        try {
+          Object.assign(
+            source,
+            await developmentHistory(receiver, provider, repo, pr, introduced, base, {
+              snapshots,
+              policy: receiver.config.conflictPolicy ?? 'confirm',
+            }),
+          );
+        } catch (error) {
+          if (error.code === 'PR_REPLAY_CONFLICT') {
+            state.pendingConflict = { ...error.details, detectedAt: new Date().toISOString() };
+            await receiver.store.save(state);
+          }
+          throw error;
+        }
       const messages = [];
       for (const sha of introduced)
         messages.push(await git(receiver.git.directory, ['show', '-s', '--format=%B', sha]));
@@ -94,6 +110,7 @@ async function discoverLocked(receiver, selection, provider) {
       base = group.target;
     }
     attachIssueRequirements(plans);
+    delete state.pendingConflict;
     await receiver.replaceQueue(state, plans, heads, target.commit);
     state.syncTarget = target;
     if (state.automation?.status === 'RUNNING') {

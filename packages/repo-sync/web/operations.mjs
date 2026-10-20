@@ -31,6 +31,7 @@ const longActions = new Set([
   'inspect-repair-exit', 'retire-repair',
   'inspect-delivery-source',
   'configure-auto-merge',
+  'accept-conflict-snapshot',
 ]);
 const active = new Set(['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED']);
 const blocked = (task) => active.has(task?.status) || task?.persistence?.status === 'FAILED';

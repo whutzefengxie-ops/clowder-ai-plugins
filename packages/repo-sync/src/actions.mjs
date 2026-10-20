@@ -37,6 +37,7 @@ export async function dispatch(receiver, input, options = {}) {
     'pause-sync': () => synchronize(receiver, input, options),
     'configure-continuation': () => synchronize(receiver, input, options),
     'configure-auto-merge': () => synchronize(receiver, input, options),
+    'accept-conflict-snapshot': () => synchronize(receiver, input, options),
     heads: () => receiver.store.locked(() => receiver.git.heads()),
     adopt: () => receiver.adopt(input.upstream, input.internal),
     discover: () =>

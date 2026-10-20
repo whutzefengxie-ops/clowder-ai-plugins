@@ -13,6 +13,7 @@ export function projectConfiguration(previous, state, input) {
     'receivingIdentity',
     'commitClosureVerified',
     'autoMergeWaitMs',
+    'conflictPolicy',
   ];
   if (Object.keys(input).some((key) => !keys.includes(key)))
     fail('INVALID_CONFIGURATION_INPUT', '设置只接受明确的可编辑字段，不接受地址绑定、命令或凭据');
@@ -20,7 +21,7 @@ export function projectConfiguration(previous, state, input) {
   if (input.internalWebUrl !== undefined) next.internalWebUrl = input.internalWebUrl;
   if (input.prMode !== undefined) next.pullRequests = prConfiguration(next, input.prMode, input);
   if (input.issueMode !== undefined) next.issues = issueConfiguration(next, input);
-  for (const key of ['commitStrategy', 'receivingIdentity', 'autoMergeWaitMs'])
+  for (const key of ['commitStrategy', 'receivingIdentity', 'autoMergeWaitMs', 'conflictPolicy'])
     if (input[key] !== undefined) next[key] = input[key];
   if (input.commitClosureVerified === true) next.commitClosureVerified = true;
   if (
