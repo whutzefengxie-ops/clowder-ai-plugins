@@ -23,8 +23,29 @@ export async function preservedTree(receiver, target, internal, id, base = null)
   return phase('internal-preserve', '保留声明的内部文件和不存在状态', async () => {
     const core = [...source.keys()].filter((path) => !preserved(path));
     const kept = [...local].filter(([path]) => preserved(path));
+    // 大仓库里逐个 startsWith 扫描是 O(核心文件数 × 保留/携带文件数)，一个 40+ 提交的
+    // PR 会因此耗时数十分钟；改用目录索引后每个路径 O(1)~O(深度)。
+    const coreSet = new Set(core),
+      coreDirs = new Map();
+    for (const path of core) {
+      let index = path.lastIndexOf('/');
+      while (index > 0) {
+        const dir = path.slice(0, index);
+        if (!coreDirs.has(dir)) coreDirs.set(dir, path);
+        index = path.lastIndexOf('/', index - 1);
+      }
+    }
+    const ancestorCore = (path) => {
+      let index = path.lastIndexOf('/');
+      while (index > 0) {
+        const parent = path.slice(0, index);
+        if (coreSet.has(parent)) return parent;
+        index = path.lastIndexOf('/', index - 1);
+      }
+      return null;
+    };
     for (const [path] of [...kept, ...carried]) {
-      const collision = core.find((other) => other.startsWith(`${path}/`) || path.startsWith(`${other}/`));
+      const collision = coreDirs.get(path) ?? ancestorCore(path);
       if (collision)
         fail('INTERNAL_PATH_COLLISION', '保留文件与上游核心目录发生结构冲突，请核对具体路径；候选未发布', {
           paths: [path, collision],
@@ -38,13 +59,15 @@ export async function preservedTree(receiver, target, internal, id, base = null)
       GIT_INDEX_FILE: join(folder, `${randomUUID()}.index`),
       GIT_TERMINAL_PROMPT: '0',
     };
-    const index = (args) => command('git', ['-C', receiver.directory, ...args], { env });
+    const index = (args, options = {}) => command('git', ['-C', receiver.directory, ...args], { env, ...options });
     await index(['read-tree', target]);
-    for (const path of source.keys()) if (preserved(path)) await index(['update-index', '--force-remove', '--', path]);
-    for (const [path, entry] of kept)
-      await index(['update-index', '--add', '--cacheinfo', entry.mode, entry.object, path]);
-    for (const [path, entry] of carried)
-      await index(['update-index', '--add', '--cacheinfo', entry.mode, entry.object, path]);
+    // 一次 --index-info 写入全部删除/新增，避免每个文件启动一个 git 进程。
+    const records = [];
+    for (const path of source.keys())
+      if (preserved(path)) records.push(`0 ${'0'.repeat(40)}\t${path}`);
+    for (const [path, entry] of kept) records.push(`${entry.mode} ${entry.object}\t${path}`);
+    for (const [path, entry] of carried) records.push(`${entry.mode} ${entry.object}\t${path}`);
+    if (records.length) await index(['update-index', '-z', '--index-info'], { input: `${records.join('\0')}\0` });
     return index(['write-tree']);
   });
 }
