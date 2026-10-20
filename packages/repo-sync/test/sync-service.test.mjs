@@ -77,3 +77,25 @@ test('stale automatic intent cannot be replaced or paused with another run ident
   assert.equal((await receiver.status()).automation.pauseRequested.afterDeliveryId, original.id);
   assert.equal((await receiver.status()).deliveries.length, 1);
 });
+import { automaticRetry } from '../src/sync-service.mjs';
+
+test('a transient COMMAND_FAILED run is retried twice with backoff and then handed back to the user', () => {
+  const run = { id: 'r'.repeat(32), status: 'FAILED', error: { code: 'COMMAND_FAILED' } };
+  let memory = null;
+  let decision = automaticRetry(run, 'delivery-1', memory, 1000);
+  assert.equal(decision.start, true);
+  memory = decision.memory;
+  decision = automaticRetry(run, 'delivery-1', memory, 5000);
+  assert.equal(decision.start, false);
+  decision = automaticRetry(run, 'delivery-1', memory, 12000);
+  assert.equal(decision.start, true);
+  memory = decision.memory;
+  decision = automaticRetry(run, 'delivery-1', memory, 60000);
+  assert.equal(decision.start, false);
+  decision = automaticRetry(run, 'delivery-2', memory, 60000);
+  assert.equal(decision.start, true);
+  assert.equal(
+    automaticRetry({ ...run, error: { code: 'AUTO_MERGE_BLOCKED' } }, 'delivery-1', null, 0).start,
+    false,
+  );
+});

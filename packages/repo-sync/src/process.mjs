@@ -122,8 +122,7 @@ export async function gitRetry(directory, args, options = {}, attempts = 3) {
     try {
       return await git(directory, args, options);
     } catch (error) {
-      const transient = ['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error.code);
-      if (!transient || attempt >= attempts) throw error;
+      if (!retryableGitError(error) || attempt >= attempts) throw error;
       await new Promise((done) => setTimeout(done, 1000 * attempt));
     }
   }
@@ -133,9 +132,16 @@ export async function commandRetry(executable, args, options = {}, attempts = 3)
     try {
       return await command(executable, args, options);
     } catch (error) {
-      const transient = ['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error.code);
-      if (!transient || attempt >= attempts) throw error;
+      if (!retryableGitError(error) || attempt >= attempts) throw error;
       await new Promise((done) => setTimeout(done, 1000 * attempt));
     }
   }
+}
+// Git 的 128 往往来自连接中断、HTTP 502、临时 ref/凭据锁等可恢复状态；
+// 只读命令（fetch/ls-remote/remoteBranch）重试一次通常就能恢复。
+export function retryableGitError(error) {
+  return (
+    ['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error?.code) ||
+    (error?.code === 'COMMAND_FAILED' && error?.details?.exitCode === 128)
+  );
 }

@@ -31,9 +31,18 @@ export class SyncService {
     if (transfer && transfer.status !== 'ACTIVE') return;
     const state = await receiver.status(),
       run = state?.automation;
-    if (!run || !['RUNNING', 'WAITING_REVIEW'].includes(run.status)) return;
+    if (!run) return;
     const task = await scope.tasks.latest();
     if (blockedTask(task)) return;
+    if (run.status === 'FAILED') {
+      const decision = automaticRetry(run, state.active?.id, this.autoRetry, Date.now());
+      this.autoRetry = decision.memory;
+      if (!decision.start) return;
+      await startResume(scope, receiver, run);
+      return;
+    }
+    this.autoRetry = null;
+    if (!['RUNNING', 'WAITING_REVIEW'].includes(run.status)) return;
     if (
       run.status === 'WAITING_REVIEW' &&
       state.active &&
@@ -87,15 +96,7 @@ export class SyncService {
       }
     }
     if (this.stopped) return;
-    await scope.tasks.start({
-      action: 'resume-sync',
-      observeOnly: true,
-      runId: run.id,
-      requestId: randomBytes(16).toString('hex'),
-      expectedBinding: receiver.config.bindingId,
-      expectedRevision: scope.options.connection?.describe().revision,
-      ...(scope.options.projectId ? { projectId: scope.options.projectId } : {}),
-    });
+    await startResume(scope, receiver, run);
   }
   status() {
     return {
@@ -116,4 +117,30 @@ function blockedTask(task) {
     ['RUNNING', 'CANCELLING', 'STOP_UNCONFIRMED'].includes(task?.status) ||
     task?.persistence?.status === 'FAILED'
   );
+}
+
+function startResume(scope, receiver, run) {
+  return scope.tasks.start({
+    action: 'resume-sync',
+    observeOnly: true,
+    runId: run.id,
+    requestId: randomBytes(16).toString('hex'),
+    expectedBinding: receiver.config.bindingId,
+    expectedRevision: scope.options.connection?.describe().revision,
+    ...(scope.options.projectId ? { projectId: scope.options.projectId } : {}),
+  });
+}
+
+// 用户反馈以及任务记录都表明：Git 的 128（连接中断、HTTP 502、临时 ref 锁）
+// 在恢复同步后即可通过。这里在轮次 FAILED 后自动重试两次，仍失败才交还给用户。
+const autoRetryCodes = new Set(['COMMAND_FAILED', 'NETWORK_FAILED']);
+export function automaticRetry(run, deliveryId, memory, now = Date.now()) {
+  if (run?.status !== 'FAILED' || !autoRetryCodes.has(run.error?.code)) return { memory: null, start: false };
+  const key = `${run.id}:${deliveryId ?? ''}:${run.error.code}`;
+  const current = memory?.key === key ? memory : { key, count: 0, at: 0 };
+  if (current.count >= 2 || now < current.at) return { memory: current, start: false };
+  return {
+    memory: { key, count: current.count + 1, at: now + (current.count === 0 ? 10000 : 30000) },
+    start: true,
+  };
 }
