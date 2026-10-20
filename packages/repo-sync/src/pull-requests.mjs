@@ -167,8 +167,25 @@ export async function createPr(receiver, state, delivery, templates) {
           );
         delivery.prCreation = { status: 'INTENT_SAVED', deliveryId: delivery.id };
         await receiver.store.save(state);
-        await invoke(receiver.config, 'create', input);
+        try {
+          await invoke(receiver.config, 'create', input);
+        } catch (error) {
+          // A 4xx/认证拒绝可以确定没有创建对象；清掉意图后把真实原因交给上层重试。
+          if (
+            error.code === 'PR_AUTH_REQUIRED' ||
+            (error.httpStatus >= 400 && error.httpStatus < 500)
+          ) {
+            delete delivery.prCreation;
+            await receiver.store.save(state);
+            throw error;
+          }
+          fail('PR_CREATE_RESULT_UNKNOWN', 'PR 创建回执未确认；恢复时只查询原交付，不重复创建');
+        }
         found = await invoke(receiver.config, 'find', input);
+        for (let attempt = 0; !found && attempt < 3; attempt++) {
+          await new Promise((done) => setTimeout(done, 500));
+          found = await invoke(receiver.config, 'find', input);
+        }
       }
       const url = validateResult(receiver.config, found, input);
       if (delivery.prUrl && delivery.prUrl !== url)

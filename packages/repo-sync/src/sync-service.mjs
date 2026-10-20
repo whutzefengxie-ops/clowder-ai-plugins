@@ -140,6 +140,8 @@ const autoRetryCodes = new Set([
   'ISSUE_API_UNAVAILABLE',
   'PR_API_UNAVAILABLE',
   'PR_API_REJECTED',
+  'PR_CREATE_RESULT_UNKNOWN',
+  'ISSUE_CREATE_RESULT_UNKNOWN',
   'PUSH_RESULT_UNKNOWN',
 ]);
 export function automaticRetry(run, deliveryId, memory, now = Date.now()) {
