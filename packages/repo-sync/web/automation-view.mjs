@@ -2,7 +2,8 @@ import { actionBar } from './actionbar.mjs';
 import { attempts, stageSummary } from './attempts.mjs';
 import { preDeliveryPresentation } from './flow-stage.mjs';
 import { panorama } from './panorama.mjs';
-import { esc, title, when } from './ui.mjs';
+import { esc, sha, title, when } from './ui.mjs';
+import { runHero } from './v3-hero.mjs';
 
 export function automationBanner(snapshot) {
   const run = snapshot.state?.automation;
@@ -98,7 +99,7 @@ export function preDeliveryFlow(snapshot, policy = automaticPolicy(snapshot, nul
     '审核合入',
     '核验接收',
   ];
-  return `${policy?.outcome === 'cancelled' ? `<p class="cancelled-notice">上一笔已撤销，未合入；接受基线未变。<button type="button" data-record="${esc(snapshot.state.automation.restartOf)}">查看已撤销记录</button></p>` : ''}${actionBar(policy, false, snapshot)}${panorama(snapshot, null, false)}<section id="flow-inspector" class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
+  return `${runHero(snapshot, snapshot.state?.active)}${automationBanner(snapshot)}${policy?.outcome === 'cancelled' ? `<p class="cancelled-notice">上一笔已撤销，未合入；接受基线未变。<button type="button" data-record="${esc(snapshot.state.automation.restartOf)}">查看已撤销记录</button></p>` : ''}${actionBar(policy, false, snapshot)}${panorama(snapshot, null, false)}${freezeScope(snapshot)}<section id="flow-inspector" class="flow-inspector" aria-label="选中节点的执行详情"><p data-flow-inspector-hint>选择上方节点查看读取结果和恢复操作。</p><ol class="journey-flow">${names
     .map((name, index) => {
       const stage = index + 1;
       const presentation = preDeliveryPresentation(stage, task, policy);
@@ -125,4 +126,14 @@ function referenceRemedy(delivery) {
       label: '补登记原 PR 引用 →',
     };
   return null;
+}
+function freezeScope(snapshot) {
+  const queue = snapshot.state?.queue ?? [];
+  if (!queue.length || snapshot.state?.active) return '';
+  const rows = queue.slice(0, 5).map((plan) => {
+    const source = plan.source.kind === 'commit' ? 'main commit' : plan.source.tag ? `版本 ${plan.source.tag}` : `PR #${plan.source.number}`;
+    const issues = plan.issues ?? [];
+    return `<div class="v3-freeze-row"><span class="no">${plan.source.kind === 'commit' ? 'commit' : plan.source.tag ? 'tag' : 'PR'}</span><span class="tt">${esc(source)} · ${esc(plan.source.title ?? '')}${issues.length ? issues.map((issue) => `<span class="issue">#${esc(issue.number)} ${esc(issue.title)} · 映射待创建</span>`).join('') : '<span class="issue">无关联 Issue · 直接主干提交</span>'}</span><span class="st">${sha(plan.target)}<br>${issues.length ? `${issues.length} Issue` : '无 Issue'}</span></div>`;
+  }).join('');
+  return `<section class="card v3-freeze" aria-label="冻结范围"><div class="v3-freeze-head"><b>冻结范围 · PR 与 Issue</b><span>${queue.length} 笔 · 边界与 Issue 已进入队列；尚未创建 PR</span></div>${rows}${queue.length > 5 ? `<div class="v3-freeze-row"><span class="tt">还有 ${queue.length - 5} 笔未展开</span></div>` : ''}</section>`;
 }

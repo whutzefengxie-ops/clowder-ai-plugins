@@ -71,7 +71,7 @@ function target(snapshot, tags) {
     config.mode === 'continuous'
       ? `${githubAuthSummary(snapshot)}${sourceTargetForm(state, tags, esc, sha, config.prTransport !== 'manual')}`
       : '';
-  return `${accepted}${sourceBlock(config, state, source)}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p class="note-line">${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系，按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
+  return `${!state.queue.length ? targetHero(state, config) : ''}${accepted}${sourceBlock(config, state, source)}<section class="card task"><span class="badge">1 · 确认同步范围</span><h2>${heading}</h2><p class="note-line">${next ? '按已核对的范围发起本次同步，内部 main 等待正常平台合入。' : '先读取 GitHub PR、Issue 与实际 main 提交关系，按接受顺序逐笔处理。'}</p>${next ? `<p>外部 ${sha(state.accepted.upstream)} → ${sha(next.target)}<br>内部基线 ${sha(state.accepted.internal)}</p>${issueReferenceNotes(next.source)}${startButton(config, next)}` : ''}<div id="operation" tabindex="-1"></div><div id="error-slot"></div></section>`;
 }
 
 function sourceBlock(config, state, inner) {
@@ -124,4 +124,9 @@ function startButton(config, next) {
         ? `同步${title(next)} →`
         : `同步上游 PR #${next.source.number} →`;
   return button(config.prTransport === 'manual' ? 'start' : 'synchronize', label);
+}
+
+function targetHero(state, config) {
+  const mode = config.mode === 'version' ? '按版本更新' : '同步开发过程';
+  return `<section class="v3-hero" aria-label="本轮目标"><div><p class="v3-eyebrow">同步工作台 · ${esc(mode)}</p><h2>选择本轮终点</h2><p>可以按最新、tag 或完整 40 位 commit 指定终点。对比是只读的；开始后会重新核验目标与内部 HEAD。</p></div><div class="v3-hero-stats"><div><b>${state.queue.length}</b><span>待处理</span></div><div><b>${sha(state.latest)}</b><span>扫描最新</span></div><div><b>${esc(state.accepted.tag ?? '已登记')}</b><span>已接收</span></div></div></section>`;
 }
