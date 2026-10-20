@@ -1,4 +1,4 @@
-import { autoMergeDelivery, configureAutoMerge } from './auto-merge.mjs';
+import { autoMergeDelivery, autoMergeSupported, configureAutoMerge } from './auto-merge.mjs';
 import { fail } from './config.mjs';
 import {
   armBoundary,
@@ -40,8 +40,8 @@ export async function synchronize(receiver, input, options = {}) {
   if (state && receiver.active(state)?.cancellation?.status === 'REQUESTED')
     fail('CANCELLATION_PENDING', '原 PR 撤销尚未完成，请继续回读原撤销结果，不恢复普通同步。');
   validateRequest(state, input);
-  if (input.autoMerge === true && receiver.config.pullRequests?.mode !== 'gitlab')
-    fail('AUTO_MERGE_UNSUPPORTED', '当前平台创建方式没有可核验的合入 API；GitHub 内部平台请审核后在平台人工合入，未开始任何新交付。');
+  if (input.autoMerge === true && !autoMergeSupported(receiver.config.pullRequests?.mode))
+    fail('AUTO_MERGE_UNSUPPORTED', '当前平台创建方式没有可核验的合入 API；请先配置 GitLab v4 或 GitHub REST 创建方式，再开启自动合入，未开始任何新交付。');
   if (input.action === 'configure-auto-merge') return configureAutoMerge(receiver, input);
   if (input.action === 'configure-continuation') return configureContinuation(receiver, input);
   if (input.action === 'pause-sync') return pause(receiver, input.runId);

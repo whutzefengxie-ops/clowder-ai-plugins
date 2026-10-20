@@ -49,7 +49,9 @@ export function githubMergeReadiness(detail, head) {
   if (detail.mergeable === null || detail.mergeable_state === 'unknown')
     return wait('GitHub 正在计算可合入性，稍后自动重试');
   if (detail.mergeable_state === 'unstable')
-    return wait('检查尚未全部通过，等待 GitHub 分支保护或 CI 完成');
+    // 没有必需检查的仓库即使 CI 失败也仍可合入；先请求合并，由平台校验
+    // 分支保护/必需检查，避免把“失败的非必需 CI”误判成永久等待。
+    return { kind: 'ready', reason: 'GitHub 可合入但部分检查未通过；交由合入接口校验必需检查' };
   if (detail.mergeable_state === 'blocked' || detail.mergeable === false)
     return wait('等待分支保护、必需检查或人工审批', true);
   if (detail.mergeable_state === 'behind')

@@ -273,3 +273,24 @@ test('auto-merge is offered for GitLab and GitHub REST, not for manual or comman
   assert.equal(autoMergeSupported('command'), false);
   assert.equal(autoMergeSupported('manual'), false);
 });
+
+test('GitHub auto-merge can be configured on a paused run', async () => {
+  const state = {
+    automation: { id: 'a'.repeat(32), status: 'PAUSED', autoMerge: false },
+    deliveries: [],
+    events: [],
+  };
+  const receiver = {
+    config: { pullRequests: { mode: 'github' } },
+    read: async () => state,
+    active: () => null,
+    change: async (fn) => fn(state),
+  };
+  const { synchronize } = await import('../src/automation.mjs');
+  await synchronize(receiver, {
+    action: 'configure-auto-merge',
+    runId: state.automation.id,
+    autoMerge: true,
+  });
+  assert.equal(state.automation.autoMerge, true);
+});

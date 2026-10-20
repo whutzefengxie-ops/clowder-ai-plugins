@@ -285,7 +285,7 @@ test('GitHub mergeability maps clean/blocked/dirty/unknown to ready/wait/blocked
   assert.equal(githubMergeReadiness(detail(false, 'blocked'), head).kind, 'wait');
   assert.equal(githubMergeReadiness(detail(false, 'blocked'), head).manual, true);
   assert.equal(githubMergeReadiness(detail(null, 'unknown'), head).kind, 'wait');
-  assert.equal(githubMergeReadiness(detail(true, 'unstable'), head).kind, 'wait');
+  assert.equal(githubMergeReadiness(detail(true, 'unstable'), head).kind, 'ready');
   assert.equal(githubMergeReadiness(detail(true, 'behind'), head).kind, 'wait');
   assert.equal(githubMergeReadiness(detail(true, 'clean', { draft: true }), head).kind, 'wait');
   assert.equal(githubMergeReadiness(detail(true, 'clean', { head: { sha: 'other' } }), head).kind, 'blocked');
