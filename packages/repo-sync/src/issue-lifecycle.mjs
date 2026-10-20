@@ -162,20 +162,22 @@ export async function syncIssues(receiver, state) {
 }
 
 async function settleClosing(receiver, state, delivery, issue, request, result) {
-  if (issue.relation === 'closes') {
-    let pending = false;
+  // 内部 Issue 是本笔交付的镜像：本笔 PR 合入后即关闭，不再区分来源关系
+  // related / closes。来源为 closes 时仍等待 requiredTargets 全部进入内部历史，
+  // 避免跨轮的关单条件尚未满足就提前关闭。
+  let pending = false;
+  if (issue.relation === 'closes')
     for (const target of issue.requiredTargets ?? [delivery.target])
       if (!(await receiver.git.isAncestor(mappedCommit(state, target), delivery.acceptedInternal))) pending = true;
-    const desiredState = pending ? 'open' : 'closed';
-    if (result.state !== desiredState) {
-      delivery.issueUpdateIntents ??= {};
-      delivery.issueUpdateIntents[issue.sourceId] = { desiredState, time: new Date().toISOString() };
-      await receiver.store.save(state);
-      await call(receiver, { ...request, desiredState }, 'update');
-      result = await call(receiver, request, 'read');
-    }
-    if (result.state !== desiredState)
-      fail('ISSUE_UPDATE_PENDING', 'Issue 状态写入尚未回读确认；代码已接受，只重试原 Issue 状态核验');
+  const desiredState = pending ? 'open' : 'closed';
+  if (result.state !== desiredState) {
+    delivery.issueUpdateIntents ??= {};
+    delivery.issueUpdateIntents[issue.sourceId] = { desiredState, time: new Date().toISOString() };
+    await receiver.store.save(state);
+    await call(receiver, { ...request, desiredState }, 'update');
+    result = await call(receiver, request, 'read');
   }
+  if (result.state !== desiredState)
+    fail('ISSUE_UPDATE_PENDING', 'Issue 状态写入尚未回读确认；代码已接受，只重试原 Issue 状态核验');
   return result;
 }

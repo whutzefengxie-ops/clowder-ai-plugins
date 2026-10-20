@@ -90,3 +90,25 @@ test('forged Issue identity stops association and preserves the same PR without 
   assert.equal(state.issues['issue-71'].internalId, '318');
   assert.equal((await platform.read()).updates, 0);
 });
+
+test('an internal mirror with source relation=related still closes when its delivery is accepted', async () => {
+  const f = await repositories();
+  for (const plan of f.plans) plan.issues[0].relation = 'related';
+  const platform = await issuePlatform(f);
+  const receiver = new Receiver({
+    ...f.config,
+    internalWebUrl: 'https://codehub.example/core',
+    issues: platform.config,
+  });
+  await receiver.adopt(f.u0, f.i0);
+  await receiver.setQueue(f.plans);
+  await receiver.start();
+  await receiver.prepare();
+  await receiver.linkPr('https://codehub.example/core/pull/1');
+  const active = (await receiver.status()).active;
+  await f.merge(active);
+  await receiver.recover();
+  const state = await receiver.status();
+  assert.equal(state.deliveries.at(-1).status, 'COMPLETE');
+  assert.equal(state.issues['issue-71'].state, 'closed');
+});
