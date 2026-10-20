@@ -131,9 +131,16 @@ function startResume(scope, receiver, run) {
   });
 }
 
-// 用户反馈以及任务记录都表明：Git 的 128（连接中断、HTTP 502、临时 ref 锁）
-// 在恢复同步后即可通过。这里在轮次 FAILED 后自动重试两次，仍失败才交还给用户。
-const autoRetryCodes = new Set(['COMMAND_FAILED', 'NETWORK_FAILED']);
+// 用户反馈以及任务记录都表明：Git 的 128（连接中断、HTTP 502、临时 ref 锁）、
+// 平台 API 短暂不可用和推送回执不明，在恢复同步后即可通过。这里在轮次 FAILED 后
+// 自动重试两次，仍失败才交还给用户。
+const autoRetryCodes = new Set([
+  'COMMAND_FAILED',
+  'NETWORK_FAILED',
+  'ISSUE_API_UNAVAILABLE',
+  'PR_API_UNAVAILABLE',
+  'PUSH_RESULT_UNKNOWN',
+]);
 export function automaticRetry(run, deliveryId, memory, now = Date.now()) {
   if (run?.status !== 'FAILED' || !autoRetryCodes.has(run.error?.code)) return { memory: null, start: false };
   const key = `${run.id}:${deliveryId ?? ''}:${run.error.code}`;

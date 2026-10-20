@@ -99,3 +99,11 @@ test('a transient COMMAND_FAILED run is retried twice with backoff and then hand
     false,
   );
 });
+test('platform API unavailability and unknown push results are also retried once', () => {
+  for (const code of ['ISSUE_API_UNAVAILABLE', 'PR_API_UNAVAILABLE', 'PUSH_RESULT_UNKNOWN']) {
+    const run = { id: 'r'.repeat(32), status: 'FAILED', error: { code } };
+    assert.equal(automaticRetry(run, 'delivery-1', null, 1000).start, true, code);
+  }
+  const run = { id: 'r'.repeat(32), status: 'FAILED', error: { code: 'ISSUE_UPDATE_PENDING' } };
+  assert.equal(automaticRetry(run, 'delivery-1', null, 1000).start, false);
+});
