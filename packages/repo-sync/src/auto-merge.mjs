@@ -1,15 +1,23 @@
 import { fail } from './config.mjs';
 import { phase, safeError } from './execution.mjs';
+import { githubMerge, githubPr, githubPrDetail } from './github-platform-pr.mjs';
 import { gitlabApi } from './gitlab-api.mjs';
 import { gitlabPr } from './gitlab-pr.mjs';
-import { mergeReadiness, mergeWait } from './merge-readiness.mjs';
+import { githubMergeReadiness, mergeReadiness, mergeWait } from './merge-readiness.mjs';
 import { event } from './store.mjs';
+
+export function autoMergeSupported(mode) {
+  return mode === 'gitlab' || mode === 'github';
+}
 
 export function configureAutoMerge(receiver, input) {
   if (typeof input.autoMerge !== 'boolean')
     fail('INVALID_AUTO_MERGE', '请明确选择是否允许本轮平台自动合入。');
-  if (input.autoMerge && receiver.config.pullRequests?.mode !== 'gitlab')
-    fail('AUTO_MERGE_UNSUPPORTED', '自动合入需要已配置的 GitLab v4 兼容合入 API；GitHub 内部平台请在平台人工审核合入。');
+  if (input.autoMerge && !autoMergeSupported(receiver.config.pullRequests?.mode))
+    fail(
+      'AUTO_MERGE_UNSUPPORTED',
+      '自动合入需要 GitLab v4 或 GitHub REST 的可核验合入 API；请先配置平台 PR 创建方式，再开启自动合入。',
+    );
   return receiver.change((state) => {
     const run = state.automation;
     if (!run || run.id !== input.runId || run.status === 'COMPLETE')
@@ -39,8 +47,9 @@ export async function autoMergeDelivery(receiver, options = {}) {
       !(options.observeOnly && unresolved?.requestedAt && !unresolved.requestRejected)
     )
       return;
-    if (receiver.config.pullRequests?.mode !== 'gitlab')
-      fail('AUTO_MERGE_UNSUPPORTED', '当前平台未提供可核验的合入 API；GitHub 内部平台请在平台人工合入。');
+    if (!autoMergeSupported(receiver.config.pullRequests?.mode))
+      fail('AUTO_MERGE_UNSUPPORTED', '当前平台未提供可核验的合入 API；请在平台人工合入或改用 GitLab v4 / GitHub REST。');
+    const mode = receiver.config.pullRequests.mode;
     const d = receiver.requireActive(state);
     if (
       options.expected &&
@@ -52,11 +61,19 @@ export async function autoMergeDelivery(receiver, options = {}) {
     if (options.observeOnly && Date.parse(d.autoMerge?.nextCheckAt) > Date.now()) return;
     if (d.status !== 'WAITING_APPROVAL' || !d.prUrl || !d.checks?.passed || d.checks.head !== d.candidate)
       fail('CHECKS_REQUIRED', '仅允许已检查且已回读的冻结 PR 自动合入。');
-    const found = await gitlabPr(receiver.config, 'find', {
-      deliveryId: d.id,
-      branch: d.branch,
-      targetBranch: receiver.config.targetBranch,
-    });
+    const findPr = () =>
+      mode === 'github'
+        ? githubPr(receiver.config, 'find', {
+            deliveryId: d.id,
+            branch: d.branch,
+            targetBranch: receiver.config.targetBranch,
+          })
+        : gitlabPr(receiver.config, 'find', {
+            deliveryId: d.id,
+            branch: d.branch,
+            targetBranch: receiver.config.targetBranch,
+          });
+    const found = await findPr();
     if (!found || found.url !== d.prUrl || found.head !== d.candidate || found.base !== d.base.internal)
       fail('PR_OBJECT_MISMATCH', '自动合入前 PR 身份或 base/head 已变化；未提交合入请求。');
     if (found.state === 'merged') {
@@ -75,22 +92,33 @@ export async function autoMergeDelivery(receiver, options = {}) {
       return;
     }
     if (found.state !== 'open') fail('AUTO_MERGE_BLOCKED', 'PR 不处于打开状态，未合入。');
-    const id = /\/(\d+)$/.exec(found.url)?.[1];
-    if (!id) fail('PR_OBJECT_MISMATCH', '自动合入的 MR 编号无效。');
-    const api = gitlabApi(receiver.config, receiver.config.pullRequests, 'PR');
-    const detail = await api.request(`merge_requests/${id}`);
-    if (
-      detail.sha !== d.candidate ||
-      detail.web_url !== d.prUrl ||
-      detail.state !== 'opened' ||
-      detail.source_branch !== d.branch ||
-      detail.target_branch !== receiver.config.targetBranch
-    )
-      fail('PR_OBJECT_MISMATCH', '自动合入的最新 MR 身份与冻结交付不同。');
+    const number = Number(/\/(\d+)$/.exec(found.url)?.[1]);
+    if (!Number.isSafeInteger(number) || number < 1) fail('PR_OBJECT_MISMATCH', '自动合入的 PR 编号无效。');
     const pending = Boolean(d.autoMerge?.requestedAt && !d.autoMerge.requestRejected);
-    outcome = pending
-      ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' }
-      : mergeReadiness(detail, d.candidate);
+    if (mode === 'github') {
+      const detail = await githubPrDetail(receiver.config, number);
+      if (
+        detail.head?.sha !== d.candidate ||
+        detail.html_url !== d.prUrl ||
+        detail.state !== 'open' ||
+        detail.head?.ref !== d.branch ||
+        detail.base?.ref !== receiver.config.targetBranch
+      )
+        fail('PR_OBJECT_MISMATCH', '自动合入的最新 PR 身份与冻结交付不同。');
+      outcome = pending ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' } : githubMergeReadiness(detail, d.candidate);
+    } else {
+      const api = gitlabApi(receiver.config, receiver.config.pullRequests, 'PR');
+      const detail = await api.request(`merge_requests/${number}`);
+      if (
+        detail.sha !== d.candidate ||
+        detail.web_url !== d.prUrl ||
+        detail.state !== 'opened' ||
+        detail.source_branch !== d.branch ||
+        detail.target_branch !== receiver.config.targetBranch
+      )
+        fail('PR_OBJECT_MISMATCH', '自动合入的最新 MR 身份与冻结交付不同。');
+      outcome = pending ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' } : mergeReadiness(detail, d.candidate);
+    }
     if (outcome.kind !== 'ready') {
       const oldReason = d.autoMerge?.reason;
       d.autoMerge = mergeWait(d, outcome, Date.now(), receiver.config.autoMergeWaitMs);
@@ -122,11 +150,18 @@ export async function autoMergeDelivery(receiver, options = {}) {
       '由平台合入原 PR 并回读',
       async () => {
         try {
-          await api.request(`merge_requests/${id}/merge`, 'PUT', {
-            sha: d.candidate,
-            squash: false,
-            should_remove_source_branch: false,
-          });
+          if (mode === 'github')
+            await githubMerge(receiver.config, Number(number), d.candidate);
+          else
+            await gitlabApi(receiver.config, receiver.config.pullRequests, 'PR').request(
+              `merge_requests/${number}/merge`,
+              'PUT',
+              {
+                sha: d.candidate,
+                squash: false,
+                should_remove_source_branch: false,
+              },
+            );
         } catch (error) {
           if (error.code !== 'PR_API_UNAVAILABLE' && !(error.httpStatus >= 500)) {
             d.autoMerge.status = 'BLOCKED';
@@ -145,11 +180,7 @@ export async function autoMergeDelivery(receiver, options = {}) {
         }
         let fresh;
         try {
-          fresh = await gitlabPr(receiver.config, 'find', {
-            deliveryId: d.id,
-            branch: d.branch,
-            targetBranch: receiver.config.targetBranch,
-          });
+          fresh = await findPr();
         } catch (error) {
           // A successful write followed by an unavailable read is an unknown result, not a rejected write.
           d.autoMerge = mergeWait(

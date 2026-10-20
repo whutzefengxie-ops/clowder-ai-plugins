@@ -38,6 +38,27 @@ export function mergeReadiness(detail, head) {
   return wait('平台尚未提供当前候选的完整合入条件；可打开原 PR 核对');
 }
 
+export function githubMergeReadiness(detail, head) {
+  const wait = (reason, manual = false) => ({ kind: 'wait', reason, manual });
+  if (detail.merged === true || detail.state !== 'open') return { kind: 'blocked', reason: 'PR 不处于打开状态' };
+  if (detail.head?.sha !== head) return { kind: 'blocked', reason: 'PR head 已变化，不再对应冻结候选' };
+  if (detail.draft === true || detail.mergeable_state === 'draft')
+    return wait('PR 仍为草稿，等待转为可审核', true);
+  if (detail.mergeable_state === 'dirty' || detail.mergeable === false && detail.mergeable_state === 'dirty')
+    return { kind: 'blocked', reason: 'PR 存在冲突，无法合入' };
+  if (detail.mergeable === null || detail.mergeable_state === 'unknown')
+    return wait('GitHub 正在计算可合入性，稍后自动重试');
+  if (detail.mergeable_state === 'unstable')
+    return wait('检查尚未全部通过，等待 GitHub 分支保护或 CI 完成');
+  if (detail.mergeable_state === 'blocked' || detail.mergeable === false)
+    return wait('等待分支保护、必需检查或人工审批', true);
+  if (detail.mergeable_state === 'behind')
+    return wait('分支落后于 base，等待更新或分支保护放行', true);
+  if (detail.mergeable === true && ['clean', 'has_hooks'].includes(detail.mergeable_state))
+    return { kind: 'ready', reason: 'GitHub 可合入性检查通过；合入时仍由平台校验最终规则' };
+  return wait('GitHub 尚未提供当前候选的完整合入条件；可打开原 PR 核对');
+}
+
 export function mergeWait(delivery, result, now, timeoutMs = 1800000) {
   const previous = delivery.autoMerge ?? {};
   const changed = previous.reason !== result.reason;

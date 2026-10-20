@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validateConfig } from '../src/config.mjs';
-import { githubPr } from '../src/github-platform-pr.mjs';
+import { githubPr, githubMerge, githubPrDetail } from '../src/github-platform-pr.mjs';
 import { invokeIssue, validateIssueConfig, verifyIssue } from '../src/issue-adapter.mjs';
+import { githubMergeReadiness } from '../src/merge-readiness.mjs';
 import { issueBody } from '../src/github-platform-issues.mjs';
 import { definitiveIssueFailure } from '../src/issue-lifecycle.mjs';
 import { issueConfiguration } from '../src/issue-settings.mjs';
@@ -262,6 +263,81 @@ test('GitHub PR creation is idempotent and readback carries the frozen identity'
     });
     p.denied(403);
     await assert.rejects(() => githubPr(p.config, 'find', input), { code: 'PR_API_REJECTED' });
+  } finally {
+    await p.close();
+  }
+});
+
+test('GitHub mergeability maps clean/blocked/dirty/unknown to ready/wait/blocked', () => {
+  const head = 'head';
+  const detail = (mergeable, mergeableState, extra = {}) => ({
+    state: 'open',
+    merged: false,
+    draft: false,
+    head: { sha: head },
+    mergeable,
+    mergeable_state: mergeableState,
+    ...extra,
+  });
+  assert.equal(githubMergeReadiness(detail(true, 'clean'), head).kind, 'ready');
+  assert.equal(githubMergeReadiness(detail(true, 'has_hooks'), head).kind, 'ready');
+  assert.equal(githubMergeReadiness(detail(false, 'dirty'), head).kind, 'blocked');
+  assert.equal(githubMergeReadiness(detail(false, 'blocked'), head).kind, 'wait');
+  assert.equal(githubMergeReadiness(detail(false, 'blocked'), head).manual, true);
+  assert.equal(githubMergeReadiness(detail(null, 'unknown'), head).kind, 'wait');
+  assert.equal(githubMergeReadiness(detail(true, 'unstable'), head).kind, 'wait');
+  assert.equal(githubMergeReadiness(detail(true, 'behind'), head).kind, 'wait');
+  assert.equal(githubMergeReadiness(detail(true, 'clean', { draft: true }), head).kind, 'wait');
+  assert.equal(githubMergeReadiness(detail(true, 'clean', { head: { sha: 'other' } }), head).kind, 'blocked');
+});
+
+test('GitHub auto-merge reads the frozen head and merges with a merge commit', async () => {
+  const p = await githubPlatform();
+  try {
+    await githubPr(p.config, 'create', {
+      deliveryId: 'delivery',
+      branch: 'sync/delivery',
+      targetBranch: 'main',
+      title: 'title',
+      body: 'body',
+    });
+    const detail = await githubPrDetail(p.config, 2);
+    assert.equal(detail.head.sha, 'head');
+    assert.equal(detail.mergeable_state, 'clean');
+    const merged = await githubMerge(p.config, 2, 'head');
+    assert.equal(merged.merged, true);
+    assert.equal(p.mergeCalls(), 1);
+    const found = await githubPr(p.config, 'find', {
+      deliveryId: 'delivery',
+      branch: 'sync/delivery',
+      targetBranch: 'main',
+    });
+    assert.equal(found.state, 'merged');
+  } finally {
+    await p.close();
+  }
+});
+
+test('GitHub merge rejection carries an actionable 405 message and is not retried', async () => {
+  const p = await githubPlatform();
+  try {
+    await githubPr(p.config, 'create', {
+      deliveryId: 'delivery',
+      branch: 'sync/delivery',
+      targetBranch: 'main',
+      title: 'title',
+      body: 'body',
+    });
+    p.failMerge(405);
+    await assert.rejects(
+      () => githubMerge(p.config, 2, 'head'),
+      (error) =>
+        error.code === 'PR_API_REJECTED' &&
+        error.httpStatus === 405 &&
+        error.message.includes('分支保护') &&
+        !error.message.includes('PRIVATE'),
+    );
+    assert.equal(p.mergeCalls(), 1);
   } finally {
     await p.close();
   }

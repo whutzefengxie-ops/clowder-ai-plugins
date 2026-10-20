@@ -264,3 +264,12 @@ test('successful merge request with failed readback remains pending and recovery
   assert.equal(s.active.autoMerge.status, 'RESULT_PENDING');
   assert.equal(f.p.state.requests.filter((r) => r.startsWith('PUT ') && r.endsWith('/merge')).length, 1);
 });
+
+test('auto-merge is offered for GitLab and GitHub REST, not for manual or command transports', async () => {
+  const { autoMergeSupported } = await import('../src/auto-merge.mjs');
+  assert.equal(autoMergeSupported('gitlab'), true);
+  assert.equal(autoMergeSupported('github'), true);
+  assert.equal(autoMergeSupported('git'), false);
+  assert.equal(autoMergeSupported('command'), false);
+  assert.equal(autoMergeSupported('manual'), false);
+});

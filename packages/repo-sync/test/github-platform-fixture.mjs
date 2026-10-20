@@ -13,6 +13,10 @@ export async function githubPlatform(options = {}) {
     duplicate: false,
     requests: [],
     nextIssue: 7,
+    mergeCalls: 0,
+    mergeable: true,
+    mergeableState: 'clean',
+    mergeFailure: null,
   };
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -68,6 +72,8 @@ export async function githubPlatform(options = {}) {
           body: payload.body,
           head: { ref: payload.head, sha: 'head' },
           base: { ref: payload.base, sha: 'base' },
+          mergeable: state.mergeable,
+          mergeable_state: state.mergeableState,
         };
         return res.end(JSON.stringify(state.pull));
       }
@@ -78,6 +84,26 @@ export async function githubPlatform(options = {}) {
       return res.end(JSON.stringify(matches));
     }
     const pullMatch = /^\/pulls\/(\d+)$/.exec(path);
+    const mergeMatch = /^\/pulls\/(\d+)\/merge$/.exec(path);
+    if (mergeMatch && req.method === 'PUT') {
+      state.mergeCalls++;
+      if (!state.pull) {
+        res.statusCode = 404;
+        return res.end(JSON.stringify({ message: 'Not Found' }));
+      }
+      if (state.mergeFailure) {
+        res.statusCode = state.mergeFailure;
+        return res.end(JSON.stringify({ message: 'merge rejected' }));
+      }
+      if (payload.sha !== state.pull.head.sha) {
+        res.statusCode = 409;
+        return res.end(JSON.stringify({ message: 'head changed' }));
+      }
+      state.pull.merged = true;
+      state.pull.state = 'closed';
+      state.pull.merge_commit_sha = 'merge';
+      return res.end(JSON.stringify({ merged: true, sha: 'merge' }));
+    }
     if (pullMatch) {
       if (!state.pull) {
         res.statusCode = 404;
@@ -85,6 +111,8 @@ export async function githubPlatform(options = {}) {
       }
       if (req.method === 'PATCH') state.pull.body = payload.body;
       if (state.mismatch) state.pull.head.sha = 'wrong';
+      state.pull.mergeable = state.mergeable;
+      state.pull.mergeable_state = state.mergeableState;
       return res.end(JSON.stringify(state.pull));
     }
     res.statusCode = 404;
@@ -124,6 +152,14 @@ export async function githubPlatform(options = {}) {
     writes: () => state.writes,
     requests: state.requests,
     pullBody: () => state.pull?.body,
+    mergeCalls: () => state.mergeCalls,
+    setMergeable: (mergeable, mergeableState) => {
+      state.mergeable = mergeable;
+      state.mergeableState = mergeableState;
+    },
+    failMerge: (status = 405) => {
+      state.mergeFailure = status;
+    },
     lastIssueBody: () => state.issues[0]?.body,
     setIssueBody: (value) => {
       state.issues[0].body = value;

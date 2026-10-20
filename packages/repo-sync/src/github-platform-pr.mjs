@@ -3,6 +3,19 @@ import { projectPath } from './api-configuration.mjs';
 import { githubPlatformApi } from './github-platform-api.mjs';
 
 const marker = (r) => `[repo-sync-pr:${r.deliveryId}]`;
+export async function githubPrDetail(config, number) {
+  if (!Number.isSafeInteger(number) || number < 1) fail('PR_OBJECT_MISMATCH', '平台 PR 编号无效');
+  return githubPlatformApi(config, config.pullRequests, 'PR').request(`pulls/${number}`);
+}
+
+export async function githubMerge(config, number, head) {
+  if (!Number.isSafeInteger(number) || number < 1) fail('PR_OBJECT_MISMATCH', '平台 PR 编号无效');
+  return githubPlatformApi(config, config.pullRequests, 'PR').request(`pulls/${number}/merge`, 'PUT', {
+    sha: head,
+    merge_method: 'merge',
+  });
+}
+
 export async function githubPr(config, action, r) {
   const api = githubPlatformApi(config, config.pullRequests, 'PR');
   if (action === 'create') {

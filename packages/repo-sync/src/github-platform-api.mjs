@@ -87,6 +87,12 @@ function reject(response, family) {
     message = `GitHub Token 缺少平台要求的权限（${accepted}）。细粒度 Token 请在仓库权限中开启 Issues、Pull requests 的读写和 Metadata 读取；经典 Token 需要 repo 范围。修改后重新保存 Token 再验证。`;
   else if (status === 403 && scopes !== null && !/(^|,\s*)repo(,|$)/i.test(scopes))
     message = `当前经典 Token 的权限范围是「${scopes || '无'}」，没有 repo（私有仓库必需）。请补上 repo 范围，或改用细粒度 Token 授予该仓库 Issues / Pull requests 读写与 Metadata 读取，然后重新保存 Token 再验证。`;
+  else if (status === 405)
+    message =
+      'GitHub 拒绝合入（HTTP 405）：PR 不满足分支保护、必需检查或冲突等合入条件；请在原 PR 处理后重试，本次未合入。';
+  else if (status === 409)
+    message =
+      'GitHub 拒绝合入（HTTP 409）：PR head 或仓库状态已变化；请核对冻结候选与平台状态后重试，本次未合入。';
   else if (status === 422)
     message =
       'GitHub 拒绝请求（HTTP 422）：标题或正文超过平台长度上限（Issue 正文最多 65,536 字符）或内容不合法。请核对来源对象后恢复原同步；本次未创建新对象。';
