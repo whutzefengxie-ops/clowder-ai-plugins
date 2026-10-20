@@ -36,6 +36,7 @@ test('round progress survives compact status and counts acceptance rather than P
     ['A', 'B', 'C'],
   );
   assert.equal(r.current.target, 'B');
+  assert.equal(r.currentIndex, 1, 'the client positions the page on the current delivery');
   state.deliveries[2].status = 'COMPLETE';
   state.queue.shift();
   assert.equal(
@@ -72,6 +73,7 @@ test('round filters and bounded pagination cover large queues without using the 
   assert.equal(r.matched, 61);
   assert.equal(r.items.length, 20);
   assert.equal(r.items[0].target, '40');
+  assert.equal(r.currentIndex, -1);
   for (const q of ['limit=51', 'offset=-1', 'status=bogus', 'status=all&status=current', 'project=other'])
     assert.throws(() => roundProgress(state, new URLSearchParams(q)), { code: 'INVALID_ROUND_QUERY' });
 });

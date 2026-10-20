@@ -62,6 +62,7 @@ export function roundProgress(state, params = new URLSearchParams()) {
     total,
     counts,
     current: all.find((r) => r.status === 'current') ?? null,
+    currentIndex: selected.findIndex((r) => r.status === 'current'),
     items: selected.slice(offset, offset + limit),
     matched: selected.length,
     offset,

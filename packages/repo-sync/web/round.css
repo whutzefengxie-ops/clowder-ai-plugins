@@ -21,6 +21,15 @@
   font-size: var(--t-4);
   margin-left: 10px;
 }
+.round-heading-actions {
+  margin-left: auto;
+}
+.round-toggle {
+  padding: 5px 12px;
+  min-height: 32px;
+  font-size: var(--t-5);
+  white-space: nowrap;
+}
 .round-heading p {
   margin: 0;
   font-size: var(--t-5);
@@ -56,8 +65,8 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 160px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 .round-items > li {
   display: flex;
@@ -145,7 +154,7 @@
   }
   .round-items {
     grid-column: 1 / -1;
-    max-height: 108px;
+    max-height: none;
   }
   .round-items > li {
     padding: 5px 0;
@@ -325,7 +334,7 @@ form .mode-cards .mode-card {
 
 @media (min-width: 769px) {
   .round-items {
-    max-height: 88px;
+    max-height: none;
   }
   .round-items > li {
     padding: 4px 0;

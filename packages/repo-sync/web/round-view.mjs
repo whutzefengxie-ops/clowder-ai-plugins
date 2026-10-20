@@ -1,22 +1,23 @@
 import { esc, shortSha } from './ui.mjs';
 
 const labels = { all: '全部', complete: '已完成', current: '同步中', pending: '未同步', cancelled: '已撤销' };
-export function roundView(round, error = '') {
+export const roundPageSize = 5;
+export function roundView(round, error = '', view = { open: false }) {
   if (error)
     return `<p class="bad" role="alert">本轮清单未能更新：${esc(error)}，原同步继续。</p><button type="button" data-round-reload>重新读取本轮清单</button>`;
   if (!round) return '<p role="status">正在读取本轮目标与逐笔进展…</p>';
   const c = round.counts,
+    open = view.open === true,
     kind = { commit: 'commit', tag: 'tag', latest: '最新分支', queue: '已冻结清单' }[round.selection?.kind];
-  return `<div class="round-heading"><h2>本轮同步进度 <span>${c.complete} / ${round.total ?? '待确定'} 笔已完成</span></h2><p class="note-line" data-round-current>${round.current ? `当前：${esc(sourceTitle(round.current))}` : round.status === 'COMPLETE' ? '本轮已全部接收' : '当前没有正在同步的交付'}</p></div><div class="round-target">目标 ${esc(kind)} · ${shortSha(round.selection?.value ?? round.target ?? '来源扫描后确定')}<span>同步中 ${c.current} · 未同步 ${c.pending} · 已撤销 ${c.cancelled}</span></div><div class="round-filter" role="group" aria-label="本轮进度筛选">${Object.entries(
-    labels,
-  )
-    .map(
-      ([key, name]) =>
-        `<button type="button" data-round-filter="${key}" aria-pressed="${(round.filter ?? 'all') === key}">${name}${key === 'all' ? '' : ` ${c[key]}`}</button>`,
-    )
-    .join(
-      '',
-    )}</div><ol class="round-items">${round.items.map(rowView).join('') || '<li>本轮来源清单尚在读取，或没有符合筛选的交付。</li>'}</ol><div class="round-pages"><small>显示 ${round.items.length ? round.offset + 1 : 0}–${round.offset + round.items.length} / ${round.matched} 笔 · 创建 PR 不计完成</small>${round.matched > 20 ? `<button type="button" data-round-page="-1" ${round.offset ? '' : 'disabled'}>上一页</button><button type="button" data-round-page="1" ${round.offset + round.items.length < round.matched ? '' : 'disabled'}>下一页</button>` : ''}</div>`;
+  const list = open
+    ? `<div class="round-filter" role="group" aria-label="本轮进度筛选">${Object.entries(labels)
+        .map(
+          ([key, name]) =>
+            `<button type="button" data-round-filter="${key}" aria-pressed="${(round.filter ?? 'all') === key}">${name}${key === 'all' ? '' : ` ${c[key]}`}</button>`,
+        )
+        .join('')}</div><ol class="round-items">${round.items.map(rowView).join('') || '<li>本轮来源清单尚在读取，或没有符合筛选的交付。</li>'}</ol><div class="round-pages"><small>显示 ${round.items.length ? round.offset + 1 : 0}–${round.offset + round.items.length} / ${round.matched} 笔 · 创建 PR 不计完成</small>${round.matched > roundPageSize ? `<button type="button" data-round-page="-1" ${round.offset ? '' : 'disabled'}>上一页</button><button type="button" data-round-page="1" ${round.offset + round.items.length < round.matched ? '' : 'disabled'}>下一页</button>` : ''}</div>`
+    : '';
+  return `<div class="round-heading"><h2>本轮同步进度 <span>${c.complete} / ${round.total ?? '待确定'} 笔已完成</span></h2><div class="round-heading-actions"><button type="button" class="round-toggle" data-round-toggle aria-expanded="${open}">${open ? '收起清单' : `展开清单（${round.matched} 笔）`}</button></div></div><p class="note-line" data-round-current>${round.current ? `当前：${esc(sourceTitle(round.current))}` : round.status === 'COMPLETE' ? '本轮已全部接收' : '当前没有正在同步的交付'}</p><div class="round-target">目标 ${esc(kind)} · ${shortSha(round.selection?.value ?? round.target ?? '来源扫描后确定')}<span>同步中 ${c.current} · 未同步 ${c.pending} · 已撤销 ${c.cancelled}</span></div>${list}`;
 }
 function sourceTitle(row) {
   const s = row.source;
