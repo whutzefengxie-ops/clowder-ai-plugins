@@ -73,5 +73,5 @@ test('pre-publish cancel is visible before any PR exists', () => {
   assert.match(html, /撤销本笔（尚未发布）/);
   assert.match(html, /data-form="cancel-delivery"/);
   assert.match(html, /放弃本笔并重新同步/);
-  assert.match(html, /<details class="delivery-cancel" open>/);
+  assert.doesNotMatch(html, /<details class="delivery-cancel" open>/);
 });

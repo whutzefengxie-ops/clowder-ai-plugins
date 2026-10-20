@@ -24,7 +24,7 @@ function exitControls(d, { action = 'cancel-delivery', ownerId = d.id, planId, p
   const r = d.exitInspection, manual = r?.kind === 'MANUAL_REQUIRED';
   const repair = action === 'retire-repair';
   if (r?.kind === 'UNKNOWN') return '<p>请先核对原 PR 创建回执，并登记正确的原 PR 链接；不会另建对象。</p>';
-  return `<details class="delivery-cancel" ${r || d.cancellation?.status === 'REQUESTED' || prePublish ? 'open' : ''}><summary>${repair ? '退出这笔未合入的修复候选' : prePublish ? '撤销本笔（尚未发布）…' : '撤销本笔（已发布未合入）…'}</summary>
+  return `<details class="delivery-cancel" ${r || d.cancellation?.status === 'REQUESTED' ? 'open' : ''}><summary>${repair ? '退出这笔未合入的修复候选' : prePublish ? '撤销本笔（尚未发布）…' : '撤销本笔（已发布未合入）…'}</summary>
     <p>放弃本笔并重新同步：关闭未合入的旧 PR 后退出，保留候选分支、Issue 和历史。本轮暂停；明确继续才创建新分支和替代 PR，不回退 main。</p>
     <form id="${action === 'cancel-delivery' ? 'cancel-delivery-form' : 'retire-repair-form'}" data-form="${action}" data-edit-baseline="${esc(JSON.stringify([d.id, d.prUrl, d.candidate, d.status, r?.id, d.cancellation?.requestedAt]))}">
     ${fields(d, ownerId)}${planId ? `<input name="planId" type="hidden" value="${esc(planId)}">` : ''}${manual ? `<input type="hidden" name="inspectionId" value="${esc(r.id)}"><label>平台人工核对结果<select name="manualDisposition" required><option value="">请选择实际结果</option><option value="closed">我已在平台关闭原 PR，且未合入</option>${!d.prUrl && !d.prCreation && !d.gitPr ? '<option value="no-pr">我已确认平台尚未创建 PR</option>' : ''}</select></label><p>此结果记录为人工确认，不会显示为 API 核验。先完成平台操作，再确认退出。</p>` : ''}

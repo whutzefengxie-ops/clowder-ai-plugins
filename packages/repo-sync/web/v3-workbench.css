@@ -762,3 +762,191 @@ textarea:focus {
 .record-detail:has(> .next-action) > .delivery-overview { order: -1 !important; }
 .issue-brief { margin: 8px 0 0; padding: 7px 9px; border-radius: 8px; background: #f8f9fc; border: 1px solid var(--v3-line); font-size: 10px; color: var(--v3-muted); }
 .issue-brief a { color: var(--v3-accent); text-decoration: none; }
+
+/* Delivery overview + base/technical details: these are the sections below the stage rail. */
+.record-detail:has([data-flow-canvas]) > .delivery-overview {
+  display: block;
+  padding: 16px;
+  margin: 0;
+}
+.v3-dov-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--v3-line);
+}
+.v3-dov-head h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+.delivery-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.v3-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--v3-line);
+  border-radius: 8px;
+  background: #fcfcfd;
+  font-size: 10px;
+}
+.v3-link small {
+  color: var(--v3-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+}
+.v3-link a { color: var(--v3-accent); text-decoration: none; white-space: nowrap; }
+.v3-link.is-pending { color: var(--v3-warn); background: #fffbf2; border-color: #fedf89; }
+.record-detail:has([data-flow-canvas]) .delivery-metrics {
+  grid-column: auto;
+  grid-row: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.delivery-metrics > div {
+  border: 1px solid var(--v3-line);
+  border-radius: 9px;
+  background: #fcfcfd;
+  padding: 8px 10px;
+}
+.delivery-metrics dt { font-size: 8.5px; letter-spacing: 0.02em; }
+.delivery-metrics dd { margin-top: 2px; font-size: 17px; letter-spacing: -0.03em; }
+.record-detail:has([data-flow-canvas]) .delivery-objects,
+.record-detail:has([data-flow-canvas]) .delivery-more,
+.record-detail:has([data-flow-canvas]) .delivery-note {
+  padding-bottom: 0;
+}
+.delivery-objects { gap: 10px; }
+.delivery-object-details {
+  background: #fff;
+  border-color: var(--v3-line);
+  border-radius: 9px;
+}
+.delivery-object-details > summary {
+  padding: 9px 11px;
+  background: #fcfcfd;
+}
+.delivery-object-details[open] > summary { background: #f8f9fc; }
+.delivery-object-title { font-size: 10.5px; }
+.delivery-object-details > summary small { font-size: 8.5px; }
+.delivery-object-guide { font-size: 9px; padding: 8px 11px 0; }
+.delivery-object-list { padding: 6px 11px 10px; }
+.delivery-object-list li { padding: 7px 0; }
+.delivery-object-list li p { font-size: 9px; margin: 3px 0; }
+.delivery-more { margin-top: 8px; }
+.delivery-more > summary { color: var(--v3-muted); font-size: 9.5px; }
+
+/* The previous layout hid the title and pushed the metrics into a second column. */
+.record-detail:has([data-flow-canvas]) > .detail-head h2 {
+  display: block;
+  margin: 2px 0 10px;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+.record-detail:has([data-flow-canvas]) > .detail-head {
+  padding: 16px;
+  border: 1px solid var(--v3-line);
+  border-radius: var(--v3-radius);
+  background: #fff;
+  box-shadow: var(--v3-shadow);
+}
+.v3-baseline-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.v3-base {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--v3-line);
+  border-radius: 8px;
+  background: #fcfcfd;
+  font-size: 9px;
+  color: var(--v3-muted);
+  overflow: hidden;
+}
+.v3-base-k {
+  flex: 0 0 auto;
+  color: var(--v3-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+}
+.v3-base code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--v3-ink-2);
+  font-size: 9px;
+}
+.v3-base b { color: var(--v3-faint); font-weight: 400; }
+.detail-head .v3-dh-details,
+.record-detail:has([data-flow-canvas]) > .detail-head .v3-dh-details { display: none; }
+.record-detail:has([data-flow-canvas]) > .detail-head > .delivery-boundary,
+.record-detail:has([data-flow-canvas]) > .detail-head > .execution-meta {
+  display: inline-block;
+  margin: 0 12px 0 0;
+  font-size: 9px;
+}
+.record-detail:has([data-flow-canvas]) > .detail-head > .delivery-boundary > summary,
+.record-detail:has([data-flow-canvas]) > .detail-head > .execution-meta > summary {
+  min-height: 26px;
+  color: var(--v3-muted);
+}
+.record-detail:has([data-flow-canvas]) > .detail-head > .workflow-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--v3-line);
+}
+.workflow-controls-hint { font-size: 9px; }
+.detail-head .workflow-controls button { font-size: 9px; min-height: 28px; }
+
+/* Exit / cancel: compact danger disclosure instead of a full-height form. */
+.candidate-recovery {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fffbfa;
+}
+.candidate-recovery h3 { margin: 0 0 4px; font-size: 12px; }
+.candidate-recovery p { font-size: 9.5px; line-height: 1.6; margin: 3px 0; }
+.candidate-recovery > button { font-size: 9.5px; min-height: 30px; }
+.candidate-recovery form { gap: 7px; margin-top: 8px; }
+.delivery-cancel {
+  margin-top: 8px;
+  padding: 8px 10px 10px;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  background: #fff;
+}
+.delivery-cancel > summary { color: var(--v3-bad); font-size: 10px; font-weight: 650; }
+.delivery-cancel p { color: var(--v3-muted); }
+.delivery-cancel label { font-size: 9.5px; }
+.delivery-cancel small { font-size: 8.5px; color: var(--v3-faint); }
+.delivery-cancel button { font-size: 9.5px; min-height: 31px; background: var(--v3-bad); color: #fff; border-color: var(--v3-bad); }
+
+@media (max-width: 900px) {
+  .v3-dov-head { display: block; }
+  .delivery-links { justify-content: flex-start; margin-top: 8px; }
+  .record-detail:has([data-flow-canvas]) .delivery-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v3-baseline-strip { grid-template-columns: 1fr; }
+  .delivery-objects { grid-template-columns: 1fr; }
+}
+.v3-dov-head h3 { display: block; }
+.v3-link a { min-width: 84px; display: inline-block; text-align: center; }
