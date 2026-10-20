@@ -1,10 +1,10 @@
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Receiver } from '../src/engine.mjs';
 import { git } from '../src/process.mjs';
 import { repositories } from './fixtures.mjs';
 
-export async function developmentFixture(count = 18) {
+export async function developmentFixture(count = 18, { staleMain = false, sharedContents = false } = {}) {
   const f = await repositories();
   await writeFile(join(f.review, 'core.txt'), 'second');
   await writeFile(join(f.review, 'README.md'), 'internal readme');
@@ -12,6 +12,16 @@ export async function developmentFixture(count = 18) {
   await git(f.review, ['commit', '-m', 'internal accepted second']);
   await git(f.review, ['push', 'origin', 'main']);
   let internal = await git(f.review, ['rev-parse', 'HEAD']), base = f.u2;
+  if (staleMain) {
+    for (const directory of [f.source, f.review]) {
+      for (const path of ['inherited.txt', 'removed.txt', 'renamed.txt', 'pr-delete.txt'])
+        await writeFile(join(directory, path), sharedContents ? 'old main' : `old main ${path}`);
+      await git(directory, ['add', '.']);
+      await git(directory, ['commit', '-m', 'shared baseline files']);
+    }
+    base = await git(f.source, ['rev-parse', 'HEAD']);
+    internal = await git(f.review, ['rev-parse', 'HEAD']);
+  }
   await git(f.source, ['switch', '-c', 'feature']);
   const commits = [];
   for (let index = 0; index < count; index++) {
@@ -30,6 +40,7 @@ export async function developmentFixture(count = 18) {
       await git(f.source, ['switch', 'feature']);
       await git(f.source, ['merge', '--no-ff', 'main', '-m', `development merge ${index}`]);
     } else {
+    if (staleMain && index === 0) await git(f.source, ['rm', 'pr-delete.txt']);
     if (index !== 1) await writeFile(join(f.source, 'core.txt'), `feature ${index}`);
     await writeFile(join(f.source, 'README.md'), `source ${index}`);
     await git(f.source, ['add', '.']);
@@ -41,6 +52,19 @@ export async function developmentFixture(count = 18) {
   const head = commits.at(-1).sha;
   await git(f.source, ['update-ref', 'refs/pull/1405/head', head]);
   await git(f.source, ['switch', 'main']);
+  if (staleMain) {
+    for (const directory of [f.source, f.review]) {
+      await writeFile(join(directory, 'inherited.txt'), 'new accepted main');
+      await writeFile(join(directory, 'parallel.txt'), 'parallel main addition');
+      await rm(join(directory, 'removed.txt'));
+      await git(directory, ['mv', 'renamed.txt', 'new-name.txt']);
+      await git(directory, ['add', '.']);
+      await git(directory, ['commit', '-m', 'parallel main changes before squash']);
+    }
+    base = await git(f.source, ['rev-parse', 'HEAD']);
+    internal = await git(f.review, ['rev-parse', 'HEAD']);
+  }
+  await git(f.review, ['push', 'origin', 'main']);
   await git(f.source, ['merge', '--squash', 'feature']);
   await git(f.source, ['commit', '-m', 'squashed feature (#1405)']);
   const target = await git(f.source, ['rev-parse', 'HEAD']);

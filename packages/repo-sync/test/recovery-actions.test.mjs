@@ -27,3 +27,11 @@ test('authentication shows the exact API recipient before asking for a Token fro
   assert.ok(html.indexOf('https://separate-api.example/api/v4') < html.indexOf('type="password"'));
   assert.ok(html.includes('team/core'));
 });
+
+test('a frozen candidate tree mismatch explains withdrawal without suggesting a baseline reset', () => {
+  const html = errorGuide({ code: 'CANDIDATE_TREE_MISMATCH', message: '原候选保留' });
+  assert.match(html, /来源追溯与撤销/);
+  assert.match(html, /放弃本笔并重新同步/);
+  assert.match(html, /已合入的交付需先核对内部修复 PR/);
+  assert.doesNotMatch(html, /启用前明确保留路径/);
+});

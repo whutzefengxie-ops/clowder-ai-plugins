@@ -7,6 +7,7 @@ import { event } from './store.mjs';
 import { sourceStillValid } from './version.mjs';
 import { git } from './process.mjs';
 import { verifyDevelopmentHistory } from './development-history.mjs';
+import { assertProjection } from './trees.mjs';
 
 async function resumePublished(receiver, state, delivery) {
   if (!['PR_REQUIRED', 'WAITING_APPROVAL'].includes(delivery.status) || delivery.error) return false;
@@ -33,6 +34,7 @@ export async function prepareDelivery(receiver, state) {
   if (delivery.commitPolicy && JSON.stringify(delivery.commitPolicy) !== JSON.stringify(commitPolicy(receiver.config)))
     fail('COMMIT_POLICY_CHANGED', '请恢复本笔交付冻结的提交身份配置后继续。');
   receiver.requirePreparation(state, delivery);
+  if (delivery.candidate) await verifyReplayCandidate(receiver, delivery);
   if (await resumePublished(receiver, state, delivery)) return;
   const heads = await receiver.git.fetch();
   state.observedInternal = heads.internal;
@@ -47,6 +49,7 @@ export async function prepareDelivery(receiver, state) {
     if (result.developmentMappings) delivery.developmentMappings = result.developmentMappings;
     delivery.internalCommitCount = Number(await git(receiver.git.directory, ['rev-list', '--count', result.head, `^${delivery.base.internal}`]));
   }
+  await verifyReplayCandidate(receiver, delivery);
   await receiver.store.save(state);
   delivery.checks = await phase(
     'candidate-check',
@@ -58,6 +61,16 @@ export async function prepareDelivery(receiver, state) {
     fail('RECOVERY_FIRST', '检查期间内部 main 已改变，先核对原交付');
   await sourceStillValid(receiver, delivery, checkedHeads);
   await publishCandidate(receiver, state, delivery);
+}
+async function verifyReplayCandidate(receiver, delivery) {
+  if (!delivery.source.developmentReplay) return;
+  try {
+    await assertProjection(receiver.git.directory, delivery.target, delivery.candidate,
+      { internalPaths: receiver.config.internalPaths ?? [], mergePaths: [] }, 'CANDIDATE_TREE_MISMATCH');
+  } catch (error) {
+    if (error.code !== 'CANDIDATE_TREE_MISMATCH') throw error;
+    fail(error.code, '冻结候选与上游实际 landing 内容不同，已停止发布。请放弃未合入的本笔后重新同步；原候选、映射与历史保留，不覆盖分支。', error.details);
+  }
 }
 async function publishCandidate(receiver, state, delivery) {
   const gitCreation = receiver.config.pullRequests?.mode === 'git';

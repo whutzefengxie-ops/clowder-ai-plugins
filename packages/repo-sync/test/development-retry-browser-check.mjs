@@ -13,7 +13,7 @@ import { developmentFixture } from './development-history-fixture.mjs';
 import { openAutoMerge, openHistory } from './journey-controls.mjs';
 import { launchOwnedBrowser } from './owned-browser.mjs';
 
-const f = await developmentFixture(),
+const f = await developmentFixture(18, { staleMain: true }),
   platform = await codehubPlatform(f);
 const adapter = {
   mode: 'gitlab',
@@ -108,6 +108,7 @@ try {
   );
   await waitTask('synchronize', 'SUCCEEDED');
   const original = state.active;
+  await receiver.git.baseline(f.target, original.candidate);
   await page
     .locator('[data-delivery-overview] .delivery-metrics dd')
     .filter({ hasText: /^18$/ })
@@ -209,6 +210,7 @@ try {
   );
   await waitTask('resume-sync', 'SUCCEEDED');
   const replacement = state.active;
+  await receiver.git.baseline(f.target, replacement.candidate);
   assert.notEqual(replacement.id, original.id);
   assert.equal(replacement.supersedes, original.id);
   assert.equal(replacement.internalCommitCount, 18);

@@ -55,8 +55,8 @@ export async function verifyDevelopmentHistory(receiver, delivery) {
 }
 
 async function changedPaths(directory, before, after) {
-  const output = await git(directory, ['diff', '--name-only', before, after]);
-  return new Set(output.split('\n').filter(Boolean));
+  const output = await git(directory, ['diff', '--no-renames', '--name-only', '-z', before, after]);
+  return new Set(output.split('\0').filter(Boolean));
 }
 
 export async function assertReplayProjection(receiver, delivery, replay) {

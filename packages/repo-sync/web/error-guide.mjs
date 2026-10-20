@@ -3,6 +3,11 @@ import { esc } from './ui.mjs';
 
 const guides = [
   [
+    /^CANDIDATE_TREE_MISMATCH$/,
+    '原候选内容与上游落地版本不一致',
+    '在“本笔同步内容 → 来源追溯与撤销 → 放弃本笔并重新同步”撤销未合入的交付，再明确继续。原候选、Issue、映射和历史保留；已合入的交付需先核对内部修复 PR，不回退 main。',
+  ],
+  [
     /BASELINE_MISMATCH|TREE_MISMATCH|UNAPPROVED_DIFFERENCE|CORE_DRIFT/,
     '核心文件有未处理差异',
     '查看本步骤的文件树与两侧内容。启用前明确保留路径并重新核验；启用后先通过内部修复 PR 对齐核心内容，不重置接收基线。',

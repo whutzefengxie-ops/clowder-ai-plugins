@@ -17,7 +17,8 @@ export async function preservedTree(receiver, target, internal, id, base = null)
   const preserved = (path) => rules.some((rule) => matches(path, rule));
   // 内部已接收、但本提交血统里不存在、且本提交也没有删除的文件：
   // 那是并行 landing 的内容，不能因为来源分支较旧就把它删掉。
-  const carried = [...local].filter(([path]) => !source.has(path) && !baseEntries.has(path));
+  // 仅中间开发提交提供 base；最终 landing 快照不能携带未声明的额外文件。
+  const carried = base ? [...local].filter(([path]) => !source.has(path) && !baseEntries.has(path)) : [];
   if (!rules.length && !carried.length) return receiver.tree(target);
   return phase('internal-preserve', '保留声明的内部文件和不存在状态', async () => {
     const core = [...source.keys()].filter((path) => !preserved(path));

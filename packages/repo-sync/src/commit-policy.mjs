@@ -66,7 +66,11 @@ export async function buildCandidate(receiver, state, delivery) {
     const separator = object.indexOf(Buffer.from('\n\n'));
     if (separator < 0) fail('COMMIT_OBJECT_INVALID', '来源提交缺少有效消息边界。');
     const message = object.subarray(separator + 2);
-    const tree = await preservedTree(receiver.git, source, delivery.base.internal, delivery.id, parents[0] ?? null);
+    // Keep development commits, but the final mapped commit receives the actual
+    // accepted landing snapshot. An old PR head is not the main content contract.
+    const finalReplay = replay && source === replay.head;
+    const tree = await preservedTree(receiver.git, finalReplay ? delivery.target : source,
+      delivery.base.internal, delivery.id, finalReplay ? null : parents[0] ?? null);
     const env = {
       ...gitEnvironment(),
       GIT_AUTHOR_NAME: policy.identity.name,

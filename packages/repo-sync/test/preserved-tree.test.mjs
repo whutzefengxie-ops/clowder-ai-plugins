@@ -55,3 +55,11 @@ test('a commit that really deletes a file still deletes it', async () => {
   const tree = await preservedTree(f.receiver, source, internal, 'candidate-2', internal);
   assert.deepEqual(await treePaths(f.repo, tree), ['base.txt']);
 });
+
+test('an authoritative landing snapshot does not resurrect internal core files absent from the landing', async () => {
+  const f = await fixture();
+  const target = await f.commit('base.txt', 'base', 'base');
+  const internal = await f.commit('gone.txt', 'temporary', 'previously accepted file');
+  const tree = await preservedTree(f.receiver, target, internal, 'landing-snapshot');
+  assert.deepEqual(await treePaths(f.repo, tree), ['base.txt']);
+});

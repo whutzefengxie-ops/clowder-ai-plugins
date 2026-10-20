@@ -382,6 +382,8 @@ clowder-repo-sync serve private-config.json 5187
 
 GitHub 发现根据 first-parent main 顺序、commit→PR 查询与实际 merge SHA确定范围，区分 squash/rebase 的实际 main 对象。读取关闭关联和完整 Issue timeline，只有能绑定本笔落地 commit 的关闭事件才视为关闭证据；文本提及仅作普通关联。无法唯一归属主干提交、PR 边界不一致或元数据查询失败时暂停。首版不提供评论、附件、账户、里程碑的全量镜像。
 
+统一内部身份并展开 squash PR 时，逐条保留开发提交的消息、日期、可映射拓扑及 SHA 对应；最后一条映射提交以 GitHub main 实际接受的 landing 文件树为准，再应用声明的内部保留规则。PR head 可能基于旧 main，不能作为最终接收内容。最后一条的差异可能包含 landing 对齐内容，这是最终快照对齐，不声称每条补丁已经无冲突地 rebase；不会另加一条修复提交。发布前重新核验核心树。旧版已冻结的错误候选会以 `CANDIDATE_TREE_MISMATCH` 暂停，不能覆盖已发布分支；未合入的本笔从“来源追溯与撤销”放弃后重新同步，保留旧 Issue 和历史。已合入的错误结果需要通过内部修复 PR 恢复正确内容，升级不会自动修复或回退 main。
+
 ## CLI 与恢复
 
 ### SSH 地址与 PR / Issue 网页地址
