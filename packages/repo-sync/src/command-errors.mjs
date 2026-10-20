@@ -33,9 +33,9 @@ const reasons = [
     '仓库不可访问，请核对地址和读取权限',
   ],
   [
-    /Could not resolve (host|hostname)|Connection refused|Network is unreachable|Connection timed out|Failed to connect/i,
+    /Could not resolve (host|hostname)|Connection refused|Network is unreachable|Connection timed out|Failed to connect|Connection reset|Recv failure|RPC failed|Early EOF|unexpected disconnect/i,
     'NETWORK_FAILED',
-    '网络连接失败，请在本机核对 DNS、网络通道及远端服务',
+    '网络连接失败或中途断开，请在本机核对 DNS、网络通道、代理及远端服务后重试',
   ],
 ];
 export function commandFailure(stderr, code, executable) {

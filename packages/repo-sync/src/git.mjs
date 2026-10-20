@@ -5,7 +5,7 @@ import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
 import { captureGitPr } from './git-pr.mjs';
 import { preservedTree } from './preserved-tree.mjs';
-import { ancestor, command, git, gitEnvironment } from './process.mjs';
+import { ancestor, command, git, gitEnvironment, gitRetry } from './process.mjs';
 import { remoteHeads } from './remote-heads.mjs';
 import { assertProjection } from './trees.mjs';
 
@@ -37,14 +37,14 @@ export class GitReceiver {
     const c = this.config;
     const options = { timeout: c.timeouts?.fetch ?? 600000 };
     await phase('source-fetch', '下载外部对象', () =>
-      git(
+      gitRetry(
         this.directory,
         ['fetch', '--progress', '--no-tags', c.sourceUrl, `+refs/heads/${c.sourceBranch}:refs/sync/source`],
         options,
       ),
     );
     await phase('internal-fetch', '下载内部对象', () =>
-      git(
+      gitRetry(
         this.directory,
         ['fetch', '--progress', '--no-tags', c.internalUrl, `+refs/heads/${c.targetBranch}:refs/sync/internal`],
         options,
@@ -115,7 +115,7 @@ export class GitReceiver {
     return head;
   }
   async remoteBranch(branch, options = {}) {
-    const output = await git(
+    const output = await gitRetry(
       this.directory,
       ['ls-remote', '--heads', this.config.internalUrl, `refs/heads/${branch}`],
       options,
@@ -130,18 +130,35 @@ export class GitReceiver {
     const existing = await this.remoteBranch(delivery.branch);
     if (existing && existing !== delivery.candidate) fail('CANDIDATE_CONFLICT', '候选分支存在不同 SHA，禁止覆盖');
     // Empty expected value is a create-only condition, never permission to replace a ref.
-    if (!existing)
-      await git(
-        this.directory,
-        [
-          'push',
-          ...pushOptions.flatMap((option) => ['--push-option', option]),
-          `--force-with-lease=refs/heads/${delivery.branch}:`,
-          this.config.internalUrl,
-          `${delivery.candidate}:refs/heads/${delivery.branch}`,
-        ],
-        delivery.gitPr ? { onOutput: (output) => captureGitPr(this.config, delivery, output) } : {},
-      );
+    if (!existing) {
+      const push = () =>
+        git(
+          this.directory,
+          [
+            'push',
+            ...pushOptions.flatMap((option) => ['--push-option', option]),
+            `--force-with-lease=refs/heads/${delivery.branch}:`,
+            this.config.internalUrl,
+            `${delivery.candidate}:refs/heads/${delivery.branch}`,
+          ],
+          delivery.gitPr ? { onOutput: (output) => captureGitPr(this.config, delivery, output) } : {},
+        );
+      // 推送是 create-only：网络失败后先回读远端。分支仍不存在才重试，
+      // 已存在则说明推送其实成功，避免重复创建或覆盖。
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await push();
+          break;
+        } catch (error) {
+          if (!['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error.code)) throw error;
+          const remote = await this.remoteBranch(delivery.branch);
+          if (remote === delivery.candidate) break;
+          if (remote) fail('CANDIDATE_CONFLICT', '候选分支存在不同 SHA，禁止覆盖');
+          if (attempt === 3) break;
+          await new Promise((done) => setTimeout(done, 1000 * attempt));
+        }
+      }
+    }
     if ((await this.remoteBranch(delivery.branch)) !== delivery.candidate)
       fail('PUSH_RESULT_UNKNOWN', '推送结果待回读确认');
   }

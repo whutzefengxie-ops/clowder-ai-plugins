@@ -37,12 +37,7 @@ export async function verifyDevelopmentHistory(receiver, delivery) {
     fail('PR_HISTORY_CHANGED', '开发历史与本笔 main 接受范围不匹配，未重放或发布。');
   const ref = `refs/sync/pr/${delivery.source.number}`;
   await phase('pr-history', '读取并核对原 PR 的完整开发提交', async () => {
-    try {
-      await git(receiver.git.directory, ['fetch', '--no-tags', receiver.git.config.sourceUrl,
-        `+refs/pull/${delivery.source.number}/head:${ref}`]);
-    } catch {
-      fail('PR_HISTORY_UNAVAILABLE', '无法读取原 PR 的 Git 对象；检查外部仓库读取权限和 PR ref 后恢复，不退回单条提交。');
-    }
+    await fetchPrHead(receiver, delivery.source.number, ref);
     if (await receiver.git.sha(ref) !== replay.head)
       fail('PR_HISTORY_CHANGED', '原 PR head 与冻结清单不一致；请核对上游变化，未发布候选。');
   });
@@ -52,6 +47,32 @@ export async function verifyDevelopmentHistory(receiver, delivery) {
     fail('PR_HISTORY_INCOMPLETE', 'PR API 清单与实际 Git 范围不一致；不能重复搬运已接受的主干提交或漏掉开发提交。');
   await assertReplayProjection(receiver, delivery, replay);
   return sources;
+}
+
+// 连续扫描多个 PR 时会逐个 fetch refs/pull/N/head；github.com 偶尔会在一次连接上超时，
+// 不能因此让整轮扫描失败，也不能把网络问题误报成权限或 PR 缺失。只对网络类错误重试。
+export async function fetchPrHead(receiver, number, ref, run = git, wait = (ms) => new Promise((done) => setTimeout(done, ms))) {
+  const directory = receiver.git.directory,
+    url = receiver.git.config.sourceUrl;
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await run(directory, ['fetch', '--no-tags', url, `+refs/pull/${number}/head:${ref}`]);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error.code) || attempt === 3) break;
+      await wait(1000 * attempt);
+    }
+  }
+  const transient = ['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(lastError?.code);
+  fail(
+    'PR_HISTORY_UNAVAILABLE',
+    transient
+      ? `无法读取 PR #${number} 的 Git 对象：连接 github.com 失败或超时（已重试 3 次）。这是外部网络 / 代理问题，不是权限或 PR 已删除；网络恢复后重试原同步，已完成对象与台账保留，不需要重新配置。`
+      : `无法读取 PR #${number} 的 Git 对象（refs/pull/${number}/head，退出状态 ${lastError?.details?.exitCode ?? '未知'}）。请核对 GitHub 是否提供该 PR ref 和外部仓库读取权限；修复后重试原同步，不退回单条提交。`,
+    { number, cause: lastError?.code },
+  );
 }
 
 async function changedPaths(directory, before, after) {

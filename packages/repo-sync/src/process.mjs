@@ -100,7 +100,11 @@ export function gitEnvironment() {
   return env;
 }
 export function git(directory, args, options = {}) {
-  return command('git', ['-C', directory, ...args], { env: gitEnvironment(), ...options });
+  // Windows 默认受 MAX_PATH 限制：候选检查的 worktree 位于私有目录深处，
+  // 仓库内较深的文件会 checkout 失败（reset index 报 128）。显式开启长路径后
+  // worktree add / diff / fsck 都能正常工作。
+  const longPaths = process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : [];
+  return command('git', [...longPaths, '-C', directory, ...args], { env: gitEnvironment(), ...options });
 }
 export async function ancestor(directory, from, to) {
   try {
@@ -109,5 +113,29 @@ export async function ancestor(directory, from, to) {
   } catch (error) {
     if (error.code === 'COMMAND_FAILED' && error.details?.exitCode === 1) return false;
     throw error;
+  }
+}
+// github.com 的连接偶发超时/断开：下载与探测属于可重试的只读操作，
+// 不应让整轮同步因为一次网络抖动失败。写操作单独处理，避免重复推送。
+export async function gitRetry(directory, args, options = {}, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await git(directory, args, options);
+    } catch (error) {
+      const transient = ['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error.code);
+      if (!transient || attempt >= attempts) throw error;
+      await new Promise((done) => setTimeout(done, 1000 * attempt));
+    }
+  }
+}
+export async function commandRetry(executable, args, options = {}, attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await command(executable, args, options);
+    } catch (error) {
+      const transient = ['NETWORK_FAILED', 'COMMAND_TIMEOUT'].includes(error.code);
+      if (!transient || attempt >= attempts) throw error;
+      await new Promise((done) => setTimeout(done, 1000 * attempt));
+    }
   }
 }

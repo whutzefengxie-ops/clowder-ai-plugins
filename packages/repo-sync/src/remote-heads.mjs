@@ -1,6 +1,6 @@
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
-import { command, gitEnvironment } from './process.mjs';
+import { commandRetry, gitEnvironment } from './process.mjs';
 
 export async function remoteHeads(config) {
   const result = {};
@@ -12,7 +12,7 @@ export async function remoteHeads(config) {
       const ref = `refs/heads/${branch}`;
       let text;
       try {
-        text = await command('git', ['ls-remote', '--exit-code', url, ref], {
+        text = await commandRetry('git', ['ls-remote', '--exit-code', url, ref], {
           env: gitEnvironment(),
           timeout: config.timeouts?.probe ?? 20000,
         });
