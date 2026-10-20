@@ -590,7 +590,9 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
   #project-sidebar {
-    display: none;
+    position: static;
+    border-right: 0;
+    border-bottom: 1px solid var(--v3-line);
   }
   .record-detail:has(> .next-action) {
     grid-template-columns: 1fr;
@@ -1155,4 +1157,150 @@ textarea:focus {
   .records-filters .rf-dates { display: flex; }
   .records-filters .rf-actions { justify-content: space-between; }
   .records-filters .rf-custom > summary { justify-content: flex-start; }
+}
+
+/* Expanded delivery objects: give the opened object the full row. */
+.delivery-objects:has(.delivery-object-details[open]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.delivery-object-details[open] {
+  border-color: #c7d7fe;
+  box-shadow: 0 0 0 3px #eef2ff;
+}
+.delivery-object-details[open] > summary {
+  background: #f5f7ff;
+  border-bottom: 1px solid #dbe2ff;
+}
+.delivery-object-details[open] .delivery-object-guide {
+  display: none;
+}
+.delivery-object-details[open] .delivery-object-list {
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px 12px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #c7cdd9 transparent;
+}
+.delivery-object-list li {
+  display: block;
+  margin: 0 0 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--v3-line);
+  border-radius: 9px;
+  background: #fcfcfd;
+}
+.delivery-object-list li:last-child { margin-bottom: 0; }
+.delivery-object-list li b,
+.delivery-object-list li > a {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.delivery-object-list li b a { color: var(--v3-accent); text-decoration: none; }
+.delivery-object-list li b a:hover { text-decoration: underline; }
+.delivery-object-list li p {
+  margin: 4px 0 0;
+  color: var(--v3-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.short-sha {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  vertical-align: middle;
+}
+.short-sha code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--v3-ink-2);
+  font-size: 11px;
+}
+.short-sha button {
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--v3-line-2);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--v3-muted);
+  font-size: 10px;
+}
+.short-sha small { color: var(--v3-good); font-size: 10px; }
+
+/* Expanded baseline / technical details: full-width definition rows. */
+.detail-head > .delivery-boundary[open],
+.detail-head > .execution-meta[open] {
+  display: block;
+  width: 100%;
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--v3-line);
+  border-radius: 8px;
+  background: #fcfcfd;
+}
+.detail-head > .delivery-boundary[open] > summary,
+.detail-head > .execution-meta[open] > summary {
+  margin-bottom: 6px;
+  color: var(--v3-ink-2);
+}
+.v3-boundary-detail,
+.v3-tech-detail {
+  display: grid;
+  gap: 5px;
+}
+.v3-kv {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--v3-muted);
+}
+.v3-kv > span:first-child {
+  color: var(--v3-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.v3-kv b { color: var(--v3-faint); font-weight: 400; }
+.v3-kv code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--v3-ink-2);
+  font-size: 11px;
+}
+.v3-tech-detail .v3-kv {
+  grid-template-columns: 66px minmax(0, 1fr);
+}
+.v3-tech-detail .v3-kv code,
+.v3-tech-detail .v3-kv > span:last-child {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* Candidate exit form when expanded. */
+.candidate-recovery .delivery-cancel[open] form {
+  padding: 10px 12px 12px;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  background: #fff;
+}
+.candidate-recovery .delivery-cancel[open] form input[type="checkbox"] { margin-right: 6px; }
+.candidate-recovery .delivery-cancel[open] form button { margin-top: 8px; }
+
+.record-detail:has([data-flow-canvas]) > .delivery-overview .delivery-objects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.record-detail:has([data-flow-canvas]) > .delivery-overview .delivery-objects:has(.delivery-object-details[open]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 900px) {
+  .record-detail:has([data-flow-canvas]) > .delivery-overview .delivery-objects {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

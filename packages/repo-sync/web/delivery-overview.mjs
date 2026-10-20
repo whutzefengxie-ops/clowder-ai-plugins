@@ -16,7 +16,7 @@ export function deliveryOverview(snapshot, _record, d, historical) {
   return `<section class="delivery-overview" aria-label="本笔同步内容" data-delivery-overview>
     <div class="v3-dov-head"><div><p class="v3-eyebrow">本笔交付</p><h3>${esc(title(d))}</h3></div><div class="delivery-links"><span class="v3-link"><small>上游</small>${link(d.source.url, d.source.number ? `PR #${d.source.number} ↗` : '来源 ↗')}</span><span class="v3-link ${d.prUrl ? '' : 'is-pending'}"><small>内部</small>${d.prUrl ? link(d.prUrl, '内部 PR ↗') : '<span>待创建 / 回读确认</span>'}</span></div></div>
     <dl class="delivery-metrics"><div><dt>PR 开发提交</dt><dd>${version ? '不重放' : d.source.kind === 'commit' ? '无上游 PR' : (development ?? '未记录')}</dd></div><div><dt>${version ? '上游范围提交' : 'main 落地提交'}</dt><dd>${d.commits?.length ?? '未记录'}</dd></div><div><dt>内部候选提交</dt><dd>${internal ?? (d.candidate ? '未记录' : '待生成')}</dd></div><div><dt>关联 Issue</dt><dd>${d.issues?.length ?? 0}</dd></div></dl>
-    ${d.issues?.length ? `<p class="issue-brief">冻结 Issue：${d.issues.map((issue) => link(issue.url, `#${issue.number} ${issue.title ?? ''}`)).join(' · ')}</p>` : ''}
+    ${d.issues?.length ? `<p class="issue-brief">冻结 Issue：${d.issues.map((issue) => `#${issue.number}`).join(' · ')} · ${d.issues.length} 个</p>` : ''}
     ${d.source.developmentReplay ? `<p class="delivery-note">已展开上游 squash：${development} 条 PR 开发提交 → 内部逐条重放；main 的 ${d.commits.length} 条落点单独记录接受对应。</p>` : oldSquash ? '<p class="record-gap">此候选沿用上游压缩后的 main 历史，未展开原 PR 开发提交。需要逐条重放时，先放弃未合入的旧 PR，再重新同步。</p>' : ''}
     ${d.supersedes ? `<p>本笔替代已撤销同步 <code>${esc(d.supersedes)}</code>；旧 PR 和历史保留。</p>` : ''}
     ${issueReferenceNotes(d.source)}

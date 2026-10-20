@@ -92,7 +92,21 @@
     <div class="note"><b>每页 10 笔</b><ul><li>列表请求 `limit=10`，翻页步长改为 10</li><li>列表底部显示「每页最多 10 笔」</li><li>记录再多也只占一页高度，不再把页面拉得很长</li></ul></div>
   </div>
 
-  <h2>6 · 整页效果</h2>
+  <h2>6 · 展开态：关联 Issue、提交与基线</h2>
+  <div class="pair small">
+    <section class="panel"><div class="ph"><b>优化前 · 双列展开</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-expanded-overview.png" alt=""></section>
+    <section class="panel"><div class="ph"><b>优化后 · 整行展开</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-expanded-overview.png" alt=""></section>
+  </div>
+  <div class="notes" style="margin-top:10px">
+    <div class="note"><b>展开后不再挤</b><ul><li>有关联对象展开时，交付对象区域切成单列整行</li><li>Issue / 提交条目变成独立行卡，标题、关系和映射分行</li><li>SHA 与「复制」按钮同一行，不再挤压成窄块</li></ul></div>
+    <div class="note"><b>基线 / 技术详情</b><ul><li>展开后变成整行定义表：外部、内部、标识、开始 / 结束</li><li>完整 SHA 在行内省略，hover 仍可看全；不再横向溢出</li><li>展开 / 收起按钮留在基线段下方，不和正文抢位置</li></ul></div>
+  </div>
+  <div class="pair small" style="margin-top:10px">
+    <section class="panel"><div class="ph"><b>基线展开 · 优化前</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-expanded-baseline.png" alt=""></section>
+    <section class="panel"><div class="ph"><b>基线展开 · 优化后</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-expanded-baseline.png" alt=""></section>
+  </div>
+
+  <h2>7 · 整页效果</h2>
   <div class="pair full">
     <section class="panel"><div class="ph"><b>优化前整页</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-full.png" alt=""></section>
     <section class="panel"><div class="ph"><b>优化后整页</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-full.png" alt=""></section>
