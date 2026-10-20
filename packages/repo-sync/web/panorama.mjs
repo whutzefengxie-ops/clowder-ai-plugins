@@ -62,7 +62,7 @@ function cards(snapshot, record, historical) {
             )
           : preDeliveryPresentation(stage, task, policy);
       const groups = [...stageGroups(stage, record, snapshot.operation, historical, snapshot).values()];
-      return `<article class="flow-phase" data-flow-stage="${stage}" data-flow-state="${state.state}"><button type="button" class="flow-phase-heading" data-flow-stage-select="${stage}"><span class="flow-state-mark">${state.mark}</span><span><b>${stage} · ${name}</b><small>${state.caption}</small></span></button><p class="flow-phase-summary">${esc(stageSummary(stage, record, task, historical, snapshot, state.state))}</p><details class="flow-child-disclosure" data-persist-details="flow-children-${stage}"><summary>查看 ${groups.length} 项子步骤</summary><ol class="flow-children">${groups
+      return `<article class="flow-phase" data-flow-stage="${stage}" data-flow-state="${state.state}"><button type="button" class="flow-phase-heading" data-flow-stage-select="${stage}"><span class="flow-state-mark">${state.mark}</span><span><b>${name}</b><small>${state.caption}</small></span></button><p class="flow-phase-summary">${esc(stageSummary(stage, record, task, historical, snapshot, state.state))}</p><details class="flow-child-disclosure" data-persist-details="flow-children-${stage}"><summary>查看 ${groups.length} 项子步骤</summary><ol class="flow-children">${groups
         .map((g) => {
           const projected = projectStep(g),
             s = projected.status;

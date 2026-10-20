@@ -67,7 +67,13 @@
     <div class="note"><b>V3 对齐</b><ul><li>标题不再被旧 CSS 隐藏</li><li>基线段与交付卡使用同一套边框、圆角和字号</li><li>展开 / 收起按钮和状态提示同排，不再散落</li></ul></div>
   </div>
 
-  <h2>3 · 左侧栏「查看项目状态」：去掉横向滚动条</h2>
+  <h2>3 · 整体字号 +2px</h2>
+  <div class="notes">
+    <div class="note"><b>基础字号</b><ul><li>`--t-5` 12.5 → 14.5px</li><li>`--t-4` 14.5 → 16.5px</li><li>`--t-3` 16 → 18px，`--t-2` 21 → 23px，`--t-1` 28 → 30px</li></ul></div>
+    <div class="note"><b>V3 局部字号</b><ul><li>工作台内 84 处显式 `font-size` 统一 +2px</li><li>阶段标题改成只显示阶段名，避免放大后换行</li><li>项目侧栏、交付卡、基线段、撤销入口同步放大</li></ul></div>
+  </div>
+
+  <h2>4 · 左侧栏「查看项目状态」：去掉横向滚动条</h2>
   <div class="pair small sidebar-pair">
     <section class="panel"><div class="ph"><b>优化前</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-projects.png" alt=""></section>
     <section class="panel"><div class="ph"><b>优化后</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-projects.png" alt=""></section>
@@ -77,7 +83,7 @@
     <div class="note"><b>窄栏也能读</b><ul><li>最后接收 / 时间从两列定义表改为纵向标签 + 值</li><li>项目标题、状态、按钮字号收紧到侧栏尺度</li><li>筛选按钮压缩为同一行，不再挤出容器</li></ul></div>
   </div>
 
-  <h2>4 · 整页效果</h2>
+  <h2>5 · 整页效果</h2>
   <div class="pair full">
     <section class="panel"><div class="ph"><b>优化前整页</b><span class="badge before">BEFORE</span></div><img src="shots/impl-before-full.png" alt=""></section>
     <section class="panel"><div class="ph"><b>优化后整页</b><span class="badge after">AFTER</span></div><img src="shots/impl-after-full.png" alt=""></section>
