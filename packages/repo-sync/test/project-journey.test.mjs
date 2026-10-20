@@ -8,9 +8,9 @@ import { serverScopes } from '../src/server-projects.mjs';
 import { projectView } from '../web/project-view.mjs';
 
 globalThis.location = new URL('http://127.0.0.1/?project=default');
-const { recordList, historyDateRange } = await import('../web/history.mjs');
+const { recordFilters, recordList, historyDateRange } = await import('../web/history.mjs');
 
-test('project overview filters local state and only offers navigation, including stale observation facts', () => {
+test('project status is integrated into each sidebar row instead of a separate overview', () => {
   const workspace = {
     projects: [
       { id: 'default', name: '运行项目', mode: 'continuous', syncStatus: 'RUNNING', busy: true },
@@ -25,28 +25,30 @@ test('project overview filters local state and only offers navigation, including
       { id: 'ready', name: '空闲项目', mode: 'version', syncStatus: 'READY' },
     ],
   };
-  const html = projectView({ workspace, filter: 'attention', overviewOpen: true }, 'default');
-  assert.match(html, /data-project-filter="attention"[^>]*aria-pressed="true"/);
-  const cards = /<div class="project-cards">([\s\S]*?)<\/details>/.exec(html)?.[1] ?? '';
-  assert.match(cards, /data-project-enter="waiting"/);
-  assert.doesNotMatch(cards, /data-project-enter="default"|data-project-enter="ready"/);
+  const html = projectView({ workspace }, 'default');
+  assert.match(html, /data-project-enter="waiting"/);
   assert.match(html, /data-project-enter="default"/);
   assert.match(html, /data-project-enter="ready"/);
   assert.match(html, /最后接收.*v1/);
   assert.match(html, /最后观察/);
+  assert.match(html, /project-status-dot/);
+  assert.doesNotMatch(html, /查看项目状态|data-project-filter|project-overview/);
   assert.doesNotMatch(html, /data-action=|已是最新|实时健康/);
 });
 
 test('empty history distinguishes no reception from no matches and never displays a reversed row range', () => {
   const filters = { q: '', status: 'all', from: '', to: '' };
-  const page = { records: [], total: 0, offset: 0, limit: 20 };
+  const page = { records: [], total: 0, offset: 0, limit: 10 };
   const empty = recordList({ page, selected: 'current', filters }, null);
   assert.match(empty, /尚无同步记录/);
   assert.doesNotMatch(empty, /1–0/);
-  assert.match(empty, /data-history-range="7"/);
+  assert.match(empty, /每页最多 10 笔/);
+  assert.doesNotMatch(empty, /data-record-filter/);
+  assert.match(recordFilters({ page, filters }), /class="records-filters"/);
+  assert.match(recordFilters({ page, filters }), /data-history-range="7"/);
   const filtered = recordList({ page, selected: 'current', filters: { ...filters, q: 'missing' } }, null);
   assert.match(filtered, /没有符合筛选条件的记录/);
-  assert.match(filtered, /data-history-range="all"/);
+  assert.match(recordFilters({ page, filters: { ...filters, q: 'missing' } }), /data-history-range="all"/);
 });
 
 test('date shortcuts use inclusive UTC calendar days and can clear only the date constraints', () => {

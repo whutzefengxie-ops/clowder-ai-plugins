@@ -4,7 +4,7 @@ import { esc, labels, title, when } from './ui.mjs';
 
 export function createHistory(snapshot, changed) {
   let selected = new URL(location.href).searchParams.get('record') ?? 'current';
-  let page = { records: [], total: 0, offset: 0, limit: 20 };
+  let page = { records: [], total: 0, offset: 0, limit: 10 };
   let detail = null;
   let error = null;
   let generation = 0;
@@ -76,7 +76,7 @@ export function createHistory(snapshot, changed) {
     const params = new URLSearchParams({
       ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)),
       offset: String(page.offset),
-      limit: '20',
+      limit: '10',
     });
     try {
       const [nextPage, nextDetail] = await Promise.all([request(`/api/records?${params}`), readDetail(id)]);
@@ -138,17 +138,10 @@ export function createHistory(snapshot, changed) {
     },
   };
 }
-export function recordList(view, active) {
-  const { page, selected, filters } = view;
-  const filtered = filters.q || filters.status !== 'all' || filters.from || filters.to;
-  const empty = filtered
-    ? '没有符合筛选条件的记录。可调整关键词、状态，或清除日期范围。'
-    : '尚无同步记录。首次同步后，可在这里回看每笔版本、PR、步骤和时间。';
-  const range = page.records.length ? ` · 当前显示 ${page.offset + 1}–${page.offset + page.records.length}` : '';
+export function recordFilters(view) {
+  const { page, filters } = view;
   const dates = `<div class="history-date-shortcuts" aria-label="历史日期快捷筛选">${[7, 30, 90].map((days) => `<button type="button" data-history-range="${days}">最近 ${days} 天</button>`).join('')}<button type="button" data-history-range="all">不限日期</button></div><small>日期按记录的 UTC 日历日筛选；不改变关键词和状态。</small>`;
-  const row = (item) =>
-    `<button type="button" data-record="${esc(item.id)}" aria-current="${selected === item.id ? 'true' : 'false'}"><b>${esc(title(item))}</b><span class="${item.error ? 'bad' : item.status === 'COMPLETE' ? 'good' : ''}">${item.error ? '× 异常 · ' : ''}${esc(labels[item.status] ?? item.status)}</span>${item.syncTarget ? `<small>本轮终点 ${esc(item.syncTarget.value)}</small>` : ''}<small>${when(item.finishedAt ?? item.startedAt)}</small></button>`;
-  return `<aside class="record-list" aria-label="同步记录"><h2>同步记录</h2><button type="button" data-record="current" aria-current="${selected === 'current'}"><b>当前同步</b><small>${active ? `${esc(title(active))} · ${esc(labels[active.status])}` : '选择更新 / 查看最新接收状态'}</small></button><form data-record-filter><label>搜索记录<input name="q" maxlength="200" value="${esc(filters.q)}" placeholder="tag、PR、commit 或同步标识"></label><label>状态<select name="status">${[
+  return `<form class="records-filters" data-record-filter aria-label="同步记录筛选"><label class="rf-search">搜索记录<input name="q" maxlength="200" value="${esc(filters.q)}" placeholder="tag、PR、commit 或同步标识"></label><label class="rf-status">状态<select name="status">${[
     ['all', '全部'],
     ['complete', '已完成'],
     ['active', '未完成'],
@@ -156,9 +149,18 @@ export function recordList(view, active) {
     ['cancelled', '已撤销'],
   ]
     .map(([value, label]) => `<option value="${value}" ${filters.status === value ? 'selected' : ''}>${label}</option>`)
-    .join(
-      '',
-    )}</select></label>${dates}<details><summary>自选日期范围</summary><label>开始日期<input name="from" type="date" value="${esc(filters.from)}"></label><label>结束日期<input name="to" type="date" value="${esc(filters.to)}"></label></details><button type="submit">筛选记录</button></form><p>${page.total} 笔匹配记录${range}</p>${page.records.map(row).join('') || `<p role="status">${empty}</p>`}<div class="file-pages"><button type="button" data-record-page="${Math.max(0, page.offset - 20)}" ${page.offset ? '' : 'disabled'}>上一页</button><button type="button" data-record-page="${page.offset + 20}" ${page.offset + page.records.length < page.total ? '' : 'disabled'}>下一页</button></div></aside>`;
+    .join('')}</select></label><div class="rf-dates">${dates}</div><details class="rf-custom"><summary>自选日期范围</summary><label>开始日期<input name="from" type="date" value="${esc(filters.from)}"></label><label>结束日期<input name="to" type="date" value="${esc(filters.to)}"></label></details><div class="rf-actions"><button type="submit">筛选记录</button><span>${page.total} 笔匹配记录${page.records.length ? ` · 当前 ${page.offset + 1}–${page.offset + page.records.length}` : ''}</span></div></form>`;
+}
+
+export function recordList(view, active) {
+  const { page, selected, filters } = view;
+  const filtered = filters.q || filters.status !== 'all' || filters.from || filters.to;
+  const empty = filtered
+    ? '没有符合筛选条件的记录。可调整关键词、状态，或清除日期范围。'
+    : '尚无同步记录。首次同步后，可在这里回看每笔版本、PR、步骤和时间。';
+  const row = (item) =>
+    `<button type="button" data-record="${esc(item.id)}" aria-current="${selected === item.id ? 'true' : 'false'}"><b>${esc(title(item))}</b><span class="${item.error ? 'bad' : item.status === 'COMPLETE' ? 'good' : ''}">${item.error ? '× 异常 · ' : ''}${esc(labels[item.status] ?? item.status)}</span>${item.syncTarget ? `<small>本轮终点 ${esc(item.syncTarget.value)}</small>` : ''}<small>${when(item.finishedAt ?? item.startedAt)}</small></button>`;
+  return `<aside class="record-list" aria-label="同步记录"><div class="record-list-head"><h2>同步记录</h2></div><button type="button" data-record="current" aria-current="${selected === 'current'}"><b>当前同步</b><small>${active ? `${esc(title(active))} · ${esc(labels[active.status])}` : '选择更新 / 查看最新接收状态'}</small></button>${page.records.map(row).join('') || `<p role="status">${empty}</p>`}<div class="file-pages record-pages"><button type="button" data-record-page="${Math.max(0, page.offset - 10)}" ${page.offset ? '' : 'disabled'}>上一页</button><small>每页最多 10 笔</small><button type="button" data-record-page="${page.offset + 10}" ${page.offset + page.records.length < page.total ? '' : 'disabled'}>下一页</button></div></aside>`;
 }
 
 export function historyDateRange(days, now = new Date()) {

@@ -8,8 +8,6 @@ export function createProjectNavigation(snapshot, saveDraft) {
     editor = null,
     pendingCreate = null,
     sending = false,
-    filter = 'all',
-    overviewOpen = false,
     navigation = null,
     error = '';
   async function load() {
@@ -31,7 +29,7 @@ export function createProjectNavigation(snapshot, saveDraft) {
   function render() {
     panel.hidden = false;
     panel.innerHTML = projectView(
-      { workspace, editor, pendingCreate, sending, error, filter, overviewOpen, navigation },
+      { workspace, editor, pendingCreate, sending, error, navigation },
       pageProjectId,
     );
   }
@@ -103,18 +101,10 @@ export function createProjectNavigation(snapshot, saveDraft) {
     if (event.target.matches('[data-project-select]')) go(event.target.value);
   });
   panel.addEventListener('click', (event) => {
-    const project = event.target.closest('[data-project-enter]'),
-      filtering = event.target.closest('[data-project-filter]');
+    const project = event.target.closest('[data-project-enter]');
     if (project) return go(project.dataset.projectEnter);
     const settings = event.target.closest('[data-project-settings]');
     if (settings) return go(settings.dataset.projectSettings, false, 'configuration');
-    if (filtering) {
-      filter = filtering.dataset.projectFilter;
-      overviewOpen = true;
-      render();
-      panel.querySelector(`[data-project-filter="${filter}"]`)?.focus();
-      return;
-    }
     if (event.target.closest('[data-project-stay]')) {
       navigation = null;
       render();
@@ -138,13 +128,6 @@ export function createProjectNavigation(snapshot, saveDraft) {
     }
     if (event.target.closest('[data-project-retry]') && pendingCreate) void submit(pendingCreate);
   });
-  panel.addEventListener(
-    'toggle',
-    (event) => {
-      if (event.target.matches('[data-project-overview]')) overviewOpen = event.target.open;
-    },
-    true,
-  );
   panel.addEventListener('submit', (event) => {
     event.preventDefault();
     event.stopPropagation();

@@ -8,7 +8,7 @@ import { boundaryDeliveryId, currentRecord } from './flow-stage.mjs';
 import { initializeFormErrors } from './form-errors.mjs';
 import { configurationConfirmation, initializeSubmissions } from './form-submission.mjs';
 import { createGithubAuthentication } from './github-auth.mjs';
-import { createHistory, recordList } from './history.mjs';
+import { createHistory, recordFilters, recordList } from './history.mjs';
 import { createIssueAuthentication, updateIssueFields } from './issue-auth.mjs';
 import { updateLiveWorkflow } from './live-workflow.mjs';
 import { renderTask } from './operation-view.mjs';
@@ -265,7 +265,7 @@ function recordsPage(snapshot, records, mobileDetail) {
         : historical
           ? '<p role="status">正在读取所选记录…</p>'
           : '<p class="records-hint" role="status">从左侧选择一笔记录，这里会显示它当时的五阶段过程、对象与时间；当前这一笔请回同步工作台查看。</p>';
-  return `<div class="records-page${mobileDetail ? ' mobile-detail' : ''}">${list}<section class="records-detail" aria-label="所选同步记录">${shown}</section></div>`;
+  return `<div class="records-toolbar">${recordFilters(records)}</div><div class="records-page${mobileDetail ? ' mobile-detail' : ''}">${list}<section class="records-detail" aria-label="所选同步记录">${shown}</section></div>`;
 }
 function changeView(next) {
   saveDraft();

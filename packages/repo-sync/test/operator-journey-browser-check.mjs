@@ -98,13 +98,13 @@ try {
   assert.ok(active.prUrl.endsWith('/501'));
   await openStage(page, 1);
   await openHistory(page);
-  await page.locator('.record-list input[name="q"]').fill('v2');
-  await page.locator('.record-list input[name="q"]').evaluate((element) => element.setSelectionRange(1, 1));
+  await page.locator('.records-filters input[name="q"]').fill('v2');
+  await page.locator('.records-filters input[name="q"]').evaluate((element) => element.setSelectionRange(1, 1));
   await page.waitForTimeout(5500);
   assert.equal(await page.locator('.records-page').count(), 1);
   assert.equal(await page.evaluate(() => document.activeElement?.name), 'q');
   assert.equal(
-    await page.locator('.record-list input[name="q"]').evaluate((element) => element.selectionStart),
+    await page.locator('.records-filters input[name="q"]').evaluate((element) => element.selectionStart),
     1,
   );
   for (const width of [1440, 1024, 768, 390]) {

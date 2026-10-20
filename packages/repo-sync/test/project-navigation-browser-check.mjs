@@ -33,17 +33,17 @@ await page.route('**/*', (route) => {
   return route.fulfill({
     contentType: 'text/html; charset=utf-8',
     body: `<!doctype html><meta charset="utf-8">
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/projects.css">
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/projects.css"><link rel="stylesheet" href="/v3-workbench.css">
 <section id="projects" class="project-bar"></section><label>普通草稿<input id="draft"></label><label>尚未提交的认证<input id="secret" type="password"></label><div id="history"></div>
 <script type="module">
-import { createProjectNavigation } from '/projects.mjs'; import { createHistory, recordList } from '/history.mjs';
+import { createProjectNavigation } from '/projects.mjs'; import { createHistory, recordFilters, recordList } from '/history.mjs';
 const current = new URL(location.href).searchParams.get('project') ?? 'default';
 const draft = document.querySelector('#draft'); draft.value = sessionStorage.getItem('ordinary:' + current) ?? '';
 const data = await (await fetch('/api/projects')).json();
 const snapshot = {token:data.token, config:{bindingId:'binding'}, state:{active:null}};
 const nav = createProjectNavigation(() => snapshot, () => { if(window.failSave) return false; sessionStorage.setItem('ordinary:' + current, draft.value); return true; });
 await nav.load();
-let history; const render = () => document.querySelector('#history').innerHTML = recordList(history.get(), null);
+let history; const render = () => document.querySelector('#history').innerHTML = '<div class="records-toolbar">' + recordFilters(history.get()) + '</div>' + recordList(history.get(), null);
 history = createHistory(() => snapshot, render); await history.load(); render();
 document.addEventListener('submit', e => { if(e.target.matches('[data-record-filter]')) { e.preventDefault(); history.filter(Object.fromEntries(new FormData(e.target))); }});
 </script>`,
@@ -85,12 +85,10 @@ try {
   await page.waitForURL((url) => url.searchParams.get('project') === 'default');
   await page.locator('.project-sidebar-row.selected').waitFor();
   assert.equal(await page.getByLabel('普通草稿').inputValue(), '项目 A 的草稿');
-  await page.getByText('查看项目状态 · 2 个项目', { exact: true }).click();
-  await page.getByRole('button', { name: '运行中', exact: true }).click();
-  await page.getByText('没有符合当前状态的项目。可选择“全部”查看。', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '需要处理', exact: true }).click();
-  assert.equal(await page.locator('.project-overview .project-cards [data-project-enter]').count(), 2);
-  assert.equal(await page.locator('.project-overview [data-action]').count(), 0);
+  assert.equal(await page.locator('.project-sidebar-row').count(), 2);
+  assert.equal(await page.locator('.project-status-dot').count(), 2);
+  assert.equal(await page.locator('.project-overview').count(), 0);
+  assert.match(await page.locator('.project-sidebar-row').first().innerText(), /最后接收|待配置|最后观察/);
   await page.getByLabel('搜索记录').fill('missing-tag');
   const dated = page.waitForResponse(
     (response) => response.url().includes('/api/records?') && response.url().includes('from='),

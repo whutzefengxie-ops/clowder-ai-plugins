@@ -134,7 +134,7 @@ try {
   await openHistory(page);
   await page.locator(`.records-page [data-record="${active.id}"]`).click();
   await page.getByText('历史记录 · 只读', { exact: true }).waitFor();
-  assert.equal(await page.locator('.record-list input[name="q"]').isDisabled(), false);
+  assert.equal(await page.locator('.records-filters input[name="q"]').isDisabled(), false);
   for (let retry = 0; retry < 100 && !checking; retry++) await new Promise((done) => setTimeout(done, 100));
   assert.ok(checking);
   releaseCheck();
