@@ -38,7 +38,7 @@ export class SyncService {
       const decision = automaticRetry(run, state.active?.id, this.autoRetry, Date.now());
       this.autoRetry = decision.memory;
       if (!decision.start) return;
-      await startResume(scope, receiver, run);
+      await startResume(scope, receiver, run, false);
       return;
     }
     this.autoRetry = null;
@@ -119,10 +119,10 @@ function blockedTask(task) {
   );
 }
 
-function startResume(scope, receiver, run) {
+function startResume(scope, receiver, run, observeOnly = true) {
   return scope.tasks.start({
     action: 'resume-sync',
-    observeOnly: true,
+    observeOnly,
     runId: run.id,
     requestId: randomBytes(16).toString('hex'),
     expectedBinding: receiver.config.bindingId,

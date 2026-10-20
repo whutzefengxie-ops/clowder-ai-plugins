@@ -107,3 +107,35 @@ test('platform API unavailability and unknown push results are also retried once
   const run = { id: 'r'.repeat(32), status: 'FAILED', error: { code: 'ISSUE_UPDATE_PENDING' } };
   assert.equal(automaticRetry(run, 'delivery-1', null, 1000).start, false);
 });
+import { SyncService } from '../src/sync-service.mjs';
+
+test('auto-retry starts a real resume task instead of a no-op observe-only task', async () => {
+  const state = {
+    automation: { id: 'r'.repeat(32), status: 'FAILED', error: { code: 'COMMAND_FAILED' } },
+    active: { id: 'delivery-1' },
+  };
+  const started = [];
+  const receiver = {
+    config: { bindingId: 'binding' },
+    status: async () => state,
+    change: async () => {},
+  };
+  const scope = {
+    receiver,
+    tasks: {
+      busy: () => false,
+      latest: async () => ({ status: 'FAILED' }),
+      start: async (input) => started.push(input),
+    },
+    options: { connection: { describe: () => ({ revision: 'rev' }) } },
+  };
+  const service = new SyncService(async () => scope, 1000);
+  try {
+    await service.observe();
+  } finally {
+    await service.close();
+  }
+  assert.equal(started.length, 1);
+  assert.equal(started[0].action, 'resume-sync');
+  assert.equal(started[0].observeOnly, false);
+});
