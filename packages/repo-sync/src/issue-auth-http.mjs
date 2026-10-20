@@ -1,7 +1,7 @@
 import { fail } from './config.mjs';
-import { gitlabApi } from './gitlab-api.mjs';
-import { body, requireToken, send } from './http.mjs';
 import { apiSettings, markIssueVerified, setIssueToken } from './issue-auth.mjs';
+import { readPlatformProject, verifyPlatformProject } from './platform-project.mjs';
+import { body, requireToken, send } from './http.mjs';
 import { configurationLock } from './private-config.mjs';
 import { checkProjectInput } from './server-projects.mjs';
 
@@ -28,14 +28,11 @@ export async function issueAuthRequest(request, response, path, context, token, 
     if (path === '/api/issue-auth')
       return send(response, 200, { authentication: setIssueToken(receiver.config, input.token, owner) });
     if (input.token !== undefined) fail('INVALID_ISSUE_INPUT', '接口验证不能夹带 Token，请先在认证入口提供。');
-    if (!apiSettings(receiver.config))
+    const settings = apiSettings(receiver.config);
+    if (!settings)
       fail('ISSUE_API_UNSUPPORTED', '当前平台尚无匹配的内置接口；网页链接不等于 API，不能宣称已连接。');
-    const project = await gitlabApi(receiver.config, apiSettings(receiver.config)).request('');
-    if (
-      !project ||
-      typeof project.id !== 'number' ||
-      project.web_url?.replace(/\/$/, '') !== receiver.config.internalWebUrl.replace(/\/$/, '')
-    )
+    const project = await readPlatformProject(receiver.config, settings);
+    if (!verifyPlatformProject(settings, receiver.config, project))
       fail('ISSUE_API_UNSUPPORTED', '接口响应与所配仓库不匹配；请核对平台协议和高级地址，未创建或修改任何 Issue。');
     send(response, 200, {
       authentication: markIssueVerified(receiver.config),

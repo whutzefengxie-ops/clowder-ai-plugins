@@ -9,7 +9,7 @@ export function configureAutoMerge(receiver, input) {
   if (typeof input.autoMerge !== 'boolean')
     fail('INVALID_AUTO_MERGE', '请明确选择是否允许本轮平台自动合入。');
   if (input.autoMerge && receiver.config.pullRequests?.mode !== 'gitlab')
-    fail('AUTO_MERGE_UNSUPPORTED', '自动合入需要已配置的平台兼容 API；Git 推送不代表平台合入权限。');
+    fail('AUTO_MERGE_UNSUPPORTED', '自动合入需要已配置的 GitLab v4 兼容合入 API；GitHub 内部平台请在平台人工审核合入。');
   return receiver.change((state) => {
     const run = state.automation;
     if (!run || run.id !== input.runId || run.status === 'COMPLETE')
@@ -40,7 +40,7 @@ export async function autoMergeDelivery(receiver, options = {}) {
     )
       return;
     if (receiver.config.pullRequests?.mode !== 'gitlab')
-      fail('AUTO_MERGE_UNSUPPORTED', '当前平台未提供可核验的合入 API。');
+      fail('AUTO_MERGE_UNSUPPORTED', '当前平台未提供可核验的合入 API；GitHub 内部平台请在平台人工合入。');
     const d = receiver.requireActive(state);
     if (
       options.expected &&

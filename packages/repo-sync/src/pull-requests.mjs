@@ -1,8 +1,10 @@
 import { fail, objectUrl } from './config.mjs';
 import { phase } from './execution.mjs';
 import { validateGitPr } from './git-pr.mjs';
+import { githubPr } from './github-platform-pr.mjs';
 import { gitlabPr } from './gitlab-pr.mjs';
-import { validateGitlabApi } from './issue-adapter.mjs';
+import { validatePlatformApi } from './api-configuration.mjs';
+import { isPlatformMode } from './platform-detect.mjs';
 import { command } from './process.mjs';
 import { event } from './store.mjs';
 
@@ -11,9 +13,9 @@ export function validatePrConfig(config) {
   const adapter = config.pullRequests;
   if (!adapter) return;
   if (adapter.mode === 'git') return validateGitPr(config);
-  if (adapter.mode === 'gitlab' && config.internalWebUrl) return validateGitlabApi(config, adapter);
+  if (isPlatformMode(adapter.mode) && config.internalWebUrl) return validatePlatformApi(config, adapter);
   if (adapter.mode !== 'command' || !config.internalWebUrl)
-    fail('INVALID_PR_ADAPTER', '自动 PR 需要 mode=command、内部网页仓库地址和固定查询/创建命令');
+    fail('INVALID_PR_ADAPTER', '自动 PR 需要 command、gitlab、github 适配方式、内部网页仓库地址和固定查询/创建命令');
   for (const action of ['find', 'create']) {
     const value = adapter[action];
     if (
@@ -110,6 +112,7 @@ function payload(receiver, state, delivery) {
 }
 async function invoke(config, action, input) {
   if (config.pullRequests.mode === 'gitlab') return gitlabPr(config, action, input);
+  if (config.pullRequests.mode === 'github') return githubPr(config, action, input);
   const spec = config.pullRequests[action];
   const text = await command(spec.command, spec.args, {
     input: JSON.stringify({ ...input, action }),

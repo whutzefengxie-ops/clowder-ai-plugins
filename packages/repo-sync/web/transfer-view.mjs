@@ -1,5 +1,6 @@
 import { githubAuthForm } from './github-auth.mjs';
 import { authenticationForm } from './issue-auth.mjs';
+import { isPlatformMode } from './platform-kind.mjs';
 import { esc, sha } from './ui.mjs';
 
 const held = (snapshot) => ['IMPORTED', 'EXPORTED'].includes(snapshot.transfer?.status);
@@ -39,7 +40,7 @@ function heldView(snapshot, local, feedback) {
     source = transfer.status === 'EXPORTED';
   const checks = transfer.checks ?? [],
     passed = checks.length > 0 && checks.every((check) => check.status === 'PASSED');
-  const authActions = `${snapshot.config?.mode === 'continuous' ? '<button type="button" data-transfer-auth="github">GitHub 认证</button>' : ''}${snapshot.config?.platformApi?.mode === 'gitlab' || snapshot.config?.issueAutomation?.mode === 'gitlab' ? '<button type="button" data-transfer-auth="platform">内部平台认证</button>' : ''}`;
+  const authActions = `${snapshot.config?.mode === 'continuous' ? '<button type="button" data-transfer-auth="github">GitHub 认证</button>' : ''}${isPlatformMode(snapshot.config?.platformApi?.mode) || isPlatformMode(snapshot.config?.issueAutomation?.mode) ? '<button type="button" data-transfer-auth="platform">内部平台认证</button>' : ''}`;
   return `<section class="transfer-held"><span class="badge">${source ? '源项目已冻结' : '已导入 · 未启用'}</span><h3>${source ? '源环境已停止推进' : '完成迁移前核验'}</h3><details class="tech"><summary>说明</summary><div class="tech-copy">${source ? '将文件交给新环境后，请保持此项目冻结。仅在取消移交且新环境尚未启用或已经停止时，才确认恢复本环境。' : transfer.kind === 'template' ? '先核验新环境并确认启用，再继续登记已有同步起点。模板只复用设置，不携带原项目历史或进度。' : '补充你自己的认证，检查新路径与运行环境，再明确启用。既有历史、映射和待合入 PR 均保留；不会重新创建对象。'}</div></details><ol class="transfer-steps"><li><b>${authActions ? '补充本环境认证' : '准备本机 Git 认证（当前模式无需 API Token）'}</b>${authActions}<details class="transfer-auth"><summary>${authActions ? '认证详情与 Token 输入' : 'Git 访问准备说明'}</summary>${githubAuthForm(snapshot)}${authenticationForm(snapshot.config ?? {})}<p>Git 的 SSH 密钥或登录由本机 Git 管理，不在迁移包中；请先在本环境恢复对应 Git 访问。</p></details></li><li><b>核验运行环境与仓库绑定</b><button type="button" data-transfer-check>${checks.length ? '重新检查迁移条件' : '检查运行环境、仓库与认证'}</button><div class="transfer-checks" role="region" aria-label="迁移条件检查" tabindex="-1">${checksView(checks)}${feedback}</div></li><li><b>确认唯一执行环境，再明确启用</b><label class="transfer-confirm"><input type="checkbox" data-transfer-confirm ${local.confirmed ? 'checked' : ''}>${source ? '我确认新环境尚未启用或已停止，此接收分支只由本环境继续同步' : '我确认旧环境已停止推进，此接收分支只由本环境继续同步'}</label><button type="button" class="primary" data-transfer-activate ${passed && local.confirmed ? '' : 'disabled data-preserve-disabled'}>${source ? '原环境继续使用' : '确认启用此环境'}</button><p class="note-line">${transfer.kind === 'template' ? '模板启用后，继续核验并登记已有同步起点，才可开始同步。' : '启用只解除迁移暂停；不会自动启动下一笔同步。请回到工作台检查原进度后明确继续。'}</p></li></ol><details class="transfer-metadata"><summary>核对仓库、已接收位置与携带记录</summary>${summaryView(transfer.summary)}</details></section>`;
 }
 

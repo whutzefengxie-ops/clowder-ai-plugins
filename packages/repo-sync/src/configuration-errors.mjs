@@ -9,15 +9,21 @@ const messages = {
     https: 'API 基础地址需要以 https:// 开头；不能用 HTTP 地址发送 Token。',
     credentials: 'API 地址不能包含用户名、密码、Token、查询参数或 # 片段；凭据请使用下方 Token 设置。',
     root: '这里只填 API 基础地址，末尾为 /api/v4；若粘贴了调用地址，请去掉后面的 /projects/…/issues 等资源路径。',
+    rootGithub:
+      'GitHub 的 API 基础地址是 https://api.github.com（GitHub Enterprise 为 https://内网域名/api/v3）；若粘贴了调用地址，请去掉后面的 /repos/…/issues 等资源路径。',
   },
   issueProjectId: {
     path: '填写数字项目 ID 或项目路径（例如 team/core），不能填写完整网页地址；也可留空，从同一仓库的 Issue 链接生成。',
+    pathGithub: 'GitHub 项目填写 owner/repo（例如 clowder/core），不能填数字 ID、完整网页地址或带前后斜杠。',
   },
   issueAuthMode: { mode: '请选择“直接输入 Token”或“使用环境变量”。' },
   issueTokenEnv: {
     name: '这里填写变量名称，例如 REPO_SYNC_INTERNAL_TOKEN，不能填 Token 本身、$ 或等号；若要粘贴 Token，请改选“直接输入 Token”。',
   },
-  issueMode: { mode: '请选择 Issue 创建方式；命令适配器需在本机私有配置中接入。' },
+  issueMode: {
+    mode: '请选择 Issue 创建方式；命令适配器需在本机私有配置中接入。',
+    platform: 'Issue 自动化需要 GitLab v4 兼容接口或 GitHub API 的固定方式。',
+  },
   internalWebUrl: {
     url: '请填写内部仓库首页的完整 HTTPS 网页地址，用于核对 PR 和 Issue 归属；不要填写 Git 克隆地址或 Issue 列表地址。',
   },

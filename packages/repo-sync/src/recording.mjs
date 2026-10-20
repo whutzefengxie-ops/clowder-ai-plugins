@@ -62,7 +62,7 @@ export function validateSnapshot(snapshot) {
     snapshot.fingerprint !== fingerprint(snapshot) ||
     !Number.isInteger(snapshot.checkCount) ||
     snapshot.checkCount < 0 ||
-    !['manual', 'git', 'command', 'gitlab'].includes(snapshot.prTransport) ||
+    !['manual', 'git', 'command', 'gitlab', 'github'].includes(snapshot.prTransport) ||
     !['custom', 'git-integrity'].includes(snapshot.checkProfile)
   )
     fail('RECORD_INVALID', '历史配置摘要损坏或版本不支持，保留原记录，不能用当前配置替代');
@@ -211,7 +211,7 @@ export function phaseLocation(action, key, parent) {
 function validateIssueSnapshot(snapshot) {
   if (
     snapshot.issueTransport !== undefined &&
-    !['manual', 'command', 'gitlab'].includes(snapshot.issueTransport)
+    !['manual', 'command', 'gitlab', 'github'].includes(snapshot.issueTransport)
   )
     fail('RECORD_INVALID', '历史 Issue 适配方式无效');
 }

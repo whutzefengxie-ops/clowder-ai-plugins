@@ -57,6 +57,7 @@ const assets = new Map([
     'source-target.mjs',
     'issue-settings.mjs',
     'issue-reference-notes.mjs',
+    'platform-kind.mjs',
     'projects.mjs',
     'projects.css',
     'project-scope.mjs',

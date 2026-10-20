@@ -1,4 +1,5 @@
 import { pageProjectId, projectUrl } from './project-scope.mjs';
+import { isPlatformMode } from './platform-kind.mjs';
 export function createSetupFlow({ snapshot, render, action }) {
   let flow = {},
     signature,
@@ -83,7 +84,7 @@ export function createSetupFlow({ snapshot, render, action }) {
         internal = true;
       if (snapshot().config.mode === 'continuous')
         source = await check('GitHub：来源仓库和令牌读取', () => api('/api/github-check'));
-      if (snapshot().config.prTransport === 'gitlab' || snapshot().config.issueAutomation?.mode === 'gitlab')
+      if (isPlatformMode(snapshot().config.prTransport) || isPlatformMode(snapshot().config.issueAutomation?.mode))
         internal = await check('内部平台：对象接口只读验证', () => api('/api/issue-check'));
       if (identity() !== original) return;
       needsCheck = false;

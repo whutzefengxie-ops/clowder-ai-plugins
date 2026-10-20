@@ -1,14 +1,15 @@
 import { fail } from './config.mjs';
 import { apiSettings, authenticationStatus } from './issue-auth.mjs';
-import { apiConfiguration, apiInputKeys } from './issue-settings.mjs';
+import { apiConfiguration, apiInputKeys, resolvePlatform } from './issue-settings.mjs';
+import { isPlatformMode } from './platform-detect.mjs';
 import { prUrl } from './pull-requests.mjs';
 export function prConfiguration(config, mode, input = {}) {
   if (mode === undefined) return config?.pullRequests;
   if (mode === 'manual') return undefined;
   if (mode === 'git') return config?.pullRequests?.mode === 'git' ? { ...config.pullRequests } : { mode: 'git' };
   if (mode === 'command' && config?.pullRequests?.mode === 'command') return config.pullRequests;
-  if (mode === 'gitlab') return apiConfiguration(config, input);
-  fail('INVALID_PR_ADAPTER', '请选择 Git 自动创建或明确手工创建；命令适配器需先在私有配置接入');
+  const platform = resolvePlatform(config, input, mode);
+  return apiConfiguration(config, input, platform);
 }
 export function checkPlatformInput(input, receiver, revision) {
   if (
@@ -19,7 +20,8 @@ export function checkPlatformInput(input, receiver, revision) {
     fail('INVALID_CONFIGURATION_INPUT', '平台设置仅接受创建方式与网页仓库地址，不能提交命令');
   if (!receiver || input.expectedRevision !== revision)
     fail('CONFIGURATION_CHANGED', '配置已变化或尚未创建，请刷新核对');
-  if (!['git', 'manual', 'command', 'gitlab'].includes(input.prMode)) fail('INVALID_PR_ADAPTER', '请选择 PR 创建方式');
+  if (!['git', 'manual', 'command', 'gitlab', 'github', 'auto'].includes(input.prMode))
+    fail('INVALID_PR_ADAPTER', '请选择 PR 创建方式');
 }
 export function checkFrozenPr(active, previous, next, state = null) {
   const runActive = ['RUNNING', 'WAITING_REVIEW', 'PAUSED', 'FAILED'].includes(state?.automation?.status);
@@ -53,7 +55,7 @@ export function publicApi(config) {
   const value = config && apiSettings(config);
   return value
     ? {
-        mode: 'gitlab',
+        mode: isPlatformMode(value.mode) ? value.mode : 'gitlab',
         apiUrl: value.apiUrl,
         projectId: String(value.projectId),
         authMode: value.authMode ?? 'environment',

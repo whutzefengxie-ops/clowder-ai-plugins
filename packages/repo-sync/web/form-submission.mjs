@@ -1,5 +1,6 @@
 import { repositoryInput } from './connections.mjs';
 import { showFormErrors } from './form-errors.mjs';
+import { isPlatformMode } from './platform-kind.mjs';
 import { revealSetupResult } from './setup-navigation.mjs';
 export function initializeSubmissions(context) {
   const { snapshot, action, issueAuthentication, githubAuthentication, records, setup, complete, activate } =
@@ -88,7 +89,9 @@ export function initializeSubmissions(context) {
     const config = result.config ?? snapshot().config;
     const issue = await issueAuthentication.complete(
       result,
-      config?.prTransport === 'gitlab' || config?.issueAutomation?.mode === 'gitlab' ? tokens.issueToken : '',
+      isPlatformMode(config?.prTransport) || isPlatformMode(config?.issueAutomation?.mode)
+        ? tokens.issueToken
+        : '',
     );
     const source = await githubAuthentication.complete(
       result,

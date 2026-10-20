@@ -1,20 +1,22 @@
-import { validateGitlabApi } from './api-configuration.mjs';
+import { validatePlatformApi } from './api-configuration.mjs';
 import { fail, objectUrl } from './config.mjs';
+import { githubIssue } from './github-platform-issues.mjs';
 import { gitlabIssue } from './gitlab-issues.mjs';
+import { isPlatformMode } from './platform-detect.mjs';
 import { authenticationStatus } from './issue-auth.mjs';
 import { command } from './process.mjs';
 
-export { validateGitlabApi } from './api-configuration.mjs';
+export { validatePlatformApi, validatePlatformApi as validateGitlabApi } from './api-configuration.mjs';
 
 export function validateIssueConfig(config) {
   const value = config.issues;
   if (value === undefined) return;
-  if (!value || !['command', 'gitlab'].includes(value.mode))
-    fail('INVALID_ISSUE_CONFIG', 'Issue 自动化需要 command 或 gitlab 适配方式');
+  if (!value || !['command', 'gitlab', 'github'].includes(value.mode))
+    fail('INVALID_ISSUE_CONFIG', 'Issue 自动化需要 command、gitlab 或 github 适配方式');
   if (!config.internalWebUrl) fail('INVALID_ISSUE_CONFIG', 'Issue 自动化需要内部仓库网页地址，用于核验回执归属');
   objectUrl(config.internalWebUrl);
   if (value.mode === 'command') validateIssueCommand(value);
-  else validateGitlabApi(config, value);
+  else validatePlatformApi(config, value);
   if (
     value.timeoutMs !== undefined &&
     (!Number.isInteger(value.timeoutMs) || value.timeoutMs < 1000 || value.timeoutMs > 300000)
@@ -24,7 +26,8 @@ export function validateIssueConfig(config) {
 export async function invokeIssue(config, request) {
   const adapter = config.issues;
   if (!adapter) fail('ISSUE_AUTOMATION_REQUIRED', '请在仓库设置配置 Issue 自动化接口；Git 本身没有通用 Issue 创建指令');
-  if (adapter.mode === 'gitlab') return gitlabIssue(config, request);
+  if (isPlatformMode(adapter.mode))
+    return adapter.mode === 'github' ? githubIssue(config, request) : gitlabIssue(config, request);
   let result;
   try {
     result = JSON.parse(
@@ -87,7 +90,7 @@ export function publicIssues(config) {
     ? {
         mode: value.mode,
         automatic: true,
-        ...(value.mode === 'gitlab'
+        ...(isPlatformMode(value.mode)
           ? {
               apiUrl: value.apiUrl,
               projectId: String(value.projectId),

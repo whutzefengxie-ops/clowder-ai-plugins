@@ -209,6 +209,34 @@ Node 支持相应 API 时，平台客户端在首次请求前合并系统受信�
 
 已有 Git 创建意图或平台对象不会因改选 API 被重置；先核对原交付和既存 MR，不能用更换方式重复创建。基础 API 创建的内网证据来自用户测试；本轮作者完整回归使用隔离真实 Git 和 API 夹具，不能代替新版在该 CodeHub 的端到端验收。
 
+#### GitHub / GitHub Enterprise：内置 API 自动创建
+
+内部平台是 GitHub（例如用 fork 或私有镜像做验收）时，PR 与 Issue 都选择 **自动识别** 或 **GitHub / GitHub Enterprise API**。自动识别只看内部仓库地址与显式 API 版本：`github.com` 走 GitHub REST（`https://api.github.com`）；GitHub Enterprise 在高级设置填写 `https://内网域名/api/v3`，或直接选择 GitHub；其余自建地址继续按内部标准走 GitLab v4。识别结果会显示在 Issue 链接下方的推断说明里，保存后由只读检查确认仓库归属。
+
+GitHub 与 GitLab 共用同一套冻结字段和写后回读规则，差异只在协议：
+
+- **项目身份**：`projectId` 是 `owner/repo`（不是数字 ID）。只读检查调用 `GET /repos/{owner}/{repo}`，并要求返回的 `full_name` 与 `html_url` 和配置一致。
+- **PR**：按 `head=owner:分支`、`base=目标分支` 查询，回读 `head.sha`、`base.sha` 与状态；PR 正文保留 `[repo-sync-pr:交付ID]`；重复对象、来源标识丢失或 head 变化仍然暂停，不创建第二个 PR。
+- **Issue**：正文保留 `[repo-sync-issue:稳定键]`。查找按创建时间倒序列出仓库 Issue 并核对标识，而不是使用 GitHub 搜索索引——创建后立即回读不会因索引延迟误判为“未找到”而重复建单。
+- **关联**：在 PR 正文追加 `Related to #编号` 与 `[repo-sync-link:…]`，再回读 PR 的 head / base / 状态确认。
+- **Token**：在“内部平台 Token”填写 GitHub PAT，需要仓库的 Issues 与 Pull requests 读写权限；与来源读取 Token、Git 凭据仍是三套独立认证，同样只留在服务内存。
+
+```json
+{
+  "internalWebUrl": "https://github.com/example-org/core-sync",
+  "pullRequests": {
+    "mode": "github", "apiUrl": "https://api.github.com",
+    "projectId": "example-org/core-sync", "authMode": "session"
+  },
+  "issues": {
+    "mode": "github", "apiUrl": "https://api.github.com",
+    "projectId": "example-org/core-sync", "authMode": "session"
+  }
+}
+```
+
+限制：自动合入仍只支持 GitLab v4 兼容的合入接口；GitHub 内部平台的 PR 需要在平台审核合入，工作台会回读合入结果并继续 Issue 关单与接收核验，不会请求平台合入。GitHub Enterprise 若未在高级设置提供 `/api/v3` 地址，会按 GitLab v4 推断而得到 404；请显式选择 GitHub 或补全 API 地址。
+
 #### 通过 Git 推送自动创建（正式向导默认选择）
 
 仓库设置中的 **PR 创建方式 → Git 推送时自动创建 PR** 会将创建动作接入准备同步：检查候选 → 同一次推送触发 PR → 解析服务器返回的具体 PR 地址 → 回读候选 ref → 自动登记 → 等待平台审核。正常路径不填写 PR 链接，也不手工创建。已有基线可在 **PR 自动创建设置** 启用，保持原台账；命令适配器也已接入准备步骤，配置后会自动执行。

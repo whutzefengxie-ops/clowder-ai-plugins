@@ -41,7 +41,7 @@ export async function synchronize(receiver, input, options = {}) {
     fail('CANCELLATION_PENDING', '原 PR 撤销尚未完成，请继续回读原撤销结果，不恢复普通同步。');
   validateRequest(state, input);
   if (input.autoMerge === true && receiver.config.pullRequests?.mode !== 'gitlab')
-    fail('AUTO_MERGE_UNSUPPORTED', '当前平台创建方式没有合入 API，未开始任何新交付。');
+    fail('AUTO_MERGE_UNSUPPORTED', '当前平台创建方式没有可核验的合入 API；GitHub 内部平台请审核后在平台人工合入，未开始任何新交付。');
   if (input.action === 'configure-auto-merge') return configureAutoMerge(receiver, input);
   if (input.action === 'configure-continuation') return configureContinuation(receiver, input);
   if (input.action === 'pause-sync') return pause(receiver, input.runId);

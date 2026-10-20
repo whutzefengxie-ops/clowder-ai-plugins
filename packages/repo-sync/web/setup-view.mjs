@@ -6,6 +6,7 @@ import { githubAuthForm } from './github-auth.mjs';
 import { authenticationForm } from './issue-auth.mjs';
 import { issueFields } from './issue-settings.mjs';
 import { prCreationFields } from './platform.mjs';
+import { suggestedMode } from './platform-kind.mjs';
 import { repositoryFields, sourceAuthenticationFields } from './repository-fields.mjs';
 import { enabledSettings } from './settings-view.mjs';
 import { when } from './ui.mjs';
@@ -33,7 +34,10 @@ export function setupConfiguration(snapshot, esc, sha, button, flow = {}) {
   return `${nav}${previous}<section class="card setup-current" data-setup-current id="baseline-step"><h2>2 · 核验已有同步起点</h2><p><b>外部填上次已接收版本；内部读取当前接收分支 HEAD。</b>外部即使已新增 20 个提交，也不应把最新版本填作历史起点。</p><button type="button" data-action="heads">读取两侧当前版本</button><div id="observed-heads" role="status"></div><form data-form="inspect-baseline"><label for="upstream">上次已经接收的外部版本 <small>U0 · 历史 tag 或完整 commit SHA，不是本次目标</small><input id="upstream" name="upstream" required value="${esc(flow.inputs?.upstream ?? '')}" placeholder="v1.0.0 或上次已接收的完整 SHA"></label><label for="internal">内部当前接收位置 <small>I0 · 当前合入分支 HEAD</small><input id="internal" name="internal" required value="${esc(flow.inputs?.internal ?? flow.heads?.internal ?? '')}"></label><p>内部第一次同步后有专项改动：U0 仍填第一次接收的外部 A，I0 填内部现在的 main。两侧 SHA 可以不同，核心文件必须一致。</p><button ${flow.report?.valid ? '' : 'class="primary"'}>核验起点并查看文件 →</button></form>${reportPanel(flow.report, snapshot, esc)}${activity}</section>${storageDetails(snapshot, esc)}`;
 }
 function connectionForm(config, connection, esc) {
-  const defaultIssueMode = config?.issueAutomation?.mode ?? (config?.mode === 'continuous' ? 'gitlab' : 'manual');
+  const defaultIssueMode = suggestedMode(
+    config,
+    config?.issueAutomation?.mode ?? (config?.mode === 'continuous' ? 'auto' : 'manual'),
+  );
   return `<form data-form="configure-repositories"><input type="hidden" name="expectedRevision" value="${esc(connection?.revision ?? '')}"><fieldset data-mode-cards><legend>你希望同步什么？（必选）</legend><div class="mode-cards">${[
     ['version', '按版本更新', '选择 tag，保留内部文件，创建一个同步 PR；不搬运 Issue。'],
     ['continuous', '同步开发过程', '逐笔搬运 PR / 主干提交、Issue 和提交映射；人工合入后自动继续。'],
@@ -47,7 +51,7 @@ function connectionForm(config, connection, esc) {
     )}</div></fieldset><h3>A · 仓库地址与分支</h3>${repositoryFields(config, esc)}<button type="button" data-next-auth>下一步：配置认证与自动化 →</button><details class="connection-auth" data-connection-auth data-persist-details="connection-auth" ${config ? 'open' : ''}><summary>B · 认证与自动化（保存前填写）</summary><p>本次填写尚未重新验证；填写必要认证后，点击“保存并检查连接”读取两侧仓库。</p><dl class="auth-channels"><div><dt>本机 Git 登录</dt><dd>读取与推送代码 · HTTPS 凭据管理器或 SSH</dd></div><div><dt>GitHub Token</dt><dd>读取来源 PR / Issue · 开发过程模式需要</dd></div><div><dt>内部平台 Token</dt><dd>创建 PR、搬运 Issue 与关单 · 接口自动化需要</dd></div></dl>${sourceAuthenticationFields()}<section class="internal-automation"><h3>内部对象自动化</h3>${prCreationFields(config)}${issueFields({ ...config, mode: config?.mode ?? 'version', issueAutomation: { mode: defaultIssueMode } }, esc)}</section><section data-closure ${config?.mode === 'continuous' ? '' : 'hidden'}><details><summary>首次接收条件：提交消息关单规则</summary>${closureInstructions()}<label><input type="checkbox" name="commitClosureVerified" ${config?.commitClosureVerified ? 'checked' : ''}>已在独立测试仓验证，或管理员已验证禁用提交消息关单</label><p>未确认可继续配置；首次发布会暂停在此条件。</p></details></section><details class="identity-advanced"><summary>提交身份（可选 · 默认保留上游身份）</summary>${commitFields(config, esc)}</details><details data-policy><summary>内部保留范围（下一步可从文件树选择）</summary>${fileRuleFields(config?.internalPaths)}</details><p>代码通过本机 Git 凭据访问；API Token 不替代 Git 登录。仅检查连接，不创建 Issue / PR，不推送 main。</p><button class="primary" type="submit">保存并检查连接 →</button></details></form>`;
 }
 export function repositorySummary(config, esc) {
-  return `<div class="split"><div><small>外部来源 · ${esc(config.sourceBranch)}</small><code>${esc(config.sourceUrl)}</code></div><div><small>内部接收 · ${esc(config.targetBranch)}</small><code>${esc(config.internalUrl)}</code></div></div><p class="note-line">${config.mode === 'version' ? '按版本更新 · 一个同步 PR' : '同步开发过程 · 逐笔接收'} · 保留内部：${esc((config.internalPaths ?? []).join('、') || '无')}</p>`;
+  return `<div class="repo-binding"><article class="repo-side"><div class="repo-side-head"><span class="repo-role">外部来源</span><span class="badge">${esc(config.sourceBranch)}</span></div><code class="repo-url" title="${esc(config.sourceUrl)}">${esc(config.sourceUrl)}</code></article><article class="repo-side"><div class="repo-side-head"><span class="repo-role">内部接收</span><span class="badge">${esc(config.targetBranch)}</span></div><code class="repo-url" title="${esc(config.internalUrl)}">${esc(config.internalUrl)}</code></article></div><p class="note-line">${config.mode === 'version' ? '按版本更新 · 一个同步 PR' : '同步开发过程 · 逐笔接收'} · 保留内部：${esc((config.internalPaths ?? []).join('、') || '无')}</p>`;
 }
 function checkList(checks, esc) {
   if (!checks.length) return '';

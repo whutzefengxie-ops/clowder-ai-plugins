@@ -1,4 +1,5 @@
 import { clearFormErrors, showFormErrors } from './form-errors.mjs';
+import { isPlatformMode } from './platform-kind.mjs';
 import { pageProjectId, projectUrl } from './project-scope.mjs';
 import { esc } from './ui.mjs';
 export function createSettingsController(snapshot, refresh) {
@@ -10,13 +11,6 @@ export function createSettingsController(snapshot, refresh) {
     const area = document.querySelector('[data-settings-result]');
     if (area) area.innerHTML = feedback.html;
   }
-  document.addEventListener('click', (event) => {
-    const key = event.target.closest('[data-clear-secret]')?.dataset.clearSecret;
-    if (key) {
-      const field = document.querySelector(`[name="${key}"]`);
-      if (field) field.value = '';
-    }
-  });
   async function submit(form) {
     if (sending) return;
     clearFormErrors(form);
@@ -30,7 +24,9 @@ export function createSettingsController(snapshot, refresh) {
     if (!fields.internalWebUrl && !initial.config.internalWebUrl && fields.prMode === 'manual')
       delete fields.internalWebUrl;
     const strategy = fields.commitStrategy;
-    if (initial.config.mode === 'continuous' && fields.prMode === 'gitlab') fields.issueMode = 'gitlab';
+    if (initial.config.mode === 'continuous' && isPlatformMode(fields.prMode)) fields.issueMode = fields.prMode;
+    if (initial.config.mode === 'continuous' && fields.prMode === 'auto' && isPlatformMode(fields.issueMode))
+      fields.issueMode = 'auto';
     if (strategy) {
       fields.receivingIdentity = {
         name: fields.commitName?.trim(),

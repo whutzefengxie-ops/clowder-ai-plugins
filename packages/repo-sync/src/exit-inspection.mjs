@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import { fail } from './config.mjs';
 import { phase } from './execution.mjs';
+import { githubPlatformApi } from './github-platform-api.mjs';
+import { githubPr } from './github-platform-pr.mjs';
 import { gitlabApi } from './gitlab-api.mjs';
 import { gitlabPr } from './gitlab-pr.mjs';
+import { isPlatformMode } from './platform-detect.mjs';
 import { git } from './process.mjs';
 import { prUrl } from './pull-requests.mjs';
 
@@ -21,26 +24,42 @@ export async function internalHead(receiver) {
   return receiver.git.sha('refs/sync/internal');
 }
 export async function originalPr(receiver, d) {
-  if (receiver.config.pullRequests?.mode !== 'gitlab') return undefined;
+  const mode = receiver.config.pullRequests?.mode;
+  if (!isPlatformMode(mode)) return undefined;
+  const config = receiver.config;
   let found;
   if (d.prUrl) {
-    const url = prUrl(receiver.config, d.prUrl);
+    const url = prUrl(config, d.prUrl);
     const id = /\/(\d+)$/.exec(url)?.[1];
     if (!id) fail('PR_OBJECT_MISMATCH', '原 PR 编号无效，未关闭任何对象。');
-    const item = await gitlabApi(receiver.config, receiver.config.pullRequests, 'PR').request(`merge_requests/${id}`);
-    if (d.prCreation && !item?.description?.includes(`[repo-sync-pr:${d.id}]`))
-      fail('PR_OBJECT_MISMATCH', '原 PR 来源标识不匹配，未关闭任何对象。');
-    found = item && { branch: item.source_branch, targetBranch: item.target_branch,
-      head: item.sha, state: item.state === 'opened' ? 'open' : item.state, url: item.web_url };
-  } else found = await gitlabPr(receiver.config, 'find', {
-    deliveryId: d.id, branch: d.branch, targetBranch: receiver.config.targetBranch,
-  });
+    if (mode === 'github') {
+      const item = await githubPlatformApi(config, config.pullRequests, 'PR').request(`pulls/${id}`);
+      if (d.prCreation && !item?.body?.includes(`[repo-sync-pr:${d.id}]`))
+        fail('PR_OBJECT_MISMATCH', '原 PR 来源标识不匹配，未关闭任何对象。');
+      found = item && {
+        branch: item.head?.ref,
+        targetBranch: item.base?.ref,
+        head: item.head?.sha,
+        state: item.merged === true ? 'merged' : item.state,
+        url: item.html_url,
+      };
+    } else {
+      const item = await gitlabApi(config, config.pullRequests, 'PR').request(`merge_requests/${id}`);
+      if (d.prCreation && !item?.description?.includes(`[repo-sync-pr:${d.id}]`))
+        fail('PR_OBJECT_MISMATCH', '原 PR 来源标识不匹配，未关闭任何对象。');
+      found = item && { branch: item.source_branch, targetBranch: item.target_branch,
+        head: item.sha, state: item.state === 'opened' ? 'open' : item.state, url: item.web_url };
+    }
+  } else {
+    const input = { deliveryId: d.id, branch: d.branch, targetBranch: config.targetBranch };
+    found = mode === 'github' ? await githubPr(config, 'find', input) : await gitlabPr(config, 'find', input);
+  }
   // diff_refs.base_sha can legitimately change when unrelated work advances main.
   if (found && (found.head !== d.candidate || found.branch !== d.branch ||
-      found.targetBranch !== receiver.config.targetBranch ||
+      found.targetBranch !== config.targetBranch ||
       (d.prUrl && found.url !== d.prUrl) || !['open', 'closed', 'merged'].includes(found.state)))
     fail('PR_OBJECT_MISMATCH', '原 PR 的仓库、分支、候选或状态不匹配；未操作其他对象。');
-  if (found) prUrl(receiver.config, found.url);
+  if (found) prUrl(config, found.url);
   return found;
 }
 export async function inspectCandidate(receiver, d) {

@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { commitPolicy } from './commit-policy.mjs';
 import { validateIssueConfig } from './issue-adapter.mjs';
 import { versionPolicy } from './policy.mjs';
+import { isPlatformMode } from './platform-detect.mjs';
 import { validatePrConfig } from './pull-requests.mjs';
 
 export function fail(code, message, details) {
@@ -92,15 +93,16 @@ export function validateConfig(input) {
   validatePrConfig(config);
   validateIssueConfig(config);
   if (
-    config.issues?.mode === 'gitlab' &&
-    config.pullRequests?.mode === 'gitlab' &&
-    ['apiUrl', 'projectId', 'authMode', 'tokenEnv'].some(
-      (key) => String(config.issues[key] ?? '') !== String(config.pullRequests[key] ?? ''),
-    )
+    isPlatformMode(config.issues?.mode) &&
+    isPlatformMode(config.pullRequests?.mode) &&
+    (config.issues.mode !== config.pullRequests.mode ||
+      ['apiUrl', 'projectId', 'authMode', 'tokenEnv'].some(
+        (key) => String(config.issues[key] ?? '') !== String(config.pullRequests[key] ?? ''),
+      ))
   )
     fail(
       'PLATFORM_API_SCOPE_CONFLICT',
-      'Issue 与 PR 的内置 API 必须使用同一个平台项目和认证设置，请在当前仓库统一核对。',
+      'Issue 与 PR 的内置接口必须使用同一个平台实现、平台项目和认证设置，请在当前仓库统一核对。',
     );
   return config;
 }

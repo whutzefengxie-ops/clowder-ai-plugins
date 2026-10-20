@@ -7,6 +7,9 @@ import { mapIssue, recordReceipts } from './metadata.mjs';
 import { event } from './store.mjs';
 
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export function definitiveIssueFailure(error) {
+  return error?.code === 'ISSUE_AUTH_REQUIRED' || (error?.httpStatus >= 400 && error?.httpStatus < 500);
+}
 function adapterIdentity(receiver, state) {
   if (!receiver.config.issues)
     fail('ISSUE_AUTOMATION_REQUIRED', '先在仓库设置配置真实 Issue 自动化；当前为人工登记方式');
@@ -60,11 +63,19 @@ export async function ensureIssues(receiver, state, delivery) {
           state.issueIntents[issue.sourceId] = { key: request.key, time: new Date().toISOString() };
           await receiver.store.save(state);
           try {
-            await call(receiver, request, 'create');
-          } catch {
+            result = await call(receiver, request, 'create');
+          } catch (error) {
+            // 4xx 与认证缺失可以确定没有创建对象：清掉本次意图后把真实原因报给用户，
+            // 否则“意图已保存”会让后续恢复永远只查不建，形成死锁。
+            if (definitiveIssueFailure(error)) {
+              delete state.issueIntents[issue.sourceId];
+              await receiver.store.save(state);
+              throw error;
+            }
             fail('ISSUE_CREATE_RESULT_UNKNOWN', 'Issue 创建回执未确认；意图已保存，恢复时先回读原对象，不重复创建');
           }
-          result = await call(receiver, request, 'find');
+          // 直接使用创建回执：GitHub 的列表接口存在读后写延迟，紧接着再 find
+          // 可能看不到刚创建的 Issue，从而误报“原 Issue 未查到”。
         }
         mapIssue(state, delivery, issue.sourceId, result.internalId, result.url);
         state.issueAdapterId ??= digest(receiver.config.issues);

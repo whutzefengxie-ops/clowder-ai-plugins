@@ -1,14 +1,15 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fail } from './config.mjs';
+import { isPlatformMode } from './platform-detect.mjs';
 
 const sessions = new Map();
 const verified = new Set();
 const key = (config) => JSON.stringify([resolve(config.stateDir), config.bindingId ?? null]);
 export const apiSettings = (config) =>
-  config.issues?.mode === 'gitlab'
+  isPlatformMode(config.issues?.mode)
     ? config.issues
-    : config.pullRequests?.mode === 'gitlab'
+    : isPlatformMode(config.pullRequests?.mode)
       ? config.pullRequests
       : null;
 const identity = (settings) =>
@@ -32,7 +33,7 @@ export function issueToken(config, settings = apiSettings(config)) {
   if (!value)
     fail(
       'ISSUE_AUTH_REQUIRED',
-      '请在当前项目的 Issue 设置输入 Token；使用环境变量的旧配置也可以继续。服务重启后需重新输入。',
+      '请在当前项目的内部平台认证输入 Token；使用环境变量的旧配置也可以继续。服务重启后需重新输入。',
     );
   return value;
 }
@@ -50,7 +51,10 @@ function environmentToken(settings) {
 }
 export function setIssueToken(config, token, owner) {
   if (!apiSettings(config))
-    fail('ISSUE_AUTH_UNSUPPORTED', '当前平台方式没有内置 Token 接口，请先配置 GitLab 兼容 API。');
+    fail(
+      'ISSUE_AUTH_UNSUPPORTED',
+      '当前平台方式没有内置 Token 接口，请先配置 GitLab v4 兼容接口或 GitHub API。',
+    );
   if (
     typeof token !== 'string' ||
     token.length > 32768 ||

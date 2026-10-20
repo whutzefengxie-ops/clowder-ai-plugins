@@ -3,9 +3,9 @@ import { safeError } from './execution.mjs';
 import { api, graphql, withGithub } from './gh-api.mjs';
 import { githubRepository } from './github.mjs';
 import { setGithubToken } from './github-auth.mjs';
-import { gitlabApi } from './gitlab-api.mjs';
 import { body, requireToken, send } from './http.mjs';
 import { apiSettings, setIssueToken } from './issue-auth.mjs';
+import { readPlatformProject, verifyPlatformProject } from './platform-project.mjs';
 import { checkProjectInput } from './server-projects.mjs';
 
 export async function projectSettingsRequest(request, response, path, context, token, owner) {
@@ -54,8 +54,9 @@ export async function projectSettingsRequest(request, response, path, context, t
     );
   if (apiSettings(receiver.config))
     await check('内部平台认证', async () => {
-      const project = await gitlabApi(receiver.config, apiSettings(receiver.config)).request('');
-      if (project?.web_url?.replace(/\/$/, '') !== receiver.config.internalWebUrl)
+      const settings = apiSettings(receiver.config);
+      const project = await readPlatformProject(receiver.config, settings);
+      if (!verifyPlatformProject(settings, receiver.config, project))
         fail('ISSUE_API_UNSUPPORTED', '平台返回的项目与当前仓库不符');
     });
   if (receiver.config.mode === 'continuous' && sourceProvided)

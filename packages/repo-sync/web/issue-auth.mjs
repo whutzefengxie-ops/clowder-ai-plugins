@@ -1,14 +1,15 @@
 import { updateIssueInference } from './issue-inference.mjs';
+import { isPlatformMode, platformLabel } from './platform-kind.mjs';
 import { esc } from './ui.mjs';
 
 export function tokenField() {
-  return '<label>内部平台 Token<input type="password" name="issueToken" autocomplete="off" placeholder="输入 Token，不回显原值"></label><p>仅供当前项目的平台 API 使用；只保留在本次服务内存，重启后需要重新输入，不保存到浏览器草稿、配置或执行记录。</p>';
+  return '<label>内部平台 Token<input type="password" name="issueToken" autocomplete="off" placeholder="输入 Token，不回显原值"></label><p>仅供当前项目的平台 API 使用（GitLab Token 或 GitHub PAT）；只保留在本次服务内存，重启后需要重新输入，不保存到浏览器草稿、配置或执行记录。</p>';
 }
 export function authenticationForm(config) {
   const api = config.platformApi ?? config.issueAutomation;
-  if (api?.mode !== 'gitlab') return '';
+  if (!isPlatformMode(api?.mode)) return '';
   const available = api.authentication?.available;
-  return `<section id="issue-auth"><h4>平台认证与接口验证</h4><p>${available ? '认证已提供；仍需验证接口。' : '需要提供 Token，或恢复原环境变量。'}输入 Token 不代表平台接口已通过核验。</p><p class="credential-scope"><b>此 Token 的 API 接收地址：</b><code>${esc(api.apiUrl ?? '请先核对平台接口配置')}</code><br>平台项目：<code>${esc(api.projectId ?? '未配置')}</code>。导入的配置也会使用此地址；请核对它属于预期的内部平台，再提供认证和检查。</p><form data-secret-form="issue-token">${tokenField()}<button type="submit">提供 / 更换 Token（本次服务）</button><button type="button" data-issue-check>验证平台接口（只读）</button><button type="button" data-issue-clear>清除本次输入的 Token</button></form><p data-auth-feedback role="status"></p></section>`;
+  return `<section id="issue-auth"><h4>${esc(platformLabel(api.mode))} 平台认证与接口验证</h4><p>${available ? '认证已提供；仍需验证接口。' : '需要提供 Token，或恢复原环境变量。'}输入 Token 不代表平台接口已通过核验。</p><p class="credential-scope"><b>此 Token 的 API 接收地址：</b><code>${esc(api.apiUrl ?? '请先核对平台接口配置')}</code><br>平台项目：<code>${esc(api.projectId ?? '未配置')}</code>。导入的配置也会使用此地址；请核对它属于预期的内部平台，再提供认证和检查。</p><form data-secret-form="issue-token">${tokenField()}<div class="token-actions"><button type="submit">提供 / 更换 Token（本次服务）</button><button type="button" data-issue-check>验证平台接口（只读）</button></div></form><p data-auth-feedback role="status"></p></section>`;
 }
 export function createIssueAuthentication(snapshot, refresh, errorPanel) {
   async function request(path, value, scope = snapshot()) {
@@ -73,9 +74,8 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
   }
   document.addEventListener('click', async (event) => {
     const provide = event.target.closest('[data-auth-provide="issue"]'),
-      check = event.target.closest('[data-issue-check]'),
-      clear = event.target.closest('[data-issue-clear]');
-    if (!provide && !check && !clear) return;
+      check = event.target.closest('[data-issue-check]');
+    if (!provide && !check) return;
     try {
       if (provide) {
         const panel = provide.closest('[data-auth-panel="issue"]');
@@ -85,9 +85,6 @@ export function createIssueAuthentication(snapshot, refresh, errorPanel) {
         if (!value) throw Error('请先输入内部平台 Token；空值不会覆盖已有认证。');
         await set(value);
         feedback('✓ Token 已保存到本次服务。请点击旁边的只读验证按钮确认接口权限。');
-      } else if (clear) {
-        await set('');
-        feedback('已清除本次输入；环境变量认证若存在仍保留。');
       } else {
         const result = await request('/api/issue-check', {});
         await refresh();
@@ -134,6 +131,7 @@ export function updateIssueFields(form) {
   if (pr && summary)
     summary.textContent = `保存后采用：${pr.selectedOptions[0].textContent}；审核合入仍在内部平台完成。`;
   const mode = form.elements.namedItem('issueMode')?.value,
+    prMode = pr?.value,
     auth = form.elements.namedItem('issueAuthMode')?.value,
     version = form.elements.namedItem('mode') ? form.elements.namedItem('mode').value !== 'continuous' : false;
   const sourceAuth = form.querySelector('[data-source-auth]');
@@ -142,11 +140,19 @@ export function updateIssueFields(form) {
   if (closure) closure.hidden = version;
   const selection = form.querySelector('[data-issue-selection]');
   if (selection) selection.hidden = version;
+  const platformSelected = isPlatformMode(prMode) || isPlatformMode(mode),
+    automatic = !platformSelected && !version && (mode === 'auto' || prMode === 'auto');
   const api = form.querySelector('[data-issue-api]');
-  if (api) api.hidden = form.elements.namedItem('prMode')?.value !== 'gitlab' && (version || mode !== 'gitlab');
+  if (api) {
+    api.hidden = !platformSelected && !automatic;
+    // 自动识别时以服务端推断为准，避免旧平台的高级地址被带入下一次保存。
+    for (const name of ['issueApiUrl', 'issueProjectId']) {
+      const field = form.elements.namedItem(name);
+      if (field) field.disabled = automatic;
+    }
+  }
   const platformAuth = form.querySelector('[data-platform-auth]');
-  if (platformAuth)
-    platformAuth.hidden = form.elements.namedItem('prMode')?.value !== 'gitlab' && mode !== 'gitlab';
+  if (platformAuth) platformAuth.hidden = !platformSelected && !automatic;
   const manualPlatformNote = form.querySelector('[data-manual-platform-note]');
   if (manualPlatformNote) manualPlatformNote.hidden = !platformAuth?.hidden;
   const direct = form.querySelector('[data-issue-token]'),
