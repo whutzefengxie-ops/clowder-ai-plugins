@@ -15,7 +15,7 @@ export function githubUrl(path) {
     url.username ||
     url.password ||
     url.hash ||
-    !/^\/(repos\/[^/]+\/[^/]+(?:\/|$)|graphql$)/.test(url.pathname)
+    !/^\/(repos\/[^/]+\/[^/]+(?:\/|$)|repositories\/\d+(?:\/|$)|graphql$)/.test(url.pathname)
   )
     fail('GITHUB_RESPONSE_INVALID', 'GitHub 请求或分页地址超出来源接口范围，已暂停；不会向其他地址发送凭据。');
   return url;

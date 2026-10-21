@@ -146,3 +146,26 @@ test('cancelling a native GitHub request aborts that request rather than becomin
   await assert.rejects(running, { code: 'OPERATION_CANCELLED' });
   assert.equal(calls, 1);
 });
+test('repository-id pagination links continue the same repository resource', async (t) => {
+  isolated(t);
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(String(url));
+    return Response.json([{ number: calls.length }], {
+      headers:
+        calls.length === 1
+          ? {
+              link: '<https://api.github.com/repositories/1179679081/pulls/1519/commits?per_page=100&page=2>; rel="next"',
+            }
+          : {},
+    });
+  });
+  assert.deepEqual(
+    await api('repos/zts212653/clowder-ai/pulls/1519/commits?per_page=100', true),
+    [{ number: 1 }, { number: 2 }],
+  );
+  assert.equal(
+    calls[1],
+    'https://api.github.com/repos/zts212653/clowder-ai/pulls/1519/commits?per_page=100&page=2',
+  );
+});

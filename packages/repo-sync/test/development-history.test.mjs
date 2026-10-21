@@ -54,7 +54,7 @@ test('squashed PR restores all 18 commits with unified identity, exact messages,
 
 test('incomplete development metadata stops before Issue creation or candidate publication', async () => {
   const f = await developmentFixture(3);
-  f.commits.pop();
+  f.pr.commits = f.commits.length + 1;
   await assert.rejects(() => discover(f.receiver, { kind: 'latest' }, f.provider), { code: 'PR_HISTORY_INCOMPLETE' });
   assert.equal((await f.receiver.status()).queue.length, 0);
 });

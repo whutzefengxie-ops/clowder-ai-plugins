@@ -24,9 +24,18 @@ export async function api(path, paged = false) {
       if (/rel="next"/.test(link)) fail('GITHUB_RESPONSE_INVALID', 'GitHub 分页回执无法解析，未静默截断。');
       return items;
     }
-    url = githubUrl(next);
+    url = sameRepositoryPage(githubUrl(next), first);
   }
   fail('GITHUB_RESPONSE_LIMIT', 'GitHub 分页超过读取上限，请收窄同步范围；不会静默截断。');
+}
+// GitHub 在部分分页 Link 中使用 /repositories/{id}/...，而不是请求时的
+// /repos/{owner}/{repo}/...；把后缀映射回原仓库前缀，既允许继续分页，
+// 也避免把凭据发往另一个仓库或地址。
+function sameRepositoryPage(url, first) {
+  const repository = /^\/repos\/[^/]+\/[^/]+/.exec(first)?.[0];
+  const byId = /^\/repositories\/\d+(\/.*)?$/.exec(url.pathname);
+  if (repository && byId) url.pathname = `${repository}${byId[1] ?? ''}`;
+  return url;
 }
 export async function graphql(query, variables) {
   requireGithubToken(context.getStore());

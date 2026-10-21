@@ -13,11 +13,24 @@ export async function developmentHistory(receiver, provider, repo, pr, introduce
   if (receiver.config.commitStrategy !== 'rewrite' || introduced.length !== 1 || pr.commits === 1) return summary;
   if (!sha(pr.head?.sha) || !Number.isSafeInteger(pr.number) || pr.number < 1)
     fail('PR_HISTORY_INCOMPLETE', '展开 squash PR 需要明确的 PR 编号和冻结 head。');
-  const items = await provider.api(`repos/${repo}/pulls/${pr.number}/commits?per_page=100`, true);
-  if (!Array.isArray(items) || items.length !== pr.commits || items.some((item) => !sha(item?.sha)) ||
-      new Set(items.map((item) => item.sha)).size !== items.length || !items.some((item) => item.sha === pr.head.sha))
+  const ref = `refs/sync/pr/${pr.number}`;
+  await fetchPrHead(receiver, pr.number, ref);
+  const frozenHead = await receiver.git.sha(ref);
+  if (frozenHead !== pr.head.sha) fail('PR_HISTORY_CHANGED', 'PR head 与读取的 ref 不一致；未创建 Issue / PR。');
+  // GitHub 的 pulls/{n}/commits 只返回前 250 条；大 PR 会被截断。
+  // 已把 PR head 拉进私有对象库，直接用 Git 计算 base..head 的完整提交，
+  // 既不受 API 上限影响，也与后续冻结清单使用同一顺序。
+  const output = await git(receiver.git.directory, [
+    'rev-list',
+    '--reverse',
+    '--topo-order',
+    pr.head.sha,
+    `^${base}`,
+  ]);
+  const commits = output ? output.split('\n').filter(Boolean) : [];
+  if (commits.length !== pr.commits || new Set(commits).size !== commits.length || commits.at(-1) !== pr.head.sha)
     fail('PR_HISTORY_INCOMPLETE', 'PR 开发提交清单缺失、重复或被平台截断；未创建 Issue / PR，请核对来源读取权限和完整清单。');
-  const replay = { schema: 1, head: pr.head.sha, commits: items.map((item) => item.sha), landingBase: base, landing: pr.merge_commit_sha };
+  const replay = { schema: 1, head: pr.head.sha, commits, landingBase: base, landing: pr.merge_commit_sha };
   try {
     await verifyDevelopmentHistory(receiver, { source: { number: pr.number, developmentReplay: replay }, base: { upstream: base }, target: pr.merge_commit_sha });
   } catch (error) {
