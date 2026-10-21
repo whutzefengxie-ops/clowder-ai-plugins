@@ -95,6 +95,18 @@ export async function autoMergeDelivery(receiver, options = {}) {
     const number = Number(/\/(\d+)$/.exec(found.url)?.[1]);
     if (!Number.isSafeInteger(number) || number < 1) fail('PR_OBJECT_MISMATCH', '自动合入的 PR 编号无效。');
     const pending = Boolean(d.autoMerge?.requestedAt && !d.autoMerge.requestRejected);
+    let retryPending = false;
+    if (pending && Date.now() - Date.parse(d.autoMerge.requestedAt) > 60000) {
+      if (d.autoMerge.retried) {
+        d.autoMerge.status = 'BLOCKED';
+        d.autoMerge.reason = '合入请求两次未确认，PR 仍打开；请打开原 PR 手动合入，或恢复同步后再试';
+        d.autoMerge.requestRejected = true;
+        event(state, d, d.autoMerge.reason);
+        if (!options.observeOnly) fail('AUTO_MERGE_BLOCKED', d.autoMerge.reason);
+        return;
+      }
+      retryPending = true;
+    }
     if (mode === 'github') {
       const detail = await githubPrDetail(receiver.config, number);
       if (
@@ -105,7 +117,7 @@ export async function autoMergeDelivery(receiver, options = {}) {
         detail.base?.ref !== receiver.config.targetBranch
       )
         fail('PR_OBJECT_MISMATCH', '自动合入的最新 PR 身份与冻结交付不同。');
-      outcome = pending ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' } : githubMergeReadiness(detail, d.candidate);
+      outcome = pending && !retryPending ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' } : githubMergeReadiness(detail, d.candidate);
     } else {
       const api = gitlabApi(receiver.config, receiver.config.pullRequests, 'PR');
       const detail = await api.request(`merge_requests/${number}`);
@@ -117,7 +129,7 @@ export async function autoMergeDelivery(receiver, options = {}) {
         detail.target_branch !== receiver.config.targetBranch
       )
         fail('PR_OBJECT_MISMATCH', '自动合入的最新 MR 身份与冻结交付不同。');
-      outcome = pending ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' } : mergeReadiness(detail, d.candidate);
+      outcome = pending && !retryPending ? { kind: 'pending', reason: '确认原合入请求结果；不会重复请求合入' } : mergeReadiness(detail, d.candidate);
     }
     if (outcome.kind !== 'ready') {
       const oldReason = d.autoMerge?.reason;
@@ -143,6 +155,7 @@ export async function autoMergeDelivery(receiver, options = {}) {
       status: 'INTENT_SAVED',
       head: d.candidate,
       requestedAt: new Date().toISOString(),
+      ...(d.autoMerge?.retried || retryPending ? { retried: true } : {}),
     };
     await phase('merge-intent', '保存冻结 PR 的自动合入意图', () => receiver.store.save(state), false);
     await phase(

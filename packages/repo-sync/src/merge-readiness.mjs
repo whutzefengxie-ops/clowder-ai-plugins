@@ -94,6 +94,7 @@ export function validateMergeObservation(delivery, fail) {
     'confirmedAt',
     'lastError',
     'requestRejected',
+    'retried',
   ];
   if (
     value &&
@@ -101,7 +102,7 @@ export function validateMergeObservation(delivery, fail) {
       Array.isArray(value) ||
       Object.keys(value).some((key) => !fields.includes(key)) ||
       !['WAITING', 'INTENT_SAVED', 'RESULT_PENDING', 'MERGED', 'BLOCKED'].includes(value.status) ||
-      ['manual', 'requestRejected'].some(
+      ['manual', 'requestRejected', 'retried'].some(
         (key) => value[key] !== undefined && typeof value[key] !== 'boolean',
       ) ||
       (value.reason !== undefined && (typeof value.reason !== 'string' || value.reason.length > 2000)) ||
