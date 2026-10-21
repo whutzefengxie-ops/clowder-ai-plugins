@@ -27,6 +27,8 @@ export function mergeReadiness(detail, head) {
   if (checking.has(status)) return wait('等待平台完成 CI 或可合入性检查');
   // CodeHub may leave this lazy status unchecked; the SHA-protected merge endpoint remains authoritative.
   const mergeable = ['mergeable', 'can_be_merged', 'unchecked'].includes(status);
+  if (mergeable && (!pipeline || !pipeline.status))
+    return { kind: 'ready', reason: '平台未提供 CI 流水线；交由 SHA 保护的合入接口校验分支规则' };
   if (pipeline?.status === 'success' && pipeline.sha === head && mergeable)
     return {
       kind: 'ready',

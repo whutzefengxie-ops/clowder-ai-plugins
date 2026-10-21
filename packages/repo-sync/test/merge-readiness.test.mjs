@@ -26,13 +26,15 @@ test('CodeHub unchecked with successful current CI may request a SHA-protected p
   for (const patch of [{ draft: true }, { has_conflicts: true }, { detailed_merge_status: 'not_approved' },
     { blocking_discussions_resolved: false }, { approvals_left: 1 }])
     assert.notEqual(mergeReadiness({ ...ready, merge_status: 'unchecked', ...patch }, head).kind, 'ready');
-  for (const head_pipeline of [undefined, { status: 'success', sha: 'b'.repeat(40) }, { status: 'pending', sha: head }])
-    assert.notEqual(mergeReadiness({ merge_status: 'unchecked', head_pipeline }, head).kind, 'ready');
+  for (const head_pipeline of [undefined, null, {}])
+    assert.equal(mergeReadiness({ merge_status: 'unchecked', head_pipeline }, head).kind, 'ready');
+  for (const head_pipeline of [{ status: 'success', sha: 'b'.repeat(40) }, { status: 'pending', sha: head }])
+    assert.equal(mergeReadiness({ merge_status: 'unchecked', head_pipeline }, head).kind, 'wait');
 });
-test('missing, skipped or stale CI never authorizes a merge of an unproven candidate', () => {
+test('missing CI allows a SHA-protected merge, while skipped or stale CI still waits', () => {
+  for (const head_pipeline of [null, undefined, {}])
+    assert.equal(mergeReadiness({ merge_status: 'can_be_merged', head_pipeline }, head).kind, 'ready');
   for (const head_pipeline of [
-    null,
-    {},
     { status: 'skipped', sha: head },
     { status: 'success' },
     { status: 'success', sha: 'b'.repeat(40) },
