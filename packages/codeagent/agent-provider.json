@@ -1,0 +1,5 @@
+{
+  "id": "codeagent",
+  "transport": "acp",
+  "acp": { "command": "codeagent", "startupArgs": ["--acp"] }
+}
