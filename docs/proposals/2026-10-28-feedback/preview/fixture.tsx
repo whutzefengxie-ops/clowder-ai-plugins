@@ -2,6 +2,8 @@ import { createRoot } from 'react-dom/client';
 import { AppShell } from '@/components/AppShell';
 import { primeCoCreatorConfigCache } from '@/hooks/useCoCreatorConfig';
 import { writeShellPresentation } from '@/components/shell/shell-presentation';
+import { FeedbackIssuePreview } from './FeedbackSubmissionResult';
+import './feedback.css';
 import '@/app/globals.css';
 import '@/app/theme-tokens.css';
 import '@/app/console-tokens.css';
@@ -13,7 +15,8 @@ globalThis.fetch = async () => new Response(JSON.stringify({
   data: [], config: {}, status: 'unavailable',
 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 primeCoCreatorConfigCache({ name: '体验者', aliases: [], mentionPatterns: [], color: { primary: '#b05f45', secondary: '#f3e3da' } });
-writeShellPresentation(new URLSearchParams(location.search).get('classic') === '1' ? 'classic' : 'v2');
-createRoot(document.getElementById('root')!).render(<AppShell>
+const previewIssueId = new URLSearchParams(location.search).get('feedbackIssue');
+if (!previewIssueId) writeShellPresentation(new URLSearchParams(location.search).get('classic') === '1' ? 'classic' : 'v2');
+createRoot(document.getElementById('root')!).render(previewIssueId && /^[a-f0-9-]{36}$/.test(previewIssueId) ? <FeedbackIssuePreview id={previewIssueId} /> : <AppShell>
   <main aria-label="主工作区" data-testid="feedback-preview-workspace" className="flex-1" />
 </AppShell>);

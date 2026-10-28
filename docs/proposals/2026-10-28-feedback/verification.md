@@ -20,16 +20,19 @@ created: 2026-10-28
 | 两 shell／窄屏 | Café 真实底部入口及经典真实底部入口都可打开；390×844 窄屏检查对话框无水平越界。只是合成页面体验证据。 |
 | 字段旁复制 | 标题和报告正文各自标签同行有对应复制按钮，浏览器几何断言验证其垂直中心处于同一行；没有底部集中复制区。剪贴板使用浏览器替身，不覆盖系统剪贴板。 |
 | 自动与手动 | 自动“确认上传”为主操作、手动创建为次操作，两者并存。模拟自动失败后保留正文和图片，手动兜底仍在；重试模拟成功明确计入 1 张图片，不冒充真实建单。无自动能力目标保留禁用主按钮和原因。手动页 GET 被测试替身拦截，跳转不带报告内容、不伪称提交。 |
-| 浏览器清理 | 最新 `evidence-r3/checks.json`：4 组旅程、0 个未捕获异常、0 个意外外部请求、1 次测试替身拦截的页面 GET、`browserClosed:true`。下载保存在本任务证据目录；没有改变用户剪贴板或下载目录。 |
+| 成功回链 | 自动提交结果生成独立 ID、模拟编号与对应本地 URL；成功页展示 URL 和“打开 Issue”。测试真实点击后断言打开页 URL／ID 与结果一致并关闭该页；失败时没有成功链接。不会把现有真实仓库中的任意 Issue 当作模拟结果。 |
+| 浏览器清理 | 最新 `evidence-r4/checks.json`：5 组旅程、0 个未捕获异常、0 个意外外部请求、1 次测试替身拦截的页面 GET、`browserClosed:true`。成功回链访问同一本地服务，额外打开页已关闭。下载保存在任务证据目录；没有改变用户剪贴板或下载目录。 |
 | 主工作区与步骤 | 中央为空白，不显示演示首页；新文案和四步进度位于弹窗内；分析失败停在第二步，报告第三步，手动跳转第四步。 |
 | port 草稿 | TypeScript strict + noEmit 检查通过；未作为现有 SDK API 导出。 |
 | 代码范围 | 所有新增源文件均在插件仓 feature worktree 的本提案目录；未修改生产 runtime、用户配置／历史或主项目源码。 |
 
-最新浏览器证据：工作区 `artifacts/feedback-preview/evidence-r3/` 下的 `checks.json`、PNG 下载物和截图。首／第二轮证据保留在各自目录，不当作当前版本证据。构建回执：`artifacts/feedback-preview/build-receipt.json`。
+最新浏览器证据：工作区 `artifacts/feedback-preview/evidence-r4/` 下的 `checks.json`、PNG 下载物和截图，`08-automatic-success.png` 展示 Issue 回链。旧轮次证据保留在各自目录，不当作当前版本证据。构建回执：`artifacts/feedback-preview/build-receipt.json`。
 
 2026-10-28 第二轮反馈修改采用现有旅程扩展检查：旧稿首先在“主工作区必须为空，不显示演示首页”断言失败（`artifacts/feedback-review-red.log`）；修改后同一检查与手动交付、复制、进度及错误路径通过（`artifacts/feedback-review-green.log`）。本轮 UI 测试不声称真实模型、系统剪贴板权限或目标平台提交能力通过验收。
 
 第三轮用户纠正了作者将手动能力替代自动能力的误解。旧稿在“自动提交应保留为主操作，手动创建只是兜底”断言 RED（`artifacts/feedback-review-r3-red.log`）；修改后自动成功／失败、字段旁复制、PNG 编码／下载、手动兜底与原旅程一并 GREEN（`artifacts/feedback-review-r3-green.log`）。
+
+第四轮要求补齐自动提交后的对应 Issue 链接。旧稿在“自动提交完成必须显示对应 Issue 链接”断言 RED（`artifacts/feedback-review-r4-red.log`）；更新后该断言、链接打开与结果 ID 一致、失败无成功回链及既有旅程 GREEN（`artifacts/feedback-review-r4-green.log`）。链接通过结构化模拟提交结果交给 UI；本地模拟结果页不承载真实平台建单，也不更改主预览的 shell 选择。
 
 ## 重放命令
 
@@ -43,12 +46,12 @@ node docs/proposals/2026-10-28-feedback/preview/build.mjs `
 
 node docs/proposals/2026-10-28-feedback/preview/check.mjs `
   'C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\dependencies\node' `
-  'G:\AIwork\clowder-ai\worktrees\feat-feedback-diagnostics\artifacts\feedback-preview\evidence-r3' `
+  'G:\AIwork\clowder-ai\worktrees\feat-feedback-diagnostics\artifacts\feedback-preview\evidence-r4' `
   'http://127.0.0.1:5187/' `
   'C:\Users\Administrator\AppData\Local\ms-playwright\chromium-1228\chrome-win64\chrome.exe'
 ```
 
-最新输出：`{"checks":4,"errors":0,"unexpectedRequests":0,"interceptedNavigations":1,"browserClosed":true}`。
+最新输出：`{"checks":5,"errors":0,"unexpectedRequests":0,"interceptedNavigations":1,"browserClosed":true}`。
 
 provider port 检查：
 

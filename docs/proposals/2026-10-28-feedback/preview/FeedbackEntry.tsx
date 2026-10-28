@@ -4,6 +4,7 @@ import { FeedbackCopyButton } from './FeedbackCopyActions';
 import { FeedbackProgress, type FeedbackStage } from './FeedbackProgress';
 import { FeedbackPictureCard, type FeedbackPicture } from './FeedbackPictures';
 import { previewDestinations } from './feedback-destinations';
+import { createPreviewSubmissionResult, FeedbackSubmissionResultCard, type FeedbackSubmissionResult } from './FeedbackSubmissionResult';
 import './feedback.css';
 
 const defaultBody = '描述你遇到的现象、发生前的操作，以及你期望看到的结果。';
@@ -23,6 +24,7 @@ export function FeedbackEntry() {
   const [client, setClient] = useState('已配置的本地 Agent Client（示例）');
   const [failure, setFailure] = useState(false);
   const [uploadFailure, setUploadFailure] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<FeedbackSubmissionResult | null>(null);
   const [error, setError] = useState('');
   const [mode, setMode] = useState('direct');
   const [logs, setLogs] = useState(true);
@@ -54,7 +56,7 @@ export function FeedbackEntry() {
       if (uploadFailure) {
         setError('自动提交失败（模拟）。报告和截图已保留，可重试自动提交，或使用手动创建。');
         setStage('review');
-      } else { setStage('submitted'); }
+      } else { setSubmissionResult(createPreviewSubmissionResult()); setStage('submitted'); }
     }, 1000);
     return () => clearTimeout(timer);
   }, [stage, uploadFailure]);
@@ -137,7 +139,7 @@ export function FeedbackEntry() {
         {locked && <p className="fb-progress" role="status">正在模拟上传报告和 {pictures.length} 张截图…</p>}
         {stage === 'submitted' && <div className="fb-success"><span>✓</span><h2>模拟自动提交成功</h2>
           <p>报告与 {pictures.length} 张截图已通过模拟提交流程；没有创建真实 Issue，也没有向远端上传文件。</p>
-          <p className="fb-note">正式版在这里显示真实 Issue 链接、附件回执和内容核对结果。</p>
+          {submissionResult && <FeedbackSubmissionResultCard result={submissionResult} />}
         </div>}
         {error && <p className="fb-error" role="alert">{error}</p>}
       </div>
@@ -148,7 +150,7 @@ export function FeedbackEntry() {
         {stage === 'review' && <><button className="fb-text" onClick={() => {setConsent(false); setStage('edit');}}>返回修改</button>
           <a role="link" className={`fb-secondary ${canOpen ? '' : 'fb-disabled'}`} href={canOpen ? safeUrl : undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!canOpen}
             title="跳转到 Issue 页面，然后手动粘贴问题并创建" onClick={e => { if (!canOpen) { e.preventDefault(); return; } setError(''); setStage('handoff'); }}>手动创建</a>
-          <button className="fb-primary" disabled={!canUpload} onClick={() => {setError('');setStage('submitting');}}>确认上传</button>
+          <button className="fb-primary" disabled={!canUpload} onClick={() => {setError('');setSubmissionResult(null);setStage('submitting');}}>确认上传</button>
           <p>自动提交不可用时，可手动创建并粘贴标题、报告和图片</p>
         </>}
         {locked && <button className="fb-primary" disabled>正在上传（模拟）…</button>}

@@ -122,6 +122,7 @@ try {
   await page.getByLabel('确认报告内容').check();
   await page.getByRole('button', {name:'确认上传',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'自动提交失败（模拟）'}).waitFor();
+  assert.equal(await page.getByRole('link', {name:'返回的 Issue 链接',exact:true}).count(), 0, '失败时不能显示上次成功链接');
   assert.match(await page.getByLabel('报告正文', {exact:true}).inputValue(), /反馈内容哨兵/);
   assert.equal(await card.count(), 1);
   assert.equal(await manual().count(), 1);
@@ -129,6 +130,17 @@ try {
   await page.getByLabel('模拟自动提交失败').uncheck();
   await page.getByRole('button', {name:'确认上传',exact:true}).click();
   await page.getByRole('heading', {name:'模拟自动提交成功',exact:true}).waitFor();
+  assert.equal(await page.getByRole('link', {name:'返回的 Issue 链接',exact:true}).count(), 1, '自动提交完成必须显示对应 Issue 链接');
+  const issueUrl = await page.getByRole('link', {name:'返回的 Issue 链接',exact:true}).getAttribute('href');
+  assert.equal(await page.getByRole('link', {name:'打开 Issue',exact:true}).getAttribute('href'), issueUrl);
+  assert.equal(new URL(issueUrl).origin, new URL(origin).origin, '体验稿只打开本地模拟链接');
+  const issueId = new URL(issueUrl).searchParams.get('feedbackIssue');
+  assert.match(issueId, /^[a-f0-9-]{36}$/);
+  const [issuePage] = await Promise.all([context.waitForEvent('page'), page.getByRole('link', {name:'打开 Issue',exact:true}).click()]);
+  await issuePage.waitForLoadState();
+  assert.equal(issuePage.url(), issueUrl);
+  assert.equal(await issuePage.getByTestId('feedback-preview-issue-id').innerText(), issueId, '打开的页面与提交结果 ID 对应');
+  await issuePage.close();
   await page.getByText(/报告与 1 张截图已通过模拟提交流程/).waitFor();
   await page.screenshot({path:path.join(output,'08-automatic-success.png')});
   await page.getByRole('button', {name:'返回报告',exact:true}).click();
@@ -174,6 +186,7 @@ try {
   observations.push('字段同一行的复制标题／正文、真实输入与修改确认失效');
   observations.push('真实 PNG 编码后复制（clipboard 替身）、图片下载字节一致、复制失败保留下载');
   observations.push('自动提交主操作、带截图模拟成功、失败不丢报告与图片、手动兜底始终保留');
+  observations.push('自动成功返回对应 Issue 链接和打开按钮，打开结果 ID 一致，失败不显示成功链接');
   observations.push('手动跳转不伪称已提交、不泄露正文到 URL、空白主工作区、两套侧栏与窄屏');
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpectedRequests, []);
