@@ -1,30 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FeedbackService } from '../src/service.js';
-import { marker } from '../src/providers.js';
-import type { Host, Journal, OwnerContext, Provider } from '../src/types.js';
+import {fixture} from './service-fixture.js';
+import type {HydratedJournal} from '../src/types.js';
 
-function fixture() {
-  const values = new Map<string, { revision: number; value: unknown }>();
-  let revision = 0; let creates = 0; let fail = false; let remote: { id: string; url: string; title: string; body: string } | undefined;
-  const host: Host = { pluginInstanceId: 'fixture', dataPath: '/unused', config: { get: async () => undefined }, secrets: { get: async () => undefined }, storage: {
-    get: async key => structuredClone(values.get(key)),
-    compareAndSet: async (key, expected, value) => {
-      if ((values.get(key)?.revision ?? null) !== expected) return { applied: false };
-      const r = ++revision; values.set(key, { revision: r, value: structuredClone(value) }); return { applied: true, revision: r };
-    },
-  } };
-  const adapter: Provider = {
-    preflight: async () => ({ principal: 'owner', visibility: 'public', attachments: true }),
-    upload: async () => '![screenshot](https://images.example.test/screenshot.png)',
-    create: async (report, id) => { creates++; remote = { id: '12', url: 'https://github.com/zts212653/clowder-ai/issues/12', title: report.title, body: `${report.body}\n\n${marker(id)}` }; if (fail) throw new Error('lost response after create'); return remote; },
-    reconcile: async () => remote, read: async () => { if (!remote) throw new Error('not found'); return remote; },
-  };
-  const ctx: OwnerContext = { kind: 'owner-http-request', userId: 'owner', pluginInstanceId: 'fixture', operation: 'write', requestIdentity: { requestId: 'request' }, signal: new AbortController().signal, assertCurrent: async () => {} };
-  const service = new FeedbackService(host, () => adapter);
-  const call = (input: unknown) => service.dispatch(input, ctx) as Promise<{ journal: Journal; revision: number }>;
-  return { host, adapter, ctx, service, call, creates: () => creates, fail: () => { fail = true; } };
-}
 const report = { title: '中文标题', body: '## 现象\napi_key=secret-value', attachments: [] };
 
 test('owner-only confirmation binds sanitized bytes and CAS allows only one create', async () => {
@@ -50,7 +29,7 @@ test('lost response survives service restart and reconciles without a second POS
   assert.equal(outcome.journal.state, 'unknown');
   const restarted = new FeedbackService(f.host, () => f.adapter);
   await assert.rejects(restarted.dispatch({ op: 'submit', digest: saved.journal.digest }, f.ctx), /不会重复/);
-  const reconciled = await restarted.dispatch({ op: 'reconcile', digest: saved.journal.digest }, f.ctx) as { journal: Journal };
+  const reconciled = await restarted.dispatch({ op: 'reconcile', digest: saved.journal.digest }, f.ctx) as { journal: HydratedJournal };
   assert.equal(reconciled.journal.state, 'published');
   assert.equal(f.creates(), 1);
 });
@@ -69,7 +48,7 @@ test('edits revoke consent; stale digest and stale window cannot publish', async
 test('analysis uses only prepared sanitized material and exact explicit consent', async () => {
   const f = fixture(); let observed = '';
   f.host.diagnostics = {
-    describe: async () => ({ environment: 'Windows node 24', projectRoot: 'C:\\Users\\Alice\\project', clients: [{ id: 'configured', label: 'Local client', provider: 'cloud', model: 'configured' }] }),
+    describe: async () => ({ environment: 'Windows node 24', projectRoot: 'C:\\Users\\Alice\\project', clients: [{ id: 'configured', label: 'Local client', provider: 'cloud', model: 'configured', destination: 'fixture', revision: '1' }] }),
     collect: async () => 'Authorization: Bearer abcdefghijk C:\\Users\\Alice\\project\\log.txt',
     analyze: async input => { observed = input.prompt; return '## 分析\naccessToken=another-secret'; },
   };

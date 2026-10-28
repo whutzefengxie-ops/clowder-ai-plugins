@@ -1,4 +1,4 @@
-import { bridge, call, copyImage, el, toBase64 } from './bridge.js';
+import { bridge, call, copyImage, el, normalizePicture } from './bridge.js';
 
 const app = document.getElementById('app');
 const state = { stage: 'edit', report: { title: '', body: '', attachments: [] }, targets: [], targetId: '', clients: [], clientId: '', logs: false,
@@ -16,7 +16,8 @@ function invalidate() {
   document.querySelectorAll('[data-consent]').forEach(node => { node.checked = false; });
   document.querySelectorAll('[data-publish]').forEach(node => { node.disabled = true; node.setAttribute('aria-disabled', 'true'); });
 }
-function locked() { return ['writing', 'unknown', 'published'].includes(state.journal?.state); }
+function locked() { return ['writing', 'unknown', 'published', 'upload_failed'].includes(state.journal?.state); }
+function issueMayExist() { return ['writing', 'unknown'].includes(state.journal?.state); }
 function check(label, key) {
   return el('label', { className: 'check' }, [el('input', { type: 'checkbox', checked: state[key], disabled: state.busy, 'data-consent': key,
     onChange: event => { state[key] = event.target.checked; render(); } }), el('span', { text: label })]);
@@ -25,15 +26,15 @@ function pictureCards() {
   return el('div', { className: 'pictures' }, state.report.attachments.map((picture, index) => el('div', { className: 'picture' }, [
     el('img', { src: `data:${picture.mime};base64,${picture.base64}`, alt: `截图 ${index + 1}` }),
     el('div', {}, [button('复制图片', async () => { await copyImage(picture); state.error = '图片已复制，可粘贴到 Issue 页面'; }, 'text'),
-      el('a', { text: '下载原图', href: `data:${picture.mime};base64,${picture.base64}`, download: picture.name }),
+      el('a', { text: '下载发送副本', href: `data:${picture.mime};base64,${picture.base64}`, download: picture.name, title: '已去除元数据的 PNG；这是自动提交的实际图片' }),
+      ...(picture.original ? [el('a', { text: '下载原图', href: `data:${picture.original.mime};base64,${picture.original.base64}`, download: picture.original.name, title: '原图可能包含隐私元数据，自动提交不会上传原图' })] : []),
       ...(!locked() ? [button('移除', async () => { state.report.attachments.splice(index, 1); invalidate(); }, 'text')] : [])]),
   ])));
 }
 async function addFiles(files) {
   for (const file of files) {
     if (state.report.attachments.length >= 4 || file.size > 4000000 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('最多 4 张 PNG/JPEG/WebP，单张不超过 4 MB');
-    state.report.attachments.push({ name: `screenshot-${state.report.attachments.length + 1}.${file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1]}`,
-      mime: file.type, base64: toBase64(new Uint8Array(await file.arrayBuffer())) });
+    state.report.attachments.push(await normalizePicture(file, state.report.attachments.length));
   }
   invalidate();
 }
@@ -90,12 +91,12 @@ function render() {
     select.value = state.targetId;
     content.append(el('label', { className: 'field' }, [el('span', { className: 'label', text: '反馈目标' }), select]),
       el('label', { className: 'secondary', text: '＋ 添加截图' }, [el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true, hidden: true, disabled: state.busy, onChange: e => run(() => addFiles(e.target.files)) })]),
-      pictureCards(), note('图片不会交给模型。请先自行裁剪、遮盖敏感内容；自动提交将上传已检查的图片原始字节。'), check('增加最近 15 分钟的错误摘要（在本地先脱敏）', 'logs'));
+      pictureCards(), note('图片不交给模型。自动提交使用已重编码并去除元数据的 PNG 发送副本，仍需自行遮盖敏感像素。原图仅供本地下载，可能含隐私元数据。'), check('增加最近 15 分钟的错误摘要（在本地先脱敏）', 'logs'));
     footer.append(button('直接提交', saveReview), button('分析并上传 · 推荐', prepareAnalysis, 'primary', !state.clients.length), note(state.clients.length ? '先检查分析范围，再检查报告并确认上传' : '安全诊断 Client 暂不可用，仍可直接反馈'));
   } else if (['scope', 'analyzing'].includes(state.stage)) {
     content.append(el('div', { className: 'notice', text: '本地 Agent Client 可能连接云端模型。以下是将交给模型的完整脱敏材料；不包含截图、完整配置或会话数据库。' }));
     const select = el('select', { disabled: state.busy, onChange: e => { state.clientId = e.target.value; state.analysisConsent = false; render(); } },
-      state.clients.map(c => el('option', { value: c.id, text: `${c.label} · ${c.provider} · ${c.model}` })));
+      state.clients.map(c => el('option', { value: c.id, text: `${c.label} · ${c.provider} · ${c.model} · ${c.destination}` })));
     select.value = state.clientId; content.append(select, note(`排查配方 ${state.recipeVersion} · 默认只读，不执行修复`),
       el('textarea', { className: 'material', value: state.material, readOnly: true, 'aria-label': '脱敏分析材料' }),
       check('同意将上述脱敏材料交给所选 Agent Client 分析', 'analysisConsent'));
@@ -106,14 +107,17 @@ function render() {
     content.append(input('Issue 标题', 'title', false, true), input('报告正文', 'body', true, true), pictureCards(),
       el('div', { className: 'notice', text: `目标：${state.journal?.target.label ?? ''} · ${state.journal?.target.visibility === 'public' ? '公开可见' : '请核对目标权限'}。文本已经本地过滤，但仍需检查业务内容和截图。` }));
     if (state.stage === 'handoff') content.append(note('已打开手动创建入口。Issue 尚未提交：请粘贴标题、报告和图片，或下载图片后拖入目标网页。', 'notice'));
-    if (locked()) content.append(note('提交结果待核对；不要再次手动创建，以免重复。此处仅核对，不会重发。', 'notice'));
-    else content.append(check('我已检查完整报告和所有图片，并同意向上述目标提交', 'consent'));
+    if (state.journal?.state === 'upload_failed') content.append(note(state.journal.safeError, 'notice'));
+    else if (issueMayExist()) content.append(note('提交结果待核对；不要再次手动创建，以免重复。此处仅核对，不会重发。', 'notice'));
+    if (state.journal?.issue && issueMayExist()) content.append(el('a', { className: 'issue', text: `已创建，待核验：${state.journal.issue.url}`, href: state.journal.issue.url, target: '_blank', rel: 'noopener noreferrer' }));
+    if (!issueMayExist()) content.append(check('我已检查完整报告和所有图片，并同意向上述目标提交', 'consent'));
     if (!locked()) footer.append(button('返回修改', async () => { state.stage = 'edit'; state.consent = false; }, 'text'), button('更新报告并检查通路', saveReview));
     const manual = el('a', { text: '手动创建', className: 'secondary', href: state.journal?.target.issueCreateUrl, target: '_blank', rel: 'noopener noreferrer',
-      title: '跳转到 Issue 页面，然后进行手动粘贴问题并创建', 'data-publish': 'manual', 'aria-disabled': !state.consent || state.dirty || locked(),
-      onClick: event => { if (!state.consent || state.dirty || locked() || state.busy) { event.preventDefault(); return; } state.stage = 'handoff'; render(); } });
+      title: '跳转到 Issue 页面，然后进行手动粘贴问题并创建', 'data-publish': 'manual', 'aria-disabled': !state.consent || state.dirty || issueMayExist(),
+      onClick: event => { if (!state.consent || state.dirty || issueMayExist() || state.busy) { event.preventDefault(); return; } state.stage = 'handoff'; render(); } });
     footer.append(manual);
-    if (locked()) footer.append(button('核对提交结果', async () => { const value = await call({ op: 'reconcile', digest: state.journal.digest }); Object.assign(state, value); state.error = value.message ?? ''; if (value.journal.state === 'published') state.stage = 'submitted'; }, 'primary'));
+    if (state.journal?.state === 'upload_failed') footer.append(button('保留回执，返回编辑', async () => { Object.assign(state, await call({ op: 'reset-upload', digest: state.journal.digest, confirmed: true })); state.stage = 'edit'; state.consent = false; state.dirty = false; }, 'primary'));
+    else if (locked()) footer.append(button('核对提交结果', async () => { const value = await call({ op: 'reconcile', digest: state.journal.digest }); Object.assign(state, value); state.error = value.message ?? ''; if (value.journal.state === 'published') state.stage = 'submitted'; }, 'primary'));
     else {
       const auto = button('确认上传', submit, 'primary', !state.consent || state.dirty || !state.automatic); auto.dataset.publish = 'auto'; footer.append(auto);
     }

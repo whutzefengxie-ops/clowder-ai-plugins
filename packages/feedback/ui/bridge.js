@@ -46,3 +46,16 @@ export async function copyImage(picture) {
     await bridge('clipboard.image', toBase64(new Uint8Array(await png.arrayBuffer())));
   } finally { bitmap.close(); }
 }
+export async function normalizePicture(file, index) {
+  let bitmap;
+  try { bitmap = await createImageBitmap(file); } catch { throw new Error('图片无法解码，请重新导出截图'); }
+  try {
+    if (bitmap.width * bitmap.height > 16000000) throw new Error('图片尺寸过大，请先裁剪');
+    const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    const png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!png || png.size > 4000000) throw new Error('PNG 发送副本超过 4 MB，请先裁剪');
+    return { mime: 'image/png', name: `screenshot-${index + 1}.png`, base64: toBase64(new Uint8Array(await png.arrayBuffer())),
+      original: { mime: file.type, name: `original-${index + 1}`, base64: toBase64(new Uint8Array(await file.arrayBuffer())) } };
+  } finally { bitmap.close(); }
+}

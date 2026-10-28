@@ -10,9 +10,9 @@ export interface OwnerContext {
 export interface Diagnostics {
   describe(): Promise<{ environment: string; projectRoot: string; clients: Client[] }>;
   collect(): Promise<string>;
-  analyze(input: { clientId: string; prompt: string; instructions: string; signal: AbortSignal }): Promise<string>;
+  analyze(input: { clientId: string; clientRevision: string; prompt: string; instructions: string; signal: AbortSignal }): Promise<string>;
 }
-export interface Client { id: string; label: string; provider: string; model: string }
+export interface Client { id: string; label: string; provider: string; model: string; destination: string; revision: string }
 export interface Host {
   pluginInstanceId: string; dataPath: string; storage: Storage;
   config: { get(key: string): Promise<unknown> }; secrets: { get(key: string): Promise<string | undefined> };
@@ -25,13 +25,20 @@ export interface Profile {
   visibility: 'public' | 'private' | 'unknown'; tokenRef: 'githubToken' | 'gitlabToken';
   command?: Command; attachmentCommand?: Command; attachmentOrigins: string[];
 }
-export interface Attachment { id: string; name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; base64: string; sha256: string }
+export interface ImageBytes { id: string; name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; base64: string; sha256: string }
+export interface Attachment extends ImageBytes { original?: ImageBytes }
+export type StoredAttachment = Omit<ImageBytes, 'base64'> & { original?: Omit<ImageBytes, 'base64'> };
 export interface Report { title: string; body: string; attachments: Attachment[] }
+export interface StoredReport { title: string; body: string; attachments: StoredAttachment[] }
 export interface RemoteIssue { id: string; url: string; title: string; body: string }
 export interface Journal {
-  version: 1; id: string; owner: string; report: Report; target: Profile; digest: string;
-  state: 'draft' | 'approved' | 'writing' | 'unknown' | 'published'; issue?: RemoteIssue; safeError?: string;
+  version: 1; id: string; owner: string; report: StoredReport; target: Profile; digest: string;
+  state: 'draft' | 'approved' | 'writing' | 'upload_failed' | 'unknown' | 'published'; issue?: RemoteIssue; safeError?: string;
+  phase?: 'uploading' | 'creating' | 'verifying';
+  uploads?: { submissionId: string; sha256: string; markdown: string }[];
+  uploadingHash?: string;
 }
+export type HydratedJournal = Omit<Journal, 'report'> & { report: Report };
 export interface Provider {
   preflight(signal: AbortSignal): Promise<{ principal: string; visibility: string; attachments: boolean }>;
   upload(attachment: Attachment, id: string, signal: AbortSignal): Promise<string>;

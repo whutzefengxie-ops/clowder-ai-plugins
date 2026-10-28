@@ -5,11 +5,12 @@ import { attachments } from '../src/attachments.js';
 import { defaultProfiles, parseProfiles } from '../src/config.js';
 import { marker, provider } from '../src/providers.js';
 import type { Host, Profile } from '../src/types.js';
+import { pngFixture } from './png-fixture.js';
 
 const signal = new AbortController().signal;
 const host = { secrets: { get: async () => 'test-only-token' } } as Host;
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
-const image = Buffer.from('89504e470d0a1a0a0102', 'hex');
+const image = pngFixture();
 
 test('GitHub validates principal/project/visibility and returns server Issue URL with Chinese readback', async () => {
   const requests: { url: string; init?: RequestInit }[] = [];

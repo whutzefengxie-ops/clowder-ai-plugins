@@ -56,6 +56,8 @@ export function provider(host: Host, target: Profile, fetcher: typeof fetch = fe
       return { principal: text(user.login ?? user.username, 100), visibility, attachments: gitlab || Boolean(target.attachmentCommand) };
     },
     async upload(attachment, id, signal) {
+      // Original downloads are local-only. CLI transports receive exactly the approved send copy.
+      attachment = { id: attachment.id, name: attachment.name, mime: attachment.mime, base64: attachment.base64, sha256: attachment.sha256 };
       let url: string;
       if (target.provider === 'organization-cli' || target.attachmentCommand) {
         const result = target.attachmentCommand
