@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react';
 
-export function FeedbackCopyActions({ title, report }: { title: string; report: string }) {
+export function FeedbackCopyButton({ label, value }: { label: string; value: string }) {
   const [status, setStatus] = useState('');
-  useEffect(() => { setStatus(''); }, [title, report]);
-  async function copy(kind: 'title' | 'report') {
+  useEffect(() => { setStatus(''); }, [value]);
+  async function copy() {
     try {
-      await navigator.clipboard.writeText(kind === 'title' ? title : report);
-      setStatus(kind === 'title' ? '标题已复制，请粘贴到 Issue 标题栏。' : '报告已复制，请粘贴到 Issue 描述栏。');
+      await navigator.clipboard.writeText(value);
+      setStatus(label === '复制标题' ? '标题已复制' : '报告正文已复制');
     } catch {
       setStatus('无法写入剪贴板，请手动选中上方内容并复制。');
     }
   }
-  return <div className="fb-copy-area">
-    <div className="fb-copy-actions">
-      <button type="button" onClick={() => void copy('title')}>复制标题</button>
-      <button type="button" onClick={() => void copy('report')}>复制报告</button>
-    </div>
-    <p className="fb-note" role="status" aria-live="polite">{status || '分别复制标题和报告，再到目标页面粘贴。'}</p>
-  </div>;
+  return <span className="fb-inline-copy">
+    <span role="status" aria-live="polite">{status}</span>
+    <button type="button" disabled={!value.trim()} onClick={() => void copy()}>{label}</button>
+  </span>;
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const requireTools = createRequire(path.join(path.resolve(process.argv[2]), 'package.json'));
@@ -15,8 +15,15 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 900 
 // 浏览器 clipboard 替身，不覆盖用户系统剪贴板。
 await context.addInitScript(() => {
   window.__feedbackClipboard = '';
+  window.__feedbackImageFail = false;
+  window.__feedbackClipboardImage = null;
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
     writeText: async text => { window.__feedbackClipboard = text; },
+    write: async items => {
+      if (window.__feedbackImageFail) throw new Error('Synthetic clipboard failure');
+      const blob = await items[0].getType('image/png');
+      window.__feedbackClipboardImage = { type: blob.type, size: blob.size, bytes: Array.from(new Uint8Array(await blob.arrayBuffer()).slice(0, 24)) };
+    },
   } });
 });
 await context.route('**/*', async route => {
@@ -44,13 +51,20 @@ try {
   await page.getByTestId('feedback-entry').click();
   await page.getByRole('heading', {name:'感谢你的反馈，一起共建项目'}).waitFor();
   assert.match(await currentStep(), /填写问题/);
-  await page.getByRole('button', {name:'跳过分析', exact:true}).click();
+  await page.getByRole('button', {name:'直接提交', exact:true}).click();
   await page.getByRole('alert').filter({hasText:'请填写标题和问题描述'}).waitFor();
   await page.getByLabel('问题标题', {exact:true}).fill('预览哨兵：工具调用后没有响应');
   await page.getByLabel('问题描述', {exact:true}).fill('反馈内容哨兵：操作后等待一分钟，页面没有新消息。');
   await page.screenshot({ path: path.join(output, '02-form.png') });
-  await page.getByRole('button', {name:'跳过分析', exact:true}).click();
+  await page.getByRole('button', {name:'直接提交', exact:true}).click();
   assert.match(await currentStep(), /检查报告/);
+  assert.equal(await page.getByRole('button', {name:'确认上传',exact:true}).count(), 1, '自动提交应保留为主操作，手动创建只是兜底');
+  assert.equal(await page.getByTestId('feedback-title-heading').getByRole('button', {name:'复制标题',exact:true}).count(), 1, '复制标题紧邻标题标签');
+  assert.equal(await page.getByTestId('feedback-report-heading').getByRole('button', {name:'复制报告正文',exact:true}).count(), 1, '复制正文紧邻报告标签');
+  for (const id of ['feedback-title-heading', 'feedback-report-heading']) {
+    const row = page.getByTestId(id), label = await row.locator('label').boundingBox(), button = await row.getByRole('button').boundingBox();
+    assert.ok(Math.abs(label.y + label.height / 2 - button.y - button.height / 2) < 12, '复制控件与对应主标题处于同一行');
+  }
   assert.match(await page.getByTestId('feedback-step-2').innerText(), /已跳过/);
   assert.match(await page.getByLabel('报告正文', {exact:true}).inputValue(), /反馈内容哨兵/);
   assert.equal(await manual().getAttribute('href'), null);
@@ -60,11 +74,11 @@ try {
   await page.getByRole('button', {name:'复制标题',exact:true}).click();
   await page.getByRole('status').filter({hasText:'标题已复制'}).waitFor();
   assert.equal(await page.evaluate(() => window.__feedbackClipboard), '预览哨兵：工具调用后没有响应');
-  await page.getByRole('button', {name:'复制报告',exact:true}).click();
-  await page.getByRole('status').filter({hasText:'报告已复制'}).waitFor();
+  await page.getByRole('button', {name:'复制报告正文',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'报告正文已复制'}).waitFor();
   assert.equal(await page.evaluate(() => window.__feedbackClipboard), '人工修改后的正文哨兵');
   await page.getByRole('button', {name:'返回修改',exact:true}).click();
-  await page.getByRole('button', {name:/分析并生成报告/}).click();
+  await page.getByRole('button', {name:/分析并上传/}).click();
   assert.match(await currentStep(), /补充分析/);
   await page.screenshot({ path: path.join(output, '03-scope.png') });
   await page.getByLabel('允许分析材料').check();
@@ -77,11 +91,50 @@ try {
   await page.getByLabel('报告正文', {exact:true}).waitFor();
   assert.match(await currentStep(), /检查报告/);
   assert.match(await page.getByLabel('报告正文', {exact:true}).inputValue(), /反馈内容哨兵/);
-  await page.locator('input[type=file]').setInputFiles({name:'示例截图.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=','base64')});
+  const pngData = await page.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 10;
+    canvas.getContext('2d').fillRect(0, 0, 16, 10); return canvas.toDataURL('image/png').split(',')[1];
+  });
+  const png = Buffer.from(pngData, 'base64');
+  await page.locator('input[type=file]').setInputFiles({name:'示例截图.png',mimeType:'image/png',buffer:png});
   await page.getByLabel('确认报告内容').check();
   assert.equal(await manual().getAttribute('href'), null);
+  assert.equal(await page.getByRole('button', {name:'确认上传',exact:true}).isEnabled(), false);
   await page.getByText('我已检查图片中的敏感信息', {exact:true}).click();
+  const card = page.getByTestId('feedback-picture-card');
+  await card.getByRole('button', {name:'复制图片 示例截图.png',exact:true}).click();
+  await card.getByRole('status').filter({hasText:'图片已复制'}).waitFor();
+  const image = await page.evaluate(() => window.__feedbackClipboardImage);
+  assert.equal(image.type, 'image/png'); assert.ok(image.size > 24);
+  assert.deepEqual(image.bytes.slice(0, 8), [137,80,78,71,13,10,26,10]);
+  assert.deepEqual(image.bytes.slice(16, 24), [0,0,0,16,0,0,0,10]);
+  const [download] = await Promise.all([page.waitForEvent('download'), card.getByRole('link', {name:'下载图片 示例截图.png',exact:true}).click()]);
+  assert.equal(download.suggestedFilename(), '示例截图.png');
+  await download.saveAs(path.join(output, 'downloaded-feedback.png'));
+  assert.deepEqual(await readFile(path.join(output, 'downloaded-feedback.png')), png);
+  await page.evaluate(() => { window.__feedbackImageFail = true; });
+  await card.getByRole('button', {name:'复制图片 示例截图.png',exact:true}).click();
+  await card.getByRole('status').filter({hasText:'图片复制失败，请下载'}).waitFor();
+  assert.equal(await card.getByRole('link', {name:'下载图片 示例截图.png',exact:true}).getAttribute('download'), '示例截图.png');
+  await page.evaluate(() => { window.__feedbackImageFail = false; });
+  await page.locator('.fb-demo-options summary').click();
+  await page.getByLabel('模拟自动提交失败').check();
+  await page.getByLabel('确认报告内容').check();
+  await page.getByRole('button', {name:'确认上传',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'自动提交失败（模拟）'}).waitFor();
+  assert.match(await page.getByLabel('报告正文', {exact:true}).inputValue(), /反馈内容哨兵/);
+  assert.equal(await card.count(), 1);
+  assert.equal(await manual().count(), 1);
+  if (!(await page.getByLabel('模拟自动提交失败').isVisible())) await page.locator('.fb-demo-options summary').click();
+  await page.getByLabel('模拟自动提交失败').uncheck();
+  await page.getByRole('button', {name:'确认上传',exact:true}).click();
+  await page.getByRole('heading', {name:'模拟自动提交成功',exact:true}).waitFor();
+  await page.getByText(/报告与 1 张截图已通过模拟提交流程/).waitFor();
+  await page.screenshot({path:path.join(output,'08-automatic-success.png')});
+  await page.getByRole('button', {name:'返回报告',exact:true}).click();
   await page.getByLabel('提交目标').selectOption({label:'GitLab · 内网项目（页面待配置）'});
+  assert.equal(await page.getByRole('button', {name:'确认上传',exact:true}).count(), 1);
+  assert.equal(await page.getByRole('button', {name:'确认上传',exact:true}).isEnabled(), false);
   await page.getByLabel('Issue 页面地址').fill('javascript:alert(1)');
   await page.getByLabel('确认报告内容').check();
   assert.equal(await manual().getAttribute('href'), null);
@@ -90,16 +143,25 @@ try {
   await page.getByLabel('确认报告内容').check();
   assert.equal(await manual().getAttribute('href'), destination);
   assert.match(await manual().getAttribute('title'), /跳转到.*手动粘贴/);
-  await page.getByText('截图需在目标 Issue 页面另行添加。', {exact:true}).waitFor();
+  await page.getByText(/自动提交会一并上传已检查的截图/).waitFor();
   await page.screenshot({ path: path.join(output, '04-review.png') });
   const [popup] = await Promise.all([context.waitForEvent('page'), manual().click()]);
   await popup.waitForLoadState();
   assert.equal(popup.url(), destination, '报告或标题不能拼入 URL');
   assert.match(await currentStep(), /手动创建/);
   await page.getByText('Issue 尚未提交。', {exact:true}).waitFor();
+  assert.equal(await page.getByTestId('feedback-title-heading').getByRole('button', {name:'复制标题',exact:true}).count(), 1);
+  assert.equal(await card.getByRole('button', {name:'复制图片 示例截图.png',exact:true}).count(), 1);
   await page.screenshot({path:path.join(output,'07-manual-handoff.png')});
   await popup.close();
   await page.getByRole('button',{name:'返回检查报告',exact:true}).click();
+  await page.getByLabel('提交目标').selectOption({label:'GitHub · Clowder AI · 公开'});
+  await page.getByLabel('确认报告内容').check();
+  assert.equal(await page.getByRole('button', {name:'确认上传',exact:true}).isEnabled(), true);
+  await page.getByLabel('问题标题', {exact:true}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(output,'09-copy-headings-and-auto.png')});
+  await card.scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(output,'10-images-and-auto.png')});
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:path.join(output,'05-narrow.png')});
   const dialogBox = await page.getByRole('dialog').boundingBox();
@@ -109,14 +171,15 @@ try {
   await page.getByTestId('feedback-entry').click();
   await page.getByLabel('问题标题',{exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'06-classic.png')});
-  observations.push('真实侧栏入口、空白工作区、新文案与四步流程；直接路径显示跳过分析');
-  observations.push('分析失败恢复、报告编辑、复制标题与正文（clipboard 替身）、图片提示');
-  observations.push('安全链接配置、手动跳转（目标页拦截替身）、不伪称已提交、两套侧栏与窄屏');
+  observations.push('字段同一行的复制标题／正文、真实输入与修改确认失效');
+  observations.push('真实 PNG 编码后复制（clipboard 替身）、图片下载字节一致、复制失败保留下载');
+  observations.push('自动提交主操作、带截图模拟成功、失败不丢报告与图片、手动兜底始终保留');
+  observations.push('手动跳转不伪称已提交、不泄露正文到 URL、空白主工作区、两套侧栏与窄屏');
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpectedRequests, []);
   assert.deepEqual(destinationRequests, [{url:destination,method:'GET'}], '只有用户发起的页面跳转，没有建单 POST');
 } finally {
   await browser.close();
-  await writeFile(path.join(output,'checks.json'),JSON.stringify({kind:'synthetic-manual-handoff-ui-only',observations,errors,unexpectedRequests,destinationRequests,clipboard:'browser-stub-user-system-clipboard-untouched',remoteIssueCreated:false,productionAcceptance:false,browserClosed:!browser.isConnected()},null,2));
+  await writeFile(path.join(output,'checks.json'),JSON.stringify({kind:'synthetic-auto-and-manual-ui-only',observations,errors,unexpectedRequests,destinationRequests,clipboard:'browser-stub-user-system-clipboard-untouched',realPngEncoding:true,realDownloadBytesCompared:true,automaticSubmission:'simulation-only',remoteIssueCreated:false,productionAcceptance:false,browserClosed:!browser.isConnected()},null,2));
 }
 console.log(JSON.stringify({checks:observations.length,errors:errors.length,unexpectedRequests:unexpectedRequests.length,interceptedNavigations:destinationRequests.length,browserClosed:!browser.isConnected()}));

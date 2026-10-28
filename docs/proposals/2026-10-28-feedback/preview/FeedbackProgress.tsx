@@ -1,8 +1,8 @@
-export type FeedbackStage = 'edit' | 'scope' | 'analyzing' | 'review' | 'handoff';
+export type FeedbackStage = 'edit' | 'scope' | 'analyzing' | 'review' | 'submitting' | 'submitted' | 'handoff';
 
 export function FeedbackProgress({ stage, direct }: { stage: FeedbackStage; direct: boolean }) {
   const current = stage === 'edit' ? 1 : stage === 'scope' || stage === 'analyzing' ? 2 : stage === 'review' ? 3 : 4;
-  const labels = ['填写问题', '补充分析', '检查报告', '手动创建'];
+  const labels = ['填写问题', '补充分析', '检查报告', stage === 'handoff' ? '手动创建' : '提交问题'];
   return <nav className="fb-steps" aria-label="反馈流程">
     <ol>{labels.map((label, index) => {
       const step = index + 1;
