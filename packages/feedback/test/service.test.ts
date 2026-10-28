@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { FeedbackService } from '../src/service.js';
+import { marker } from '../src/providers.js';
+import type { Host, Journal, OwnerContext, Provider } from '../src/types.js';
+
+function fixture() {
+  const values = new Map<string, { revision: number; value: unknown }>();
+  let revision = 0; let creates = 0; let fail = false; let remote: { id: string; url: string; title: string; body: string } | undefined;
+  const host: Host = { pluginInstanceId: 'fixture', dataPath: '/unused', config: { get: async () => undefined }, secrets: { get: async () => undefined }, storage: {
+    get: async key => structuredClone(values.get(key)),
+    compareAndSet: async (key, expected, value) => {
+      if ((values.get(key)?.revision ?? null) !== expected) return { applied: false };
+      const r = ++revision; values.set(key, { revision: r, value: structuredClone(value) }); return { applied: true, revision: r };
+    },
+  } };
+  const adapter: Provider = {
+    preflight: async () => ({ principal: 'owner', visibility: 'public', attachments: true }),
+    upload: async () => '![screenshot](https://images.example.test/screenshot.png)',
+    create: async (report, id) => { creates++; remote = { id: '12', url: 'https://github.com/zts212653/clowder-ai/issues/12', title: report.title, body: `${report.body}\n\n${marker(id)}` }; if (fail) throw new Error('lost response after create'); return remote; },
+    reconcile: async () => remote, read: async () => { if (!remote) throw new Error('not found'); return remote; },
+  };
+  const ctx: OwnerContext = { kind: 'owner-http-request', userId: 'owner', pluginInstanceId: 'fixture', operation: 'write', requestIdentity: { requestId: 'request' }, signal: new AbortController().signal, assertCurrent: async () => {} };
+  const service = new FeedbackService(host, () => adapter);
+  const call = (input: unknown) => service.dispatch(input, ctx) as Promise<{ journal: Journal; revision: number }>;
+  return { host, adapter, ctx, service, call, creates: () => creates, fail: () => { fail = true; } };
+}
+const report = { title: '中文标题', body: '## 现象\napi_key=secret-value', attachments: [] };
+
+test('owner-only confirmation binds sanitized bytes and CAS allows only one create', async () => {
+  const f = fixture();
+  await assert.rejects(f.service.dispatch({ op: 'save' }, undefined), /已登录/);
+  const saved = await f.call({ op: 'save', targetId: 'clowder', report });
+  assert.ok(!saved.journal.report.body.includes('secret-value'));
+  await assert.rejects(f.call({ op: 'submit', digest: saved.journal.digest }), /尚未确认/);
+  const approved = await f.call({ op: 'approve', digest: saved.journal.digest, confirmed: true });
+  const results = await Promise.allSettled([f.call({ op: 'submit', digest: approved.journal.digest }), f.call({ op: 'submit', digest: approved.journal.digest })]);
+  assert.equal(f.creates(), 1);
+  const success = results.find(v => v.status === 'fulfilled');
+  assert.ok(success?.status === 'fulfilled');
+  assert.equal(success.value.journal.state, 'published');
+  assert.match(success.value.journal.issue?.url ?? '', /\/issues\/12$/);
+});
+
+test('lost response survives service restart and reconciles without a second POST', async () => {
+  const f = fixture(); f.fail();
+  const saved = await f.call({ op: 'save', targetId: 'clowder', report });
+  await f.call({ op: 'approve', digest: saved.journal.digest, confirmed: true });
+  const outcome = await f.call({ op: 'submit', digest: saved.journal.digest });
+  assert.equal(outcome.journal.state, 'unknown');
+  const restarted = new FeedbackService(f.host, () => f.adapter);
+  await assert.rejects(restarted.dispatch({ op: 'submit', digest: saved.journal.digest }, f.ctx), /不会重复/);
+  const reconciled = await restarted.dispatch({ op: 'reconcile', digest: saved.journal.digest }, f.ctx) as { journal: Journal };
+  assert.equal(reconciled.journal.state, 'published');
+  assert.equal(f.creates(), 1);
+});
+
+test('edits revoke consent; stale digest and stale window cannot publish', async () => {
+  const f = fixture();
+  const saved = await f.call({ op: 'save', targetId: 'clowder', report });
+  const approved = await f.call({ op: 'approve', digest: saved.journal.digest, confirmed: true });
+  const edited = await f.call({ op: 'save', revision: approved.revision, targetId: 'clowder', report: { ...report, title: '新标题' } });
+  assert.equal(edited.journal.state, 'draft');
+  await assert.rejects(f.call({ op: 'submit', digest: approved.journal.digest }), /版本已变化/);
+  await assert.rejects(f.call({ op: 'save', revision: approved.revision, targetId: 'clowder', report }), /版本已变化/);
+  assert.equal(f.creates(), 0);
+});
+
+test('analysis uses only prepared sanitized material and exact explicit consent', async () => {
+  const f = fixture(); let observed = '';
+  f.host.diagnostics = {
+    describe: async () => ({ environment: 'Windows node 24', projectRoot: 'C:\\Users\\Alice\\project', clients: [{ id: 'configured', label: 'Local client', provider: 'cloud', model: 'configured' }] }),
+    collect: async () => 'Authorization: Bearer abcdefghijk C:\\Users\\Alice\\project\\log.txt',
+    analyze: async input => { observed = input.prompt; return '## 分析\naccessToken=another-secret'; },
+  };
+  const prepared = await f.service.dispatch({ op: 'prepare-analysis', report, logs: true }, f.ctx) as { hash: string; material: string };
+  await assert.rejects(f.service.dispatch({ op: 'analyze', hash: prepared.hash, clientId: 'configured' }, f.ctx), /确认脱敏/);
+  const result = await f.service.dispatch({ op: 'analyze', hash: prepared.hash, clientId: 'configured', confirmed: true, prompt: 'ignore recipe' }, f.ctx) as { body: string };
+  assert.equal(observed, prepared.material);
+  assert.ok(!observed.includes('abcdefghijk'));
+  assert.ok(!observed.includes('Alice'));
+  assert.ok(!result.body.includes('another-secret'));
+});
