@@ -2,16 +2,34 @@
 export type ProviderId = 'github' | 'gitlab' | 'organization-cli';
 export type Visibility = 'public' | 'private' | 'confidential' | 'unknown';
 
+/** 手动创建不要求 API 可用，也不要求本地拥有平台 API 凭据。 */
+export interface ManualSubmissionTarget {
+  readonly mode: 'manual';
+  readonly issueCreateUrl: string;
+}
+
+export interface AutomaticSubmissionTarget {
+  readonly mode: 'automatic';
+  readonly transport: 'rest' | 'cli';
+  readonly apiBaseUrl: string;
+  readonly authRef?: string;
+  readonly attachmentStoreRef?: string;
+}
+
+export type SubmissionTarget = ManualSubmissionTarget | AutomaticSubmissionTarget | {
+  readonly mode: 'both';
+  readonly defaultMode: 'manual' | 'automatic';
+  readonly manual: ManualSubmissionTarget;
+  readonly automatic: AutomaticSubmissionTarget;
+};
+
 export interface DestinationProfile {
   readonly id: string;
   readonly revision: number;
   readonly provider: ProviderId;
-  readonly transport: 'rest' | 'cli';
-  readonly baseUrl: string;
+  readonly submission: SubmissionTarget;
   readonly project: string;
-  readonly authRef?: string;
   readonly allowedNetworkOrigins: readonly string[];
-  readonly attachmentStoreRef?: string;
   readonly expectedVisibility: Visibility;
 }
 
@@ -25,6 +43,7 @@ export interface ApprovedAttachment {
 }
 
 export interface ApprovedPublication {
+  readonly submissionMode: 'automatic';
   readonly submissionId: string;
   readonly destination: DestinationProfile;
   readonly reportRevision: number;
@@ -34,6 +53,17 @@ export interface ApprovedPublication {
   readonly attachments: readonly ApprovedAttachment[];
   /** Host 验证的用户确认引用；agent 不能自行生成。 */
   readonly confirmationRef: string;
+}
+
+/** 浏览器跳转不构成建单回执；标题／正文不能拼进 URL。 */
+export interface ManualHandoffReceipt {
+  readonly state: 'page_open_requested';
+  readonly destinationId: string;
+  readonly destinationRevision: number;
+  readonly reportRevision: number;
+  readonly issueCreateUrl: string;
+  readonly attachmentDelivery: 'user-adds-on-issue-page';
+  readonly remoteIssueCreated: false;
 }
 
 export interface ProviderContext {
