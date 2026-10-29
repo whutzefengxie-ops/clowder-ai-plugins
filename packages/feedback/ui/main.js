@@ -51,6 +51,7 @@ async function saveReview() {
   } catch (error) { state.error = error.message + '。手动创建仍可使用。'; }
 }
 async function prepareAnalysis() {
+  state.analysisConsent = false; render();
   // Persist the form first so a failed/cancelled client cannot lose the draft.
   await saveReview(); state.error = '';
   const prepared = await call({ op: 'prepare-analysis', report: state.report, logs: state.logs, parentThreadId: state.parentThreadId, projectRef: state.projectRef });
@@ -85,7 +86,7 @@ async function refreshAnalysis() {
   if (analysis?.state === 'ready') {
     state.report.title = analysis.title; state.report.body = analysis.body; state.dirty = true;
     await saveReview();
-  } else if (['failed', 'cancelled'].includes(analysis?.state)) {
+  } else if (['failed', 'cancelled', 'interrupted'].includes(analysis?.state)) {
     state.error = analysis.error ?? '已停止等待，Client 可能仍在运行；可打开分析对话查看。'; state.stage = 'scope';
   } else if (analysis) analysisTimer = setTimeout(() => run(refreshAnalysis), 1000);
 }
@@ -108,6 +109,7 @@ function render() {
     if (!state.parentThreadId) content.append(el('input', { value: state.projectRef, placeholder: '项目目录；由 Host 校验访问规则', disabled: state.busy, onInput: event => { state.projectRef = event.target.value; } }));
     footer.append(button('直接提交', saveReview), button('分析并上传 · 推荐', prepareAnalysis, 'primary', !state.clients.length), note(state.clients.length ? '先检查分析范围，再检查报告并确认上传' : '已配置成员暂不可用，仍可直接反馈'));
     if (state.analysis?.state === 'ready') footer.append(button('查看上次分析报告', async () => { state.report.title = state.analysis.title; state.report.body = state.analysis.body; state.dirty = true; await saveReview(); }));
+    if (state.analysis?.threadUrl) content.append(el('a', { href: state.analysis.threadUrl, text: '打开上次分析对话', target: '_blank', rel: 'noopener noreferrer' }));
   } else if (['scope', 'analyzing'].includes(state.stage)) {
     content.append(el('div', { className: 'notice', text: '以下采集材料已脱敏，截图不交给模型。普通 Agent Client 沿用现有权限、项目规则与原生历史，可能连接云端模型；默认只读排查并在上传前再次脱敏。' }));
     const select = el('select', { disabled: state.busy, onChange: e => { state.clientId = e.target.value; state.analysisConsent = false; render(); } },
@@ -117,9 +119,9 @@ function render() {
       check('同意将上述脱敏材料交给所选 Agent Client 分析', 'analysisConsent'));
     if (state.stage === 'analyzing') content.append(note('正在分析所选证据，随后将再次脱敏并展示完整报告。', 'notice'));
     if (state.analysis?.threadUrl) content.append(el('a', { href: state.analysis.threadUrl, text: '打开分析对话', target: '_blank', rel: 'noopener noreferrer' }));
-    if (state.analysis?.state === 'blocked') content.append(note(state.analysis.error || 'Client 需要处理，请打开分析对话。', 'notice'));
-    if (state.stage === 'analyzing') footer.append(button('停止等待，保留草稿', async () => { clearTimeout(analysisTimer); await call({ op: 'cancel-analysis' }); state.stage = 'scope'; state.error = '已停止等待；这不会强制终止 Client，可打开分析对话查看。'; }));
-    else footer.append(button('跳过分析', saveReview), ['failed', 'cancelled'].includes(state.analysis?.state)
+    if (['blocked', 'preparing'].includes(state.analysis?.state)) content.append(note(state.analysis.error || 'Client 需要处理，请打开分析对话。', 'notice'));
+    if (state.stage === 'analyzing') footer.append(button('停止等待，保留草稿', async () => { clearTimeout(analysisTimer); const result = await call({ op: 'cancel-analysis' }); state.analysis = result.analysis; state.analysisConsent = false; state.stage = 'scope'; state.error = '已停止等待；这不会强制终止 Client，可打开分析对话查看。'; }));
+    else footer.append(button('跳过分析', saveReview), ['failed', 'cancelled', 'interrupted'].includes(state.analysis?.state)
       ? button('重新准备材料', prepareAnalysis, 'primary') : button('开始分析', analyze, 'primary', !state.analysisConsent || !state.clientId));
   } else if (['review', 'handoff', 'submitting'].includes(state.stage)) {
     content.append(input('Issue 标题', 'title', false, true), input('报告正文', 'body', true, true), pictureCards(),
@@ -158,9 +160,9 @@ run(async () => {
     state.stage = initial.journal.state === 'published' ? 'submitted' : initial.journal.state === 'draft' ? 'edit' : 'review';
     if (initial.journal.state === 'approved') { state.stage = 'review'; await saveReview(); }
   }
-  if (initial.analysis && ['starting', 'running', 'blocked'].includes(initial.analysis.state)) {
-    Object.assign(state, { analysis: initial.analysis, material: initial.analysis.material, hash: initial.analysis.hash, stage: 'analyzing' });
-    analysisTimer = setTimeout(() => run(refreshAnalysis), 1000);
+  if (initial.analysis && ['prepared', 'preparing', 'starting', 'running', 'blocked'].includes(initial.analysis.state)) {
+    Object.assign(state, { analysis: initial.analysis, material: initial.analysis.material, hash: initial.analysis.hash, recipeVersion: initial.analysis.recipeVersion, stage: initial.analysis.state === 'prepared' ? 'scope' : 'analyzing' });
+    if (initial.analysis.state !== 'prepared') analysisTimer = setTimeout(() => run(refreshAnalysis), 1000);
   }
-  if (initial.analysis?.state === 'failed') state.error = initial.analysis.error;
+  if (['failed', 'interrupted'].includes(initial.analysis?.state)) state.error = initial.analysis.error;
 });

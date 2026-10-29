@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { FeedbackService } from '../src/service.js';
 import { fixture } from './service-fixture.js';
 
 function analysisFixture() {
@@ -72,4 +74,57 @@ test('a broken Client subscription cannot block reopening direct feedback', asyn
   assert.ok(Array.isArray(reopened.targets));
   assert.equal((reopened.analysis as { state: string }).state, 'failed');
   await f.call({ op: 'save', targetId: 'clowder', report: { title: '直接反馈', body: '无需可用 Client', attachments: [] } });
+});
+
+test('unknown thread creation is recorded before the effect and not retried blindly', async () => {
+  const f = analysisFixture(); let creates = 0;
+  const create = f.host.threads!.create;
+  f.host.threads!.create = async input => { creates++; await create(input); throw new Error('response lost after create'); };
+  const input = { op: 'prepare-analysis', report: { title: '失败', body: '无法运行', attachments: [] } };
+  await assert.rejects(f.call(input), /response lost/);
+  await assert.rejects(f.call(input), /待核对/);
+  assert.equal(creates, 1);
+  assert.equal(((await f.call({ op: 'bootstrap' })).analysis as { state: string }).state, 'preparing');
+});
+
+test('a cold plugin activation reports an unverifiable old run as interrupted', async () => {
+  const f = analysisFixture();
+  const prepared = await f.call({ op: 'prepare-analysis', report: { title: '失败', body: '无法运行', attachments: [] } });
+  const resumed = new FeedbackService(f.host);
+  const pending = await resumed.dispatch({ op: 'bootstrap' }, f.ctx) as { analysis: { state: string } };
+  assert.equal(pending.analysis.state, 'prepared');
+  const started = await resumed.dispatch({ op: 'analyze', clientId: 'configured-cat', hash: prepared.hash, confirmed: true }, f.ctx) as { analysis: { state: string } };
+  assert.equal(started.analysis.state, 'running');
+  const restarted = new FeedbackService(f.host);
+  const reopened = await restarted.dispatch({ op: 'analysis-status' }, f.ctx) as { analysis: { state: string; threadUrl: string } };
+  assert.equal(reopened.analysis.state, 'interrupted');
+  assert.equal(reopened.analysis.threadUrl, f.thread.deepLinkUrl);
+  assert.equal(f.effects.filter(effect => effect.startsWith('wake:')).length, 1);
+});
+
+test('owner interruption after create preserves the exact thread reference before stopping', async () => {
+  const f = analysisFixture(); let expired = false;
+  const create = f.host.threads!.create;
+  f.host.threads!.create = async input => { const result = await create(input); expired = true; return result; };
+  f.ctx.assertCurrent = async () => { if (expired) throw new Error('owner request expired'); };
+  const input = { op: 'prepare-analysis', report: { title: '失败', body: '无法运行', attachments: [] } };
+  await assert.rejects(f.call(input), /expired/);
+  expired = false;
+  const reopened = await f.call({ op: 'bootstrap' });
+  assert.equal((reopened.analysis as { threadUrl: string }).threadUrl, f.thread.deepLinkUrl);
+  await assert.rejects(f.call(input), /待核对/);
+  assert.equal(f.effects.filter(effect => effect.startsWith('create:')).length, 1);
+});
+
+test('project logs cannot escape the selected project through a junction', async () => {
+  const f = analysisFixture();
+  const outside = join(f.host.dataPath, '..', `outside-feedback-${randomUUID()}`);
+  await mkdir(f.host.dataPath, { recursive: true }); await mkdir(outside);
+  await writeFile(join(outside, 'client.log'), JSON.stringify({ time: Date.now(), level: 50, msg: 'outside-business-canary' }));
+  const link = join(f.host.dataPath, 'logs'); await symlink(outside, link, 'junction');
+  try {
+    const prepared = await f.call({ op: 'prepare-analysis', report: { title: '失败', body: '无法运行', attachments: [] }, logs: true });
+    assert.ok(!String(prepared.material).includes('outside-business-canary'));
+    assert.match(String(prepared.material), /覆盖存在缺口/);
+  } finally { await unlink(link); }
 });

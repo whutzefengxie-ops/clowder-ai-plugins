@@ -1,10 +1,14 @@
 import { open, readdir, realpath, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 
 /** Recipe-owned collection: two recent files per explicit log root, at most
  * 128 KiB each. No recursion, client HOME, environment dump or configuration. */
-export async function collectEvidence(root: string, now = Date.now()) {
+export async function collectEvidence(root: string, now = Date.now(), projectRoot?: string) {
   const directory = await realpath(root);
+  if (projectRoot) {
+    const within = relative(await realpath(projectRoot), directory);
+    if (within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within)) throw new Error('Project log directory is outside the selected project');
+  }
   const entries = (await readdir(directory, { withFileTypes: true }))
     .filter(entry => entry.isFile() && /\.log$/.test(entry.name));
   const files = await Promise.all(entries.map(async entry => ({ path: join(directory, entry.name), info: await stat(join(directory, entry.name)) })));
