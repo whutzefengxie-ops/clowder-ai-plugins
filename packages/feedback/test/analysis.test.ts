@@ -184,3 +184,17 @@ test('history unavailability cannot prevent bootstrap or direct feedback', async
   assert.equal((reopened.analysis as {state:string}).state,'failed');
   await f.call({op:'save',targetId:'clowder',report:{title:'直接反馈',body:'不依赖分析历史',attachments:[]}});
 });
+
+test('a previously rejected completed response can be recovered after a parser update without invoking again', async () => {
+  const f=analysisFixture();
+  const prepared=await f.call({op:'prepare-analysis',report:{title:'模板验收',body:'已完成但格式被拒绝',attachments:[]}});
+  await f.call({op:'analyze',clientId:'configured-cat',hash:prepared.hash,confirmed:true});
+  await f.service.receiveDelivery({kind:'execution_status',deliveryId:'started',threadId:f.thread.id,state:'started',replyTo:'request-message',executionId:'execution'});
+  await f.service.receiveDelivery({kind:'execution_status',deliveryId:'settled',threadId:f.thread.id,state:'settled',chainDone:true,outcome:'completed',executionId:'execution'});
+  assert.equal(((await f.call({op:'analysis-status'})).analysis as {state:string}).state,'failed');
+  Object.assign(f.host.threads!,{readMessages:async()=>[{id:'reply',timestamp:20,sender:{kind:'cat',catId:'configured-cat'},content:'先说明分析依据。\n\n# 完整报告\n\n## 摘要\n合成验收。',
+    response:{executionId:'turn',inputMessageIds:['request-message'],status:'completed',startedAt:10}}]});
+  const result=await new FeedbackService(f.host).dispatch({op:'bootstrap'},f.ctx) as {analysis:{state:string;title:string}};
+  assert.equal(result.analysis.state,'ready'); assert.equal(result.analysis.title,'完整报告');
+  assert.equal(f.effects.filter(effect=>effect.startsWith('wake:')).length,1);
+});

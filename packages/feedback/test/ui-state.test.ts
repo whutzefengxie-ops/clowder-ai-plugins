@@ -9,7 +9,7 @@ test('a prior poll cannot save its report into a newly prepared analysis draft',
   let release!: (value:unknown)=>void;
   const context=createContext({
     document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[],createTextNode:(text:string)=>text},
-    el:node,bridge:async()=>true,copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
+    el:node,reportPreview:node,bridge:async()=>true,copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
     call:async(input: {op:string;report:{title:string;body:string}})=>{
       if(input.op==='bootstrap') return new Promise(()=>{});
       if(input.op==='analysis-status') return new Promise(resolve=>{release=resolve;});
@@ -20,7 +20,7 @@ test('a prior poll cannot save its report into a newly prepared analysis draft',
     },
   });
   const source=await readFile(new URL('../ui/main.js',import.meta.url),'utf8');
-  runInContext(source.replace(/^import[^\n]+\n/,''),context);
+  runInContext(source.replace(/^import[^\n]+\n/gm,''),context);
   const actions=runInContext('({state,refreshAnalysis,prepareAnalysis,analyze})',context);
   Object.assign(actions.state,{busy:false,stage:'analyzing',analysis:{id:'run-A'},journal:{digest:'digest-A',state:'draft'},report:{title:'new problem B',body:'new body B',attachments:[]}});
   const pending=actions.refreshAnalysis();

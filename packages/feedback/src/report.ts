@@ -11,7 +11,7 @@ export function parseReport(content: string): {title: string; body: string} | un
     ({title, body} = value as Record<string, unknown>);
     if (typeof body === 'string' && !body.includes('\n') && body.includes('\\n')) body = body.replaceAll('\\n', '\n');
   } else {
-    const match = /^#\s+([^\n]+)\n+([\s\S]+)$/.exec(cleaned);
+    const match = /(?:^|\n)#\s+([^\n]+)\n+([\s\S]+)$/.exec(cleaned);
     title = match?.[1]; body = match?.[2];
   }
   if (typeof title !== 'string' || typeof body !== 'string' || !title.trim() || !body.trim() || title.length > 200 || body.length > 100_000) return undefined;

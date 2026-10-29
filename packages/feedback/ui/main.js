@@ -1,4 +1,5 @@
 import { bridge, call, copyImage, el, normalizePicture } from './bridge.js';
+import { reportPreview } from './report.js';
 
 const app = document.getElementById('app');
 const state = { stage: 'edit', report: { title: '', body: '', attachments: [] }, targets: [], targetId: '', clients: [], clientId: '',
@@ -13,20 +14,7 @@ function input(label, field, multiline = false, copy = false) {
   return el('div', { className: 'field' }, [el('div', { className: 'label' }, [el('label', { htmlFor: `feedback-${field}`, text: label }),
     ...(copy && multiline ? [button(state.preview ? '编辑正文' : '预览正文', async () => { state.preview = !state.preview; }, 'text')] : []),
     ...(copy ? [button(field === 'title' ? '复制标题' : '复制报告正文', async () => { if (state.dirty) await saveReview(); await bridge('clipboard.text', state.report[field]); state.error = '已复制'; }, 'text')] : [])]),
-    copy && multiline && state.preview ? reportPreview(state.report[field]) : control]);
-}
-function reportPreview(body) {
-  const nodes = []; let code; let list;
-  for (const line of body.split('\n')) {
-    if (/^```/.test(line)) { if (code) code = undefined; else { code = el('code'); nodes.push(el('pre', {}, [code])); } continue; }
-    if (code) { code.append(document.createTextNode(`${line}\n`)); continue; }
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line); const item = /^(?:[-*]|\d+\.)\s+(.+)$/.exec(line);
-    if (item) { if (!list) { list = el('ul'); nodes.push(list); } list.append(el('li', {text:item[1]})); continue; }
-    list = undefined;
-    if (heading) nodes.push(el(`h${Math.min(heading[1].length, 4)}`, {text:heading[2]}));
-    else if (line.trim()) nodes.push(el('p', {text:line}));
-  }
-  return el('article', {className:'report-preview','aria-label':'报告正文预览'}, nodes);
+    copy && multiline && state.preview ? reportPreview(state.report[field], el) : control]);
 }
 function invalidate() {
   state.dirty = true; state.consent = false; state.automatic = false;

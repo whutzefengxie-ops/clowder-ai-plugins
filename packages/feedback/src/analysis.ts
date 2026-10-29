@@ -44,7 +44,7 @@ export class FeedbackAnalysis {
     let run = stored.value as Analysis;
     // Ordinary response records are durable truth even if a live delivery was
     // missed, the panel was closed or this plugin was updated during analysis.
-    if (run.messageId && this.host.threads?.readMessages && ['starting', 'running', 'blocked', 'interrupted'].includes(run.state)) {
+    if (run.messageId && this.host.threads?.readMessages && (['starting', 'running', 'blocked', 'interrupted'].includes(run.state) || run.state === 'failed' && run.outcome === 'completed')) {
       const rows = await this.host.threads.readMessages(run.threadId, {limit: 30}).catch(() => undefined);
       if (!rows) run = await this.update(`analysis:${digest(userId)}`, current => ['starting','running','blocked','interrupted'].includes(current.state)
         ? {...current,state:'failed',error:'暂时无法读取分析对话；草稿已保留，可直接反馈或重新检查。'} : current,run.id);
@@ -53,7 +53,7 @@ export class FeedbackAnalysis {
         const response = reply.response;
         if (response.status === 'completed') {
           const report = parseReport(reply.content);
-          run = await this.update(`analysis:${digest(userId)}`, current => !['starting','running','blocked','interrupted'].includes(current.state) ? current : ({...current,
+          run = await this.update(`analysis:${digest(userId)}`, current => !(['starting','running','blocked','interrupted'].includes(current.state) || current.state === 'failed' && current.outcome === 'completed') ? current : ({...current,
             state: report ? 'ready' : 'failed', outcome: 'completed',
             ...(report ? {candidate:{title:sanitize(report.title,[current.projectRef]),body:sanitize(report.body,[current.projectRef])}} : {}),
             error: report ? undefined : '分析已完成，但回复不是有效报告；可打开分析对话检查或重新分析。',
