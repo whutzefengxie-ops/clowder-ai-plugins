@@ -44,19 +44,3 @@ test('edits revoke consent; stale digest and stale window cannot publish', async
   await assert.rejects(f.call({ op: 'save', revision: approved.revision, targetId: 'clowder', report }), /版本已变化/);
   assert.equal(f.creates(), 0);
 });
-
-test('analysis uses only prepared sanitized material and exact explicit consent', async () => {
-  const f = fixture(); let observed = '';
-  f.host.diagnostics = {
-    describe: async () => ({ environment: 'Windows node 24', projectRoot: 'C:\\Users\\Alice\\project', clients: [{ id: 'configured', label: 'Local client', provider: 'cloud', model: 'configured', destination: 'fixture', revision: '1' }] }),
-    collect: async () => 'Authorization: Bearer abcdefghijk C:\\Users\\Alice\\project\\log.txt',
-    analyze: async input => { observed = input.prompt; return '## 分析\naccessToken=another-secret'; },
-  };
-  const prepared = await f.service.dispatch({ op: 'prepare-analysis', report, logs: true }, f.ctx) as { hash: string; material: string };
-  await assert.rejects(f.service.dispatch({ op: 'analyze', hash: prepared.hash, clientId: 'configured' }, f.ctx), /确认脱敏/);
-  const result = await f.service.dispatch({ op: 'analyze', hash: prepared.hash, clientId: 'configured', confirmed: true, prompt: 'ignore recipe' }, f.ctx) as { body: string };
-  assert.equal(observed, prepared.material);
-  assert.ok(!observed.includes('abcdefghijk'));
-  assert.ok(!observed.includes('Alice'));
-  assert.ok(!result.body.includes('another-secret'));
-});

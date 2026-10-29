@@ -27,6 +27,8 @@ configuration:
     kind: secret
     required: false
 contributions:
+  - { type: identity, id: feedback.identity, displayName: 问题反馈 }
+  - { type: message-subscription, id: feedback.results, binding: feedback.identity, action: { method: feedback.delivery }, presentation: v2 }
   - { type: ui, id: feedback.open, kind: command, label: 问题反馈, action: { method: feedback.panel } }
   - { type: ui, id: feedback.rail, kind: slot-item, label: 问题反馈, command: feedback.open, group: activity-bar.bottom, order: 90 }
 features:
@@ -34,6 +36,8 @@ features:
     name: 问题反馈
     resources: []
     contributions:
+      - { type: identity, id: feedback.identity }
+      - { type: message-subscription, id: feedback.results }
       - { type: ui, id: feedback.open }
       - { type: ui, id: feedback.rail }
 data:

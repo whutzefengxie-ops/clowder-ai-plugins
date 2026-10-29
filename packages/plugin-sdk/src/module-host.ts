@@ -47,6 +47,8 @@ export interface PluginStorageHost {
 
 export interface PluginThreadSummary {
   readonly id: string;
+  /** Canonical project selected by the Host; never a caller-provided cwd. */
+  readonly projectRef?: string;
   /** Host-authored navigation after owner/visibility/deleted filtering. Never
    * reconstruct this URL from plugin configuration, payloads or thread IDs. */
   readonly deepLinkUrl: string;
@@ -84,6 +86,9 @@ export interface PluginThreadCats {
 export interface PluginThreadCreateInput {
   readonly title: string;
   readonly parentThreadId?: string;
+  /** Host validates this directory using the ordinary project-path policy.
+   * Mutually exclusive with parentThreadId. Omit to use the Host project. */
+  readonly projectRef?: string;
   readonly participants?: readonly string[];
 }
 
@@ -294,6 +299,7 @@ export type ModulePluginSettingsHost = Pick<ModulePluginHostShape, 'pluginInstan
 
 /** Structural mirror of the Host-owned in-process module surface. */
 export interface ModulePluginHostShape {
+  readonly runtimeInfo?: import('./runtime-info.js').PluginRuntimeInfoHost;
   /** Optional Host-owned seam, supplied only to its verified installed Collective instance. */
   readonly collectiveArtifactOwner?: import('./collective-artifact-owner.js').CollectiveArtifactOwnerPort;
   /** Installation attribution supplied by the Host, never the manifest's package id. */

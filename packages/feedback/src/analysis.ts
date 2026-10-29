@@ -1,0 +1,127 @@
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { collectEvidence } from './collect-evidence.js';
+import { digest, record, text } from './config.js';
+import { instructions, recipeVersion } from './recipe.js';
+import { sanitize } from './sanitize.js';
+import type { Host, OwnerContext } from './types.js';
+
+type Analysis = {
+  id: string; owner: string; threadId: string; threadUrl: string; projectRef: string; hash: string; material: string;
+  state: 'prepared' | 'starting' | 'running' | 'blocked' | 'ready' | 'failed' | 'cancelled';
+  catId?: string; messageId?: string; triggerMessageId?: string; executionId?: string;
+  candidate?: { title: string; body: string }; outcome?: string; error?: string;
+};
+
+/** Feedback jobs use ordinary threads and Host deliveries. No model or Client
+ * implementation is selected or launched by this package. */
+export class FeedbackAnalysis {
+  constructor(private readonly host: Host) {}
+
+  private async update(key: string, change: (current: Analysis) => Analysis) {
+    const stored = await this.host.storage.get(key);
+    if (!stored) throw new Error('分析记录不存在，请重新准备材料');
+    const current = stored.value as Analysis;
+    const next = change(current);
+    if (next === current) return current;
+    if (!['prepared', 'cancelled', 'failed'].includes(next.state) && next.messageId && next.triggerMessageId === next.messageId && next.outcome) {
+      next.state = next.outcome === 'completed' && next.candidate ? 'ready' : 'failed';
+      next.error = next.state === 'failed' ? '分析已结束，但没有有效报告；可重新分析或直接反馈。' : undefined;
+    }
+    if (!(await this.host.storage.compareAndSet(key, stored.revision, next)).applied) throw new Error('分析状态已变化，请重新打开检查');
+    return next;
+  }
+
+  async status(userId: string, resume = false) {
+    const stored = await this.host.storage.get(`analysis:${digest(userId)}`);
+    if (!stored) return undefined;
+    let run = stored.value as Analysis;
+    if (resume && ['starting', 'running', 'blocked'].includes(run.state)) {
+      try { await this.host.messaging?.subscribe({ threadId: run.threadId, method: 'feedback.delivery', includeOwnMessages: false }); }
+      catch {
+        run = await this.update(`analysis:${digest(userId)}`, current => ({ ...current, state: 'failed', error: '无法恢复分析订阅；草稿已保留，可直接反馈或打开原对话查看。' }));
+      }
+    }
+    return { id: run.id, state: run.state, threadUrl: run.threadUrl, error: run.error, hash: run.hash, material: run.material,
+      ...(run.state === 'ready' ? run.candidate : {}) };
+  }
+
+  async dispatch(data: Record<string, unknown>, context: OwnerContext) {
+    const key = `analysis:${digest(context.userId)}`;
+    if (data.op === 'analysis-status') return { analysis: await this.status(context.userId) };
+    if (data.op === 'cancel-analysis') {
+      const run = await this.update(key, current => ({ ...current, state: 'cancelled' }));
+      await this.host.messaging?.unsubscribe({ threadId: run.threadId }).catch(() => undefined); // Local cancellation already rejects later reports.
+      return { analysis: await this.status(context.userId) };
+    }
+    const { threads, messaging, members, runtimeInfo } = this.host;
+    if (!threads || !messaging || !members || !runtimeInfo) throw new Error('Host 缺少普通线程或运行信息能力，可直接提交或手动创建');
+    if (data.op === 'prepare-analysis') {
+      const previous = await this.host.storage.get(key);
+      if (previous && ['starting', 'running', 'blocked'].includes((previous.value as Analysis).state)) throw new Error('当前分析仍在进行，请先停止等待或回到报告');
+      const environment = await runtimeInfo.get();
+      const report = record(data.report);
+      const parentThreadId = typeof data.parentThreadId === 'string' && data.parentThreadId ? data.parentThreadId : undefined;
+      const projectRef = !parentThreadId && typeof data.projectRef === 'string' && data.projectRef ? data.projectRef : undefined;
+      const thread = await threads.create({ title: '问题反馈分析', ...(parentThreadId ? { parentThreadId } : {}), ...(projectRef ? { projectRef } : {}) });
+      const project = thread.projectRef ?? environment.projectRoot;
+      const roots = data.logs === true ? [environment.logDirectory, join(project, 'logs')] : [];
+      const collected = await Promise.allSettled(roots.map(root => collectEvidence(root)));
+      const evidence = collected.map((result, index) => `E${index + 3} ${index === 0 ? '当前实例日志' : '所选项目 logs 目录'}\n${result.status === 'fulfilled' ? result.value : '无法读取此来源；覆盖存在缺口。'}`).join('\n\n');
+      const material = sanitize(`E1 环境\nClowder ${environment.version}\n${environment.platform} ${environment.architecture} Node ${environment.nodeVersion}\n\nE2 用户现象\n${text(report.title, 200)}\n${text(report.body, 100_000)}\n\n${evidence || '用户未选择自动采集日志。'}`, [project, environment.projectRoot, environment.logDirectory]);
+      const run: Analysis = { id: randomUUID(), owner: context.userId, threadId: thread.id, threadUrl: thread.deepLinkUrl, projectRef: project, hash: digest({ material, recipeVersion, threadId: thread.id }), material, state: 'prepared' };
+      await context.assertCurrent();
+      if (!(await this.host.storage.compareAndSet(key, previous?.revision ?? null, run)).applied) throw new Error('分析材料已变化，请重新打开检查');
+      await this.host.storage.compareAndSet(`analysis-thread:${thread.id}`, null, { key, id: run.id });
+      return { material, hash: run.hash, recipeVersion, analysis: await this.status(context.userId) };
+    }
+    if (data.op !== 'analyze') throw new Error('不支持的分析操作');
+    const stored = await this.host.storage.get(key);
+    const run = stored?.value as Analysis | undefined;
+    if (!run || run.state !== 'prepared' || run.hash !== data.hash || data.confirmed !== true) throw new Error('请先检查并确认当前脱敏材料');
+    const catId = text(data.clientId, 200);
+    const member = await members.get(catId);
+    if (!member?.available) throw new Error('所选成员目前不可用，可更换成员或直接反馈');
+    await this.update(key, current => ({ ...current, state: 'starting', catId }));
+    await messaging.subscribe({ threadId: run.threadId, method: 'feedback.delivery', includeOwnMessages: false });
+    // The durable starting state makes an uncertain send visible, rather than
+    // silently issuing a second invocation after a connection failure.
+    const sent = await messaging.send({ threadId: run.threadId, idempotencyKey: `feedback-analysis:${run.id}`, wake: { catId },
+      payload: { provenance: { epistemicStatus: 'user_intent' }, elements: [{ elementId: run.id, kind: 'text', payload: { text: `${instructions}\n\n${run.material}` } }] } });
+    await this.update(key, current => ({ ...current, messageId: sent.messageId, state: current.state === 'starting' ? 'running' : current.state }));
+    return { analysis: await this.status(context.userId) };
+  }
+
+  async receiveDelivery(input: unknown) {
+    const delivery = record(input);
+    const receipt = { deliveryId: text(delivery.deliveryId, 500) };
+    const threadId = text(delivery.threadId, 500);
+    const mapping = (await this.host.storage.get(`analysis-thread:${threadId}`))?.value as { key: string; id: string } | undefined;
+    if (!mapping) return receipt;
+    await this.update(mapping.key, run => {
+      if (run.id !== mapping.id || !['starting', 'running', 'blocked'].includes(run.state)) return run;
+      if (delivery.kind === 'execution_status') {
+        if (delivery.state === 'started' && typeof delivery.replyTo === 'string' && (!run.messageId || delivery.replyTo === run.messageId)) {
+          return { ...run, executionId: text(delivery.executionId, 500), triggerMessageId: delivery.replyTo };
+        }
+        if (delivery.executionId !== run.executionId) return run;
+        if (delivery.state === 'blocked') return { ...run, state: 'blocked', error: sanitize(String(delivery.reason ?? 'Client 需要处理，请打开分析对话')) };
+        if (delivery.state === 'resumed') return { ...run, state: 'running', error: undefined };
+        if (delivery.state === 'settled' && delivery.chainDone === true) return { ...run, outcome: text(delivery.outcome, 30) };
+        return run;
+      }
+      if (delivery.kind !== 'message' || !run.executionId || delivery.executionId !== run.executionId) return run;
+      const envelope = record(delivery.envelope); const actor = record(envelope.actor);
+      if (actor.kind !== 'cat' || actor.id !== run.catId) return run;
+      const payload = record(envelope.payload);
+      const content = (Array.isArray(payload.elements) ? payload.elements : []).map(record)
+        .filter(element => element.kind === 'text').map(element => String(record(element.payload).text ?? '')).join('\n');
+      let candidate: Record<string, unknown>;
+      try { candidate = record(JSON.parse(content.replace(/^\s*```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, ''))); }
+      catch { return run; } // Streaming fragments and ordinary chat are not reports.
+      if (typeof candidate.title !== 'string' || typeof candidate.body !== 'string' || !candidate.title.trim() || !candidate.body.trim() || candidate.title.length > 200 || candidate.body.length > 100_000) return run;
+      return { ...run, candidate: { title: sanitize(candidate.title, [run.projectRef]), body: sanitize(candidate.body, [run.projectRef]) } };
+    });
+    return receipt;
+  }
+}

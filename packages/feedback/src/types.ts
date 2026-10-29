@@ -7,16 +7,13 @@ export interface OwnerContext {
   requestIdentity?: { requestId: string }; signal: AbortSignal; assertCurrent(): Promise<void>;
 }
 /** Versioned optional Host seam. Older Hosts fail closed while direct/manual feedback remains usable. */
-export interface Diagnostics {
-  describe(): Promise<{ environment: string; projectRoot: string; clients: Client[] }>;
-  collect(): Promise<string>;
-  analyze(input: { clientId: string; clientRevision: string; prompt: string; instructions: string; signal: AbortSignal }): Promise<string>;
-}
-export interface Client { id: string; label: string; provider: string; model: string; destination: string; revision: string }
 export interface Host {
   pluginInstanceId: string; dataPath: string; storage: Storage;
   config: { get(key: string): Promise<unknown> }; secrets: { get(key: string): Promise<string | undefined> };
-  diagnostics?: Diagnostics;
+  runtimeInfo?: import('@clowder-ai/plugin-sdk').PluginRuntimeInfoHost;
+  members?: import('@clowder-ai/plugin-sdk').ModulePluginHostShape['members'];
+  threads?: Pick<import('@clowder-ai/plugin-sdk').PluginThreadHost, 'create' | 'get' | 'list'>;
+  messaging?: Pick<import('@clowder-ai/plugin-sdk').ModulePluginHostShape['messaging'], 'send' | 'subscribe' | 'unsubscribe'>;
 }
 export interface Command { executable: string; args: string[] }
 export interface Profile {

@@ -2,7 +2,8 @@ import { bridge, call, copyImage, el, normalizePicture } from './bridge.js';
 
 const app = document.getElementById('app');
 const state = { stage: 'edit', report: { title: '', body: '', attachments: [] }, targets: [], targetId: '', clients: [], clientId: '', logs: false,
-  consent: false, analysisConsent: false, busy: false, error: '', dirty: true, automatic: false };
+  consent: false, analysisConsent: false, busy: false, error: '', dirty: true, automatic: false, threads: [], parentThreadId: '', projectRef: '', analysis: undefined };
+let analysisTimer;
 const button = (label, action, style = 'secondary', disabled = false) => el('button', { type: 'button', text: label, className: style, disabled: disabled || state.busy, onClick: () => run(action) });
 const note = (text, className = 'hint') => el('p', { text, className });
 function input(label, field, multiline = false, copy = false) {
@@ -52,7 +53,7 @@ async function saveReview() {
 async function prepareAnalysis() {
   // Persist the form first so a failed/cancelled client cannot lose the draft.
   await saveReview(); state.error = '';
-  const prepared = await call({ op: 'prepare-analysis', report: state.report, logs: state.logs });
+  const prepared = await call({ op: 'prepare-analysis', report: state.report, logs: state.logs, parentThreadId: state.parentThreadId, projectRef: state.projectRef });
   Object.assign(state, prepared, { stage: 'scope', analysisConsent: false });
   if (!state.clients.some(c => c.id === state.clientId)) state.clientId = state.clients[0]?.id ?? '';
 }
@@ -60,8 +61,8 @@ async function analyze() {
   state.stage = 'analyzing'; render();
   try {
     const result = await call({ op: 'analyze', clientId: state.clientId, hash: state.hash, confirmed: state.analysisConsent });
-    state.report.body = result.body; state.dirty = true;
-    await saveReview();
+    state.analysis = result.analysis;
+    analysisTimer = setTimeout(() => run(refreshAnalysis), 1000);
   } catch (error) { state.stage = 'scope'; throw error; }
 }
 async function submit() {
@@ -79,6 +80,15 @@ async function run(action) {
   try { await action(); } catch (error) { state.error = error.message || '操作未完成，草稿已保留'; }
   finally { state.busy = false; render(); }
 }
+async function refreshAnalysis() {
+  const { analysis } = await call({ op: 'analysis-status' }); state.analysis = analysis;
+  if (analysis?.state === 'ready') {
+    state.report.title = analysis.title; state.report.body = analysis.body; state.dirty = true;
+    await saveReview();
+  } else if (['failed', 'cancelled'].includes(analysis?.state)) {
+    state.error = analysis.error ?? '已停止等待，Client 可能仍在运行；可打开分析对话查看。'; state.stage = 'scope';
+  } else if (analysis) analysisTimer = setTimeout(() => run(refreshAnalysis), 1000);
+}
 function render() {
   const stageIndex = state.stage === 'edit' ? 0 : ['scope', 'analyzing'].includes(state.stage) ? 1 : ['review', 'submitting'].includes(state.stage) ? 2 : 3;
   const header = el('header', {}, [el('h1', { text: '感谢你的反馈，一起共建项目' }), note('提供更详细的分析报告，帮助我们更快地定位和解决问题。'),
@@ -92,17 +102,25 @@ function render() {
     content.append(el('label', { className: 'field' }, [el('span', { className: 'label', text: '反馈目标' }), select]),
       el('label', { className: 'secondary', text: '＋ 添加截图' }, [el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: true, hidden: true, disabled: state.busy, onChange: e => run(() => addFiles(e.target.files)) })]),
       pictureCards(), note('图片不交给模型。自动提交使用已重编码并去除元数据的 PNG 发送副本，仍需自行遮盖敏感像素。原图仅供本地下载，可能含隐私元数据。'), check('增加最近 15 分钟的错误摘要（在本地先脱敏）', 'logs'));
-    footer.append(button('直接提交', saveReview), button('分析并上传 · 推荐', prepareAnalysis, 'primary', !state.clients.length), note(state.clients.length ? '先检查分析范围，再检查报告并确认上传' : '安全诊断 Client 暂不可用，仍可直接反馈'));
+    const parent = el('select', { disabled: state.busy, onChange: event => { state.parentThreadId = event.target.value; render(); } }, [el('option', { value: '', text: '选择项目目录（无已有对话也可分析）' }), ...state.threads.map(thread => el('option', { value: thread.id, text: thread.title ?? '未命名对话' }))]);
+    parent.value = state.parentThreadId;
+    content.append(el('label', { className: 'field' }, [el('span', { text: '诊断项目：继承已有对话或指定目录' }), parent]));
+    if (!state.parentThreadId) content.append(el('input', { value: state.projectRef, placeholder: '项目目录；由 Host 校验访问规则', disabled: state.busy, onInput: event => { state.projectRef = event.target.value; } }));
+    footer.append(button('直接提交', saveReview), button('分析并上传 · 推荐', prepareAnalysis, 'primary', !state.clients.length), note(state.clients.length ? '先检查分析范围，再检查报告并确认上传' : '已配置成员暂不可用，仍可直接反馈'));
+    if (state.analysis?.state === 'ready') footer.append(button('查看上次分析报告', async () => { state.report.title = state.analysis.title; state.report.body = state.analysis.body; state.dirty = true; await saveReview(); }));
   } else if (['scope', 'analyzing'].includes(state.stage)) {
-    content.append(el('div', { className: 'notice', text: '本地 Agent Client 可能连接云端模型。以下是将交给模型的完整脱敏材料；不包含截图、完整配置或会话数据库。' }));
+    content.append(el('div', { className: 'notice', text: '以下采集材料已脱敏，截图不交给模型。普通 Agent Client 沿用现有权限、项目规则与原生历史，可能连接云端模型；默认只读排查并在上传前再次脱敏。' }));
     const select = el('select', { disabled: state.busy, onChange: e => { state.clientId = e.target.value; state.analysisConsent = false; render(); } },
-      state.clients.map(c => el('option', { value: c.id, text: `${c.label} · ${c.provider} · ${c.model} · ${c.destination}` })));
+      state.clients.map(c => el('option', { value: c.id, text: `${c.label} · ${c.model}` })));
     select.value = state.clientId; content.append(select, note(`排查配方 ${state.recipeVersion} · 默认只读，不执行修复`),
       el('textarea', { className: 'material', value: state.material, readOnly: true, 'aria-label': '脱敏分析材料' }),
       check('同意将上述脱敏材料交给所选 Agent Client 分析', 'analysisConsent'));
     if (state.stage === 'analyzing') content.append(note('正在分析所选证据，随后将再次脱敏并展示完整报告。', 'notice'));
-    footer.append(button('跳过分析', saveReview), button('开始分析', analyze, 'primary', !state.analysisConsent || !state.clientId));
-    if (state.stage === 'analyzing') footer.append(el('button', { type: 'button', className: 'secondary', text: '取消分析，保留草稿', onClick: () => bridge('close') }));
+    if (state.analysis?.threadUrl) content.append(el('a', { href: state.analysis.threadUrl, text: '打开分析对话', target: '_blank', rel: 'noopener noreferrer' }));
+    if (state.analysis?.state === 'blocked') content.append(note(state.analysis.error || 'Client 需要处理，请打开分析对话。', 'notice'));
+    if (state.stage === 'analyzing') footer.append(button('停止等待，保留草稿', async () => { clearTimeout(analysisTimer); await call({ op: 'cancel-analysis' }); state.stage = 'scope'; state.error = '已停止等待；这不会强制终止 Client，可打开分析对话查看。'; }));
+    else footer.append(button('跳过分析', saveReview), ['failed', 'cancelled'].includes(state.analysis?.state)
+      ? button('重新准备材料', prepareAnalysis, 'primary') : button('开始分析', analyze, 'primary', !state.analysisConsent || !state.clientId));
   } else if (['review', 'handoff', 'submitting'].includes(state.stage)) {
     content.append(input('Issue 标题', 'title', false, true), input('报告正文', 'body', true, true), pictureCards(),
       el('div', { className: 'notice', text: `目标：${state.journal?.target.label ?? ''} · ${state.journal?.target.visibility === 'public' ? '公开可见' : '请核对目标权限'}。文本已经本地过滤，但仍需检查业务内容和截图。` }));
@@ -133,11 +151,16 @@ function render() {
 }
 render();
 run(async () => {
-  const initial = await call({ op: 'bootstrap' }); state.targets = initial.targets; state.clients = initial.diagnostics?.clients ?? [];
+  const initial = await call({ op: 'bootstrap' }); state.targets = initial.targets; state.clients = initial.clients ?? []; state.threads = initial.threads ?? []; state.analysis = initial.analysis;
   state.clientId = state.clients[0]?.id ?? ''; state.targetId = state.targets[0]?.id ?? '';
   if (initial.journal) {
     Object.assign(state, { journal: initial.journal, revision: initial.revision, report: initial.journal.report, targetId: initial.journal.target.id, dirty: false });
     state.stage = initial.journal.state === 'published' ? 'submitted' : initial.journal.state === 'draft' ? 'edit' : 'review';
     if (initial.journal.state === 'approved') { state.stage = 'review'; await saveReview(); }
   }
+  if (initial.analysis && ['starting', 'running', 'blocked'].includes(initial.analysis.state)) {
+    Object.assign(state, { analysis: initial.analysis, material: initial.analysis.material, hash: initial.analysis.hash, stage: 'analyzing' });
+    analysisTimer = setTimeout(() => run(refreshAnalysis), 1000);
+  }
+  if (initial.analysis?.state === 'failed') state.error = initial.analysis.error;
 });

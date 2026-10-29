@@ -1,20 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { attachments } from './attachments.js';
 import { AttachmentVault } from './attachment-vault.js';
+import { FeedbackAnalysis } from './analysis.js';
 import { digest, profiles, record, text } from './config.js';
 import { marker, provider } from './providers.js';
-import { instructions, recipeVersion } from './recipe.js';
 import { sanitize } from './sanitize.js';
-import type { Client, Host, Journal, OwnerContext, Profile, Provider, Report } from './types.js';
+import type { Host, Journal, OwnerContext, Profile, Provider, Report } from './types.js';
 
 type ProviderFactory = (target: Profile) => Provider;
 export class FeedbackService {
-  constructor(private readonly host: Host, private readonly factory: ProviderFactory = target => provider(host, target)) {}
+  private readonly analysis: FeedbackAnalysis;
+  constructor(private readonly host: Host, private readonly factory: ProviderFactory = target => provider(host, target)) {
+    this.analysis = new FeedbackAnalysis(host);
+  }
+
+  receiveDelivery(input: unknown) { return this.analysis.receiveDelivery(input); }
 
   async dispatch(input: unknown, context: OwnerContext | undefined): Promise<unknown> {
     if (context?.kind !== 'owner-http-request' || context.operation !== 'write' || !context.requestIdentity || context.pluginInstanceId !== this.host.pluginInstanceId) throw new Error('反馈仅能由已登录用户在插件面板中操作');
     await context.assertCurrent();
     const data = record(input); const op = text(data.op, 30); const key = `feedback:${digest(context.userId)}`;
+    if (['prepare-analysis', 'analyze', 'analysis-status', 'cancel-analysis'].includes(op)) return this.analysis.dispatch(data, context);
     const current = await this.host.storage.get(key);
     const journal = current?.value as Journal | undefined;
     const vault = new AttachmentVault(this.host.dataPath);
@@ -28,11 +34,15 @@ export class FeedbackService {
     };
     const publicWrite = async (value: Journal) => { const saved = await write(value); return present(saved.journal, saved.revision); };
     if (op === 'bootstrap') {
-      let diagnostics;
-      try { diagnostics = await this.host.diagnostics?.describe(); } catch { /* Direct submission remains available. */ }
-      return { targets, journal: journal ? await vault.hydrate(journal) : undefined, revision: current?.revision, diagnostics: diagnostics ? {
-        ...diagnostics, projectRoot: '[PROJECT]', environment: sanitize(diagnostics.environment, [diagnostics.projectRoot]),
-      } : undefined };
+      const [members, threads, runtime] = await Promise.allSettled([
+        this.host.members?.list() ?? Promise.resolve([]), this.host.threads?.list({ limit: 50 }) ?? Promise.resolve([]),
+        this.host.runtimeInfo?.get(),
+      ]);
+      return { targets, journal: journal ? await vault.hydrate(journal) : undefined, revision: current?.revision,
+        clients: members.status === 'fulfilled' ? members.value.filter(member => member.available).map(member => ({ id: member.catId, label: member.displayName, model: member.defaultModel })) : [],
+        threads: threads.status === 'fulfilled' ? threads.value : [],
+        projectRoot: runtime.status === 'fulfilled' ? runtime.value?.projectRoot : undefined,
+        analysis: await this.analysis.status(context.userId, true) };
     }
     if (op === 'save') {
       if (journal && ['writing', 'unknown', 'upload_failed'].includes(journal.state)) throw new Error('请先处理上一次提交或保留上传回执，再编辑新报告');
@@ -47,28 +57,6 @@ export class FeedbackService {
         owner: context.userId, report, target, digest: digest({ id, report, target }), state: 'draft',
       };
       return publicWrite(value);
-    }
-    if (op === 'prepare-analysis') {
-      if (!this.host.diagnostics) throw new Error('当前宿主未提供安全诊断 Client，可直接提交或手动创建');
-      const description = await this.host.diagnostics.describe();
-      const report = this.report(data.report);
-      const material = sanitize(`E1 环境摘要\n${description.environment}\n\nE2 用户描述\n${report.title}\n${report.body}\n\nE3 最近错误摘要\n${data.logs === true ? await this.host.diagnostics.collect() : '用户未选择日志'}`, [description.projectRoot]);
-      const hash = digest({ material, clients: description.clients, recipeVersion }); const analysisKey = `${key}:analysis`;
-      const old = await this.host.storage.get(analysisKey);
-      await context.assertCurrent();
-      const stored = await this.host.storage.compareAndSet(analysisKey, old?.revision ?? null, { material, hash, clients: description.clients, recipeVersion });
-      if (!stored.applied) throw new Error('分析范围已变化，请重新检查');
-      return { material, hash, clients: description.clients, recipeVersion };
-    }
-    if (op === 'analyze') {
-      const prepared = await this.host.storage.get(`${key}:analysis`);
-      const selected = prepared?.value as { material: string; hash: string; clients: Client[]; recipeVersion: string } | undefined;
-      if (!selected || selected.hash !== data.hash || data.confirmed !== true || !this.host.diagnostics) throw new Error('请先检查并确认脱敏后的分析材料');
-      const client = selected.clients.find(c => c.id === data.clientId);
-      if (!client?.revision || selected.recipeVersion !== recipeVersion) throw new Error('分析目的地或排查配方已变化，请重新检查范围');
-      const result = await this.host.diagnostics.analyze({ clientId: client.id, clientRevision: client.revision, prompt: selected.material, instructions, signal: context.signal });
-      await context.assertCurrent();
-      return { body: sanitize(result), recipeVersion };
     }
     if (!journal || journal.owner !== context.userId || data.digest !== journal.digest) throw new Error('报告版本已变化，请重新检查并确认');
     if (digest(targets.find(p => p.id === journal.target.id)) !== digest(journal.target)) throw new Error('目标配置已变化，请重新检查报告');

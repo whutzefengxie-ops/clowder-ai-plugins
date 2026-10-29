@@ -7,7 +7,7 @@ created: 2026-10-28
 
 # 反馈插件：最小 Host 增量方案
 
-状态：源码核验后的收敛方案；通用扩展契约待 Mind 确认，尚未按本方案改写产品代码。原 Host Draft #1732 中的专用诊断通道不属于本方案。
+状态：2026-10-29 已按用户授权在插件 Draft #155 和配套 Host Draft #1732 落实本方案，通用接口仍待维护者评审。专用诊断通道及 Client 改动已移除；当前验证与真实验收边界见 [verification.md](verification.md)。通用能力诉求已提交 [Host #1734](https://github.com/zts212653/clowder-ai/issues/1734)，截至本轮核对尚无 Mind 回复。
 
 ## 用户目标与验收边界
 
@@ -34,6 +34,8 @@ After：左栏一个插件按钮打开反馈表单，已配置 Agent 辅助形�
 Architecture cell：Host 提供通用容器、身份/生命周期和项目路由；插件拥有反馈业务、材料、报告与外部平台适配。
 
 Map delta：补 UI consumer/面板语义及必要运行上下文；不增加诊断专用模型调用、会话系统或数据库。
+
+当前接口：SDK `runtimeInfo.get()`、普通线程 `projectRef` 输入/投影，以及版本化 `PluginUiPanel` 命令结果。后两者是模块接口与结果语义，不新增 manifest contribution 种类。面板 HTML 由已校验安装包的模块返回，复用现有安装完整性、owner 调度和隔离策略；没有单独扩展 Companion/编辑器静态服务。Host 不解析反馈步骤、材料、报告或平台配置。
 
 Why：让第二个普通插件也可复用这些能力；后续改反馈 recipe、平台或报告模板不再要求发版 Host。
 

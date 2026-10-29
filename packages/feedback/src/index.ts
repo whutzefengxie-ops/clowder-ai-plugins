@@ -20,10 +20,11 @@ export default {
             'feedback.panel': async (input: unknown, _native?: unknown, context?: OwnerContext) => {
               if (context?.kind !== 'owner-http-request' || context.pluginInstanceId !== host.pluginInstanceId) throw new Error('请通过左栏反馈入口打开面板');
               await context.assertCurrent();
-              if (input && typeof input === 'object' && 'op' in input && input.op === 'open') return { html };
+              if (input && typeof input === 'object' && 'op' in input && input.op === 'open') return { kind: 'plugin-panel', version: 1, html } satisfies import('@clowder-ai/plugin-sdk').PluginUiPanel;
               return service.dispatch(input, context);
             },
             'feedback.check': () => check(host),
+            'feedback.delivery': (input: unknown) => service.receiveDelivery(input),
           },
           stop() {},
         };

@@ -25,6 +25,8 @@ SDK 公开方法是接口边界，不再按插件 ID 或 feature 能力数组复
 
 ## 2. Plugin → Host
 
+本轮候选新增可选 `runtimeInfo.get()`：仅在当前安装的 owner HTTP 操作中返回当前 Host 版本/修订、系统、Node、默认项目和有效日志目录，不提供完整环境或配置；旧 Host / 不支持的载体可不提供。`threads.create({title, projectRef?, parentThreadId?, participants?})` 中项目目录引用由 Host 按普通项目策略校验，不能同时指定 parent 与 projectRef；省略两者沿用默认项目。线程投影的 `projectRef` 是 Host 解析后的真实项目。`ui` command 可返回 `PluginUiPanel`（`{kind:'plugin-panel',version:1,html}`）打开隔离面板，包内 HTML 不获得 Host DOM 或任意网络访问；SDK 类型见 `runtime-info.ts`。侧栏入口来自已启用安装的 `activity-bar.bottom` 声明，图标来自插件元数据，不硬编码业务。
+
 参数与结果的完整类型以 [module-host.ts](../packages/plugin-sdk/src/module-host.ts)、[FeatureContext](../packages/plugin-sdk/src/feature-context.ts) 及相应类型入口为准。下表涵盖当前公开 surface；“实例”表示 Host 自动绑定的安装实例与 feature，不能由正文替换。
 
 | 接口 | 用途、参数与结果 | 资源与身份边界 | 生命周期与取消 |
