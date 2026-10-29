@@ -160,3 +160,27 @@ test('durable progress stays associated with the exact request and invalid compl
   status='completed'; content='未生成有效报告';
   assert.equal(((await f.call({op:'analysis-status'})).analysis as {state:string}).state,'failed');
 });
+
+test('a late durable read cannot revive a cancelled analysis', async () => {
+  const f = analysisFixture();
+  const prepared=await f.call({op:'prepare-analysis',report:{title:'取消分析',body:'保留草稿',attachments:[]}});
+  await f.call({op:'analyze',clientId:'configured-cat',hash:prepared.hash,confirmed:true});
+  let release!: (value: unknown[])=>void;
+  Object.assign(f.host.threads!,{readMessages:()=>new Promise(resolve=>{release=resolve;})});
+  const pending=f.call({op:'analysis-status'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(((await f.call({op:'cancel-analysis'})).analysis as {state:string}).state,'cancelled');
+  release([{id:'reply',timestamp:20,sender:{kind:'cat',catId:'configured-cat'},content:'# 已完成\n\n## 摘要\n旧结果',response:{executionId:'turn',inputMessageIds:['request-message'],status:'completed',startedAt:10}}]);
+  assert.equal(((await pending).analysis as {state:string}).state,'cancelled');
+});
+
+test('history unavailability cannot prevent bootstrap or direct feedback', async () => {
+  const f=analysisFixture();
+  const prepared=await f.call({op:'prepare-analysis',report:{title:'诊断',body:'历史不可读',attachments:[]}});
+  await f.call({op:'analyze',clientId:'configured-cat',hash:prepared.hash,confirmed:true});
+  Object.assign(f.host.threads!,{readMessages:async()=>{throw new Error('thread unavailable');}});
+  const reopened=await f.call({op:'bootstrap'});
+  assert.ok(Array.isArray(reopened.targets));
+  assert.equal((reopened.analysis as {state:string}).state,'failed');
+  await f.call({op:'save',targetId:'clowder',report:{title:'直接反馈',body:'不依赖分析历史',attachments:[]}});
+});

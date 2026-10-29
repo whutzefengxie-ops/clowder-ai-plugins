@@ -4,6 +4,7 @@ const app = document.getElementById('app');
 const state = { stage: 'edit', report: { title: '', body: '', attachments: [] }, targets: [], targetId: '', clients: [], clientId: '',
   consent: false, busy: false, error: '', dirty: true, automatic: false, projectRef: '', analysis: undefined, preview: true };
 let analysisTimer;
+let analysisEpoch = 0;
 const button = (label, action, style = 'secondary', disabled = false) => el('button', { type: 'button', text: label, className: style, disabled: disabled || state.busy, onClick: () => run(action) });
 const note = (text, className = 'hint') => el('p', { text, className });
 function input(label, field, multiline = false, copy = false) {
@@ -67,6 +68,7 @@ async function saveReview(checkTarget = true) {
   } catch (error) { state.error = error.message + '。手动创建仍可使用。'; }
 }
 async function prepareAnalysis() {
+  analysisEpoch++; clearTimeout(analysisTimer);
   // Persist the form first so a failed/cancelled client cannot lose the draft.
   await saveReview(false); state.error = '';
   const prepared = await call({ op: 'prepare-analysis', report: state.report, logs: true, projectRef: state.projectRef, journalDigest:state.journal.digest });
@@ -74,6 +76,7 @@ async function prepareAnalysis() {
   if (!state.clients.some(c => c.id === state.clientId)) state.clientId = state.clients[0]?.id ?? '';
 }
 async function analyze() {
+  analysisEpoch++;
   state.stage = 'analyzing'; render();
   try {
     const result = await call({ op: 'analyze', clientId: state.clientId, hash: state.hash, confirmed: true });
@@ -98,9 +101,12 @@ async function run(action) {
 }
 async function refreshAnalysis() {
   if (state.stage !== 'analyzing') return;
+  const epoch = analysisEpoch; const runId = state.analysis?.id; const sourceDigest = state.journal?.digest;
+  const current = () => state.stage === 'analyzing' && analysisEpoch === epoch && state.analysis?.id === runId && state.journal?.digest === sourceDigest;
   try {
     const { analysis } = await call({ op: 'analysis-status' });
-    if (state.stage !== 'analyzing') return;
+    if (!current()) return;
+    if (analysis?.id !== runId) { state.stage = 'scope'; state.error = '分析已在其他窗口变化，请重新打开检查。'; render(); return; }
     state.analysis = analysis;
     if (analysis?.state === 'ready') {
       state.report.title = analysis.title; state.report.body = analysis.body; state.dirty = true;
@@ -116,10 +122,11 @@ async function refreshAnalysis() {
     const elapsed = document.querySelector('[data-analysis-elapsed]');
     if (elapsed) elapsed.textContent = `已等待 ${Math.max(0, Math.floor((Date.now() - (analysis?.startedAt ?? Date.now())) / 1000))} 秒${analysis?.receivedChars ? ` · 已收到 ${analysis.receivedChars} 字回复` : ''}。完成后会自动展示报告，可关闭面板稍后回来。`;
   } catch (error) {
+    if (!current()) return;
     const progress = document.querySelector('[data-analysis-progress]');
     if (progress) progress.textContent = '暂时无法获取进展，正在重试；原分析不会重复发起。';
   }
-  if (state.stage === 'analyzing') analysisTimer = setTimeout(refreshAnalysis, 1500);
+  if (current()) analysisTimer = setTimeout(refreshAnalysis, 1500);
 }
 function render() {
   const scroll = app.dataset.stage === state.stage ? app.querySelector('.content')?.scrollTop ?? 0 : 0;
@@ -153,7 +160,7 @@ function render() {
       el('p',{'data-analysis-elapsed':'',className:'hint',text:'完成后会自动展示报告，可关闭面板稍后回来。'})]));
     if (state.analysis?.threadUrl) content.append(el('a', { href: state.analysis.threadUrl, text: '打开分析对话', target: '_blank', rel: 'noopener noreferrer' }));
     if (['blocked', 'preparing'].includes(state.analysis?.state)) content.append(note(state.analysis.error || 'Client 需要处理，请打开分析对话。', 'notice'));
-    if (state.stage === 'analyzing') footer.append(button('停止等待，保留草稿', async () => { clearTimeout(analysisTimer); const result = await call({ op: 'cancel-analysis' }); state.analysis = result.analysis; state.stage = 'scope'; state.error = '已停止等待；这不会强制终止 Client，可打开分析对话查看。'; }));
+    if (state.stage === 'analyzing') footer.append(button('停止等待，保留草稿', async () => { analysisEpoch++; clearTimeout(analysisTimer); const result = await call({ op: 'cancel-analysis' }); state.analysis = result.analysis; state.stage = 'scope'; state.error = '已停止等待；这不会强制终止 Client，可打开分析对话查看。'; }));
     else footer.append(button('跳过分析', saveReview), ['failed', 'cancelled', 'interrupted'].includes(state.analysis?.state)
       ? button('重新准备材料', prepareAnalysis, 'primary') : button('开始分析', analyze, 'primary', !state.clientId));
   } else if (['review', 'handoff', 'submitting'].includes(state.stage)) {
