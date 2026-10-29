@@ -34,13 +34,12 @@ export class FeedbackService {
     };
     const publicWrite = async (value: Journal) => { const saved = await write(value); return present(saved.journal, saved.revision); };
     if (op === 'bootstrap') {
-      const [members, threads, runtime] = await Promise.allSettled([
-        this.host.members?.list() ?? Promise.resolve([]), this.host.threads?.list({ limit: 50 }) ?? Promise.resolve([]),
+      const [members, runtime] = await Promise.allSettled([
+        this.host.members?.list() ?? Promise.resolve([]),
         this.host.runtimeInfo?.get(),
       ]);
       return { targets, journal: journal ? await vault.hydrate(journal) : undefined, revision: current?.revision,
         clients: members.status === 'fulfilled' ? members.value.filter(member => member.available).map(member => ({ id: member.catId, label: member.displayName, model: member.defaultModel })) : [],
-        threads: threads.status === 'fulfilled' ? threads.value : [],
         projectRoot: runtime.status === 'fulfilled' ? runtime.value?.projectRoot : undefined,
         analysis: await this.analysis.status(context.userId, true) };
     }

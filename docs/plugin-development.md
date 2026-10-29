@@ -35,7 +35,7 @@ SDK 公开方法是接口边界，不再按插件 ID 或 feature 能力数组复
 | `context.secrets.get(key)` | 读取声明凭据，返回 string 或 undefined | 实例声明的凭据 | 不把密钥写日志，撤销后拒绝 |
 | `context.storage.get/list/set/compareAndSet/delete` | 私有键值；读返回 revision/value，CAS 接 expectedRevision，返回 applied/revision | 实例私有存储 | 持久数据按声明保留；并发用 revision；停用撤销调用 |
 | `context.threads.get(id)`、`context.threads.list({limit,before}?)` | 普通线程摘要或 null／分页摘要，含 Host 生成 deepLinkUrl | 普通用户线程规则 | 实际资源检查、实例存活 |
-| `context.threads.readMessages(id,{limit,before?})` | 分页历史 id/timestamp/content/sender；游标用同一行的 timestamp/id | 普通线程可见性 | 同上，不把分页当永久快照 |
+| `context.threads.readMessages(id,{limit,before?})` | 分页历史 id/timestamp/content/sender；可选 response 提供 executionId/inputMessageIds/status/startedAt/completedAt，恢复漏掉的实时状态；游标用同一行的 timestamp/id | 普通线程可见性 | 同上，不把分页当永久快照；不暴露原生认证或会话元数据 |
 | `context.threads.getCats(id)` | 实际参与者、当前可路由成员与未加入成员事实 | 普通成员与线程可见性 | 实际线程参与者，不是插件自建成员目录 |
 | `context.threads.create({title,parentThreadId?,participants?})` | 创建普通线程；父线程存在时继承项目；返回摘要 | 普通用户线程写入规则 | 写失败不自动重试；成功后业务绑定由插件 storage 管理；响应异常后允许重新创建并覆盖映射 |
 | `context.threads.update(id,{title?,preferredCats?})` | 修改标题或偏好，返回摘要 | 普通用户线程写入规则 | preferredCats 是偏好，不等同实际参与者 |

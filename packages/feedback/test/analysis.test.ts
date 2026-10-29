@@ -128,3 +128,35 @@ test('project logs cannot escape the selected project through a junction', async
     assert.match(String(prepared.material), /覆盖存在缺口/);
   } finally { await unlink(link); }
 });
+
+test('durable completed replies recover a missed lifecycle event and legacy signed JSON without another wake', async () => {
+  const f = analysisFixture();
+  const prepared = await f.call({op:'prepare-analysis',report:{title:'测试反馈',body:'生成模板',attachments:[]}});
+  await f.call({op:'analyze',clientId:'configured-cat',hash:prepared.hash,confirmed:true});
+  Object.assign(f.host.threads!, {readMessages:async()=>[{
+    id:'answer',timestamp:20,sender:{kind:'cat',catId:'configured-cat'},
+    content:JSON.stringify({title:'反馈报告',body:'## 问题摘要\\n已分析\\n\\n[伙伴/model🐾]'})+'\n\n[伙伴/model🐾]',
+    response:{executionId:'turn',inputMessageIds:['request-message'],status:'completed',startedAt:10,completedAt:20},
+  }]});
+  const restarted = new FeedbackService(f.host);
+  const result = await restarted.dispatch({op:'bootstrap'},f.ctx) as {analysis:{state:string;title:string;body:string}};
+  assert.equal(result.analysis.state,'ready');
+  assert.equal(result.analysis.title,'反馈报告');
+  assert.equal(result.analysis.body,'## 问题摘要\n已分析');
+  assert.equal(f.effects.filter(effect=>effect.startsWith('wake:')).length,1);
+});
+
+test('durable progress stays associated with the exact request and invalid completed output stops waiting', async () => {
+  const f = analysisFixture();
+  const prepared = await f.call({op:'prepare-analysis',report:{title:'测试反馈',body:'分析问题',attachments:[]}});
+  await f.call({op:'analyze',clientId:'configured-cat',hash:prepared.hash,confirmed:true});
+  let inputMessageId = 'old-request'; let status = 'completed'; let content = '# 旧报告\n\n不能复用';
+  Object.assign(f.host.threads!,{readMessages:async()=>[{id:'answer',timestamp:20,sender:{kind:'cat',catId:'configured-cat'},content,
+    response:{executionId:'turn',inputMessageIds:[inputMessageId],status,startedAt:10}}]});
+  assert.equal(((await f.call({op:'analysis-status'})).analysis as {state:string}).state,'running');
+  inputMessageId='request-message'; status='processing'; content='正在分析';
+  const progress=(await f.call({op:'analysis-status'})).analysis as {state:string;receivedChars:number};
+  assert.equal(progress.state,'running'); assert.equal(progress.receivedChars,4);
+  status='completed'; content='未生成有效报告';
+  assert.equal(((await f.call({op:'analysis-status'})).analysis as {state:string}).state,'failed');
+});

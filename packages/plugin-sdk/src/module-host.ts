@@ -64,6 +64,14 @@ export interface PluginThreadMessage {
   readonly timestamp: number;
   readonly content: string;
   readonly sender: { readonly kind: 'owner' | 'cat' | 'system'; readonly catId?: string };
+  /** Persisted ordinary response status, correlated to its exact input messages. */
+  readonly response?: {
+    readonly executionId: string;
+    readonly inputMessageIds: readonly string[];
+    readonly status: 'processing' | 'completed' | 'failed' | 'canceled' | 'interrupted';
+    readonly startedAt: number;
+    readonly completedAt?: number;
+  };
 }
 
 export interface PluginThreadCat {
