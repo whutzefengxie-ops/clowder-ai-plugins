@@ -8,7 +8,7 @@ export default {
   create() {
     const check = async (host: Pick<Host, 'config'>) => {
       parseProfiles(await host.config.get('destinations'));
-      return { status: 'success', message: '目标配置有效。启用后从左栏底部打开问题反馈；自动提交会在确认前核验身份与附件通路。' };
+      return { ok: true, message: '目标配置有效。启用后从左栏底部打开问题反馈；自动提交会在确认前核验身份与附件通路。' };
     };
     return {
       settings: (host: Pick<Host, 'config'>) => ({ actions: { 'feedback.check': () => check(host) } }),
