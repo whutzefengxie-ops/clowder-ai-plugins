@@ -15,5 +15,7 @@ export function parseReport(content: string): {title: string; body: string} | un
     title = match?.[1]; body = match?.[2];
   }
   if (typeof title !== 'string' || typeof body !== 'string' || !title.trim() || !body.trim() || title.length > 200 || body.length > 100_000) return undefined;
-  return {title: title.trim(), body: stripSignature(body)};
+  // Chinese labels with a colon inside closing ** are not right-flanking
+  // emphasis in CommonMark. Keep the label bold and move its punctuation out.
+  return {title: title.trim(), body: stripSignature(body).replace(/\*\*((?:事实|推测|未验证|预期|实际)(?:[（(][^\n)）]{1,40}[)）])?)[：:]\*\*/g, '**$1**：')};
 }

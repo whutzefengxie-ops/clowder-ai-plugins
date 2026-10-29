@@ -9,5 +9,5 @@ test('readable Issue Markdown remains readable and strips only the final Client 
 });
 
 test('a real Client may prepend commentary before the final Issue heading', () => {
-  assert.deepEqual(parseReport('我会依据材料整理报告。\n\n# 反馈模板验收\n\n## 问题摘要\n**事实：**合成样例。\n\n[伙伴/model🐾]'),{title:'反馈模板验收',body:'## 问题摘要\n**事实：**合成样例。'});
+  assert.deepEqual(parseReport('我会依据材料整理报告。\n\n# 反馈模板验收\n\n## 问题摘要\n**事实：**合成样例。\n\n[伙伴/model🐾]'),{title:'反馈模板验收',body:'## 问题摘要\n**事实**：合成样例。'});
 });
