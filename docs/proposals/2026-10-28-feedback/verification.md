@@ -7,37 +7,50 @@ created: 2026-10-29
 
 # 反馈插件验证与交付边界
 
-#155 包含插件实现、公开 SDK 增量和必要文档；#1732 提供通用 UI/runtime-info/projectRef。旧方案的反馈专用 Host 诊断和 Claude/Codex 改动已移除。旧模拟预览已从当前差异移除，历史可回溯到提交 `482b39e5306f68c3d983104bf5f8ac370f49d3c2`，不作为当前运行证据。
+#155 包含插件实现、公开 SDK 增量和必要文档；#1732 提供通用 UI/runtime-info/projectRef，以及普通响应的持久化状态投影。Host 不包含反馈采证、脱敏或 Claude/Codex 专用诊断通道。旧模拟预览不作为运行证据。
 
-## 当前验证
+## 2026-10-29 七项问题复验
 
-- 插件类型检查、构建及 24 项行为测试通过：普通成员分析、持久状态重开、未知创建/请求中断、冷激活中断、项目 junction 范围、无有效报告/迟到结果、提交与远端回读、截图处理、上传恢复，以及 Settings 自检返回契约。
-- SDK 类型检查及定向 24 项通过：公开接口/文档一致、owner 上下文、撤销和普通线程映射。
-- Host API 类型检查通过；4 项通用 UI、owner/生命周期、最小运行信息和项目目录校验测试通过。
-- Web 隔离面板定向 3 项通过。
-- Packed archive 在干净 consumer 中安装，用实际 Host React 面板、HTTP 路由、模块调用、普通线程与真实私有存储编码器跑过 19 项浏览器旅程。Redis 传输、成员输出和远端平台仍为替身；界面实际接收异步执行/报告事件，不走专用 diagnostics 回调。
+| 用户问题 | 修复与实际证据 |
+| --- | --- |
+| 最近错误摘要用途不清楚 | 移除日志开关；开始前说明版本、现象和有界错误线索先脱敏，再交给所选成员。云端模型会接收该材料，截图不交模型；原始日志不作为 Issue 附件。真实输入及最终复制正文中的合成令牌均被过滤。 |
+| 重复同意分析 | 删除分析复选框；开始前保留范围说明与可展开材料。真实页面分析复选框数量为 0；发布前完整报告及图片确认保留。 |
+| 会话选择含义不清 | 改为“分析成员”，说明复用 Clowder 已配置的 Agent Client/模型；只保留可选项目目录。真实选择 Sol 并成功调用。 |
+| 分析页闪动 | 静默轮询只更新进展节点。打包浏览器连续轮询验证内容 DOM 对象不变；真实运行等待时长持续更新，关闭重开不重复调用。 |
+| 无进展、JSON 难读 | 显示实际请求/分析/回复阶段与等待时长。新配方返回 Markdown 标题和正文，支持标题、列表、表格及代码预览；真实报告有 9 个二级标题，复制正文有真实换行，无 JSON 外壳及签名。 |
+| 会话完成仍等待 | 用普通消息中成员与原输入 ID 对应的响应终态恢复结果。原用户已完成报告无新增调用恢复；最终真实运行自动进入检查页，“停止等待”消失。 |
+| 图标裂图 | 修复 Windows tar 列表 CRLF 导致清单精确匹配失败。真实图标接口 HTTP 200；侧栏与插件卡片 3 个图像均 complete、自然尺寸 150×150。 |
 
-可复现命令：
+## 当前检查
+
+- 插件类型检查、构建及 33 项行为测试通过，涵盖持久化恢复、无效输出、取消后迟到结果、旧轮询不得覆盖新草稿、历史读取失败保留直接反馈、旧签名 JSON 与新 Markdown。
+- SDK 类型检查及 24 项定向检查通过。
+- Host API 类型检查，2 项恢复/投影回归和 9 项真实 tar 静态图标边界检查通过。API/shared/MCP/Web 生产构建及 2 项生产缓存测试通过。
+- 最终包清洁安装后，通过实际 Host React、HTTP、模块和私有存储编码器的 21 项浏览器旅程。含截图复制/下载、自动提交结果链接、手动兜底、部分附件恢复、远端回读失败不得重发和静默轮询。此处成员、远端平台及 Redis 传输为替身，不能等同于真实平台验收。
+- 非作者代理独立审查覆盖插件代码 `4ac493d4aec9dd701171a88467ff243a1be29cfd` 与 Host `e59543a015943c235cecda183eb65d97f25f0bf3`；阻塞项已修复并复验。该结论不代替维护者正式审查。
+
+复现入口：
 
 ```sh
 pnpm --filter @clowder-ai/plugin-sdk typecheck
 node --import tsx --test packages/plugin-sdk/src/public-surface.test.ts packages/plugin-sdk/src/owner-action-context.test.ts packages/plugin-sdk/src/thread-mappings.test.ts
 pnpm --filter @clowder-ai/feedback typecheck
 pnpm --filter @clowder-ai/feedback test
-pnpm --filter @clowder-ai/feedback pack --pack-destination artifacts
-# 在配套 Host worktree 中：
-pnpm --filter @cat-cafe/api test:plugin-feedback
-pnpm --filter @cat-cafe/web exec vitest run src/components/plugins/__tests__/plugin-ui.test.tsx
-# FEEDBACK_ARTIFACT / FEEDBACK_NPM_CLI 指向实际包和 npm CLI；可配置现有浏览器位置：
+pnpm --filter @clowder-ai/feedback build
+# 在配套 Host 中，安装包与工具链位置通过 FEEDBACK_* 环境变量指定：
 pnpm --filter @cat-cafe/api test:plugin-feedback:installed
 ```
 
-## 真实验收与生命周期
+## 真实安装与成员调用
 
-2026-10-29 用户明确授权在原 runtime 部署候选。Host `1ec3910fca4e0a49d376dc3ae336ac9e4fc72340` 已部署并重启，真实 Settings 完成安装包安装、Host secret 配置、原位更新、自检、启用，并从真实左栏入口打开反馈面板。实际安装发现自检原返回 `status` 被 Host 拒绝，修复为契约要求的 `ok`；新增回归已观察 RED → GREEN，代码增量获非作者独立批准。实际包 SHA-256：`e6920299ba7d834c5133e483ab6ac5211400799d90d0a02ad2b4a0a8f6b0a195`。
+用户授权的原 runtime 已部署 Host `e59543a015943c235cecda183eb65d97f25f0bf3`；真实 Settings 完成原位包更新、自检及启用。插件代码 `4ac493d4aec9dd701171a88467ff243a1be29cfd`，最终包 SHA-256 `89e1d9ad143d52aa4aa93b552e90f7a322453c73880601b303d3715c643043da`。后续仅文档变化不改变此包。原 GitHub 密钥及插件实例身份保持不变。
 
-原实例 22 个会话、560 条消息完整保留并通过 API 回读，Web/API/资源及构建版本检查通过；唯一必需环境调整为 API 监听改为 loopback，以满足已有的本地插件管理门禁。原配置、数据库及旧构建均留有校验过的回退材料。GitHub 凭据通过 Host 密钥配置保存，仅只读核对目标公开仓库及 Issue 功能；未创建真实反馈 Issue，也未调用真实模型或创建原生验收会话。GitHub 带图自动提交仍需组织附件适配器，当前可复制/下载图片后手动建单。
+本轮真实调用 Sol 两次，使用明确标注的合成材料和隔离项目目录。首次约 60 秒完成，发现 Client 可能在最终一级标题前追加过程说明，旧解析器明确失败；补充回归和兼容后，直接从该回复恢复报告，未重新唤醒。最终包再完整调用一次，Host 响应生命周期约 45.2 秒后完成；面板自动进入检查页，并通过运行中关闭重开、完成后重开、实际复制和图标检查。验收结论来自 Host 状态、页面和剪贴板，不把模型生成的报告当作通过证据。
 
-真实配置成员/模型调用、GitHub/GitLab 实际反馈写入及内网组织 CLI 尚未验收；以上检查不等于这些场景通过。两个 PR 保持 Draft，尚未合入或正式发布。
+部署前 23 个会话、562 条消息均保留且 API 可读，9 份配置哈希未变；Web/API/资源及四份构建版本核验通过。本轮未改变 API 监听设置，沿用上一轮为既有本地管理门禁配置的 loopback。正确回退数据在服务完全停止后备份并校验；较早非静止样本明确排除。原用户会话未归档或删除，验收后恢复原用户报告草稿。两个作者原生测试会话按精确 ID、项目目录和消息关联证明归属，备份并核对日志哈希后可恢复归档；Clowder 历史与测试证据保留。
 
-先前隔离验收的临时浏览器服务已停止。实际地址、PID、源码工作区、包 SHA、数据目录及停止回执在 Host worktree 的 `artifacts/feedback-installed/instance-ledger.json`；结果在同目录 receipt 与截图中。该阶段未绑定用户原生 HOME；合成草稿/附件和旧消费者程序保留以供复查，不删除持久数据。本次授权部署沿用原生产实例与原生客户端配置，用户使用环境保持运行，未新增临时服务。
+## 尚未覆盖与保留状态
+
+未向 GitHub/GitLab 创建真实测试 Issue；内网组织 CLI 与组织附件适配器未进行真实接入验收。自动建单、返回实际链接、读取核对及手动兜底能力保留，替身检查通过；不能据此宣称真实平台端到端通过。GitHub 带图自动提交仍需附件适配器，无适配器时使用图片复制/下载和手动网页建单。
+
+作者临时浏览器服务已停止，候选生产环境按用户要求继续运行。多余的置换构建在核对回退副本后清理；具名回退包、数据库、认证与配置均保留。完整本地验收报告、截图、原生归属及实例台账保留在任务 artifacts，包含私有诊断证据，不纳入公共 Git。两个 PR 保持 Draft，未合入或发布。

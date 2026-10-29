@@ -7,6 +7,8 @@ created: 2026-10-28
 
 # 反馈诊断指导 v0.1（设计稿）
 
+> 本文保留最初方案供追溯。当前随包执行的指导为 [`src/recipe.ts`](../../../packages/feedback/src/recipe.ts) 的 `feedback-diagnosis/3`：截图不交模型，最终回复为可读 Markdown 一级标题与正文，下面的 JSON 是设计阶段的数据语义，不能作为当前 Client 的输出要求。实际验证见 [verification.md](./verification.md)。
+
 此文必须随插件包发布并版本化。它指导报告质量，不能代替宿主限制文件、工具、网络与发布权限。
 
 ## Host 提供的输入
