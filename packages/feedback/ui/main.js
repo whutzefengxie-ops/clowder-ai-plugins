@@ -27,6 +27,7 @@ function input(label, field, multiline = false, copy = false) {
 function invalidate() {
   state.dirty = true; state.consent = false; state.automatic = false;
   editVersion++;
+  const status=document.querySelector('[data-save-status]');if(status)status.textContent='尚未保存，关闭前请保存';
   if(state.stage==='edit') {clearTimeout(draftTimer);draftTimer=setTimeout(()=>{pendingDraft=pendingDraft.then(saveDraft).catch(error=>{state.error=`草稿暂未保存：${error.message}`;render();});},500);}
   document.querySelectorAll('[data-consent]').forEach(node => { node.checked = false; });
   document.querySelectorAll('[data-publish]').forEach(node => { node.disabled = true; node.setAttribute('aria-disabled', 'true'); });
@@ -34,11 +35,12 @@ function invalidate() {
 async function saveDraft() {
   if(state.stage!=='edit'||!state.dirty||locked()||!hasDraft())return;
   const id=state.feedbackId, version=editVersion;
+  const status=document.querySelector('[data-save-status]');if(status)status.textContent='正在保存草稿…';
   const saved=await recordCall({op:'save',draftOnly:true,targetId:state.targetId,revision:state.revision,report:state.report});
   if(state.feedbackId!==id)return;
   state.journal=saved.journal;state.revision=saved.revision;
   if(version===editVersion)state.dirty=false;
-  const status=document.querySelector('[data-save-status]');if(status)status.textContent='草稿已保存到反馈记录';
+  if(status)status.textContent=version===editVersion?'草稿已保存到反馈记录':'尚未保存，关闭前请保存';
 }
 function hasDraft(){return state.journal||state.report.title.replace(/^(?:bug|feat):\s*/i,'').trim()||state.report.body.trim()||state.report.attachments.length;}
 async function flushDraft(){clearTimeout(draftTimer);await pendingDraft;await saveDraft();}
@@ -62,7 +64,7 @@ async function openRecord(id){
   analysisEpoch++;clearTimeout(analysisTimer);clearTimeout(historyTimer);await flushDraft();
   const value=await call({op:'bootstrap',feedbackId:id});
   Object.assign(state,value,{feedbackId:id,report:{...value.journal.report,kind:value.journal.report.kind??(/^feat:/i.test(value.journal.report.title)?'feat':'bug')},
-    targetId:value.journal.target.id,dirty:false,consent:false,automatic:false,error:'',preview:true});
+    targetId:value.journal.target.id,analysis:value.analysis,material:value.analysis?.material,hash:value.analysis?.hash,preflight:undefined,dirty:false,consent:false,automatic:false,error:'',preview:true});
   state.clientId=value.analysis?.clientId??state.clientId;state.projectRef=value.analysis?.projectRef??'';
   state.stage=value.journal.state==='published'?'submitted':value.journal.reviewReady||locked()?'review':'edit';
   if(['prepared','preparing','starting','running','blocked'].includes(value.analysis?.state)){
@@ -185,7 +187,7 @@ function render() {
     footer.append(button('刷新记录',showHistory),button('新建反馈',startNew,'primary'));
   } else if (state.stage === 'edit') {
     content.append(...feedbackForm(state,{input,note,button,pictureCards,addFiles,invalidate,run,render}));
-    footer.append(el('span',{'data-save-status':'',className:'hint',text:state.journal&&!state.dirty?'草稿已保存到反馈记录':''}),button('直接反馈',saveReview),button('生成分析报告',prepareAnalysis,'primary',!state.clients.length));
+    footer.append(el('span',{'data-save-status':'',className:'hint',text:state.journal&&!state.dirty?'草稿已保存到反馈记录':hasDraft()?'尚未保存，关闭前请保存':''}),button('保存草稿',flushDraft,'text'),button('直接反馈',saveReview),button('生成分析报告',prepareAnalysis,'primary',!state.clients.length));
     if(state.analysis?.state==='ready')footer.append(button('查看本条分析报告',async()=>{state.report.title=state.analysis.title;state.report.body=state.analysis.body;await saveReview();},'text'));
   } else if (['scope', 'analyzing'].includes(state.stage)) {
     const client = state.clients.find(c=>c.id===state.clientId);

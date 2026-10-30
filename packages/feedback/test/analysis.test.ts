@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, rmdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FeedbackService } from '../src/service.js';
@@ -126,7 +126,7 @@ test('project logs cannot escape the selected project through a junction', async
     const prepared = await f.call({ op: 'prepare-analysis', report: { title: '失败', body: '无法运行', attachments: [] }, logs: true });
     assert.ok(!String(prepared.material).includes('outside-business-canary'));
     assert.match(String(prepared.material), /覆盖存在缺口/);
-  } finally { await unlink(link); }
+  } finally { await (process.platform === 'win32' ? rmdir(link) : unlink(link)); }
 });
 
 test('durable completed replies recover a missed lifecycle event and legacy signed JSON without another wake', async () => {
