@@ -34,5 +34,5 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/codeagent-packed"
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/codeagent-packed"
-          tar -xzf "$RUNNER_TEMP/codeagent-packed/"*.tgz -C "$RUNNER_TEMP/codeagent-packed"
+          (cd "$RUNNER_TEMP/codeagent-packed" && tar -xzf ./*.tgz)
           CODEAGENT_PACKAGE_DIR="$RUNNER_TEMP/codeagent-packed/package" node --test test/package.test.mjs
