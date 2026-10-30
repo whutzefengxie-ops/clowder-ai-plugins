@@ -191,7 +191,7 @@ function render() {
     if(state.analysis?.state==='ready')footer.append(button('查看本条分析报告',async()=>{state.report.title=state.analysis.title;state.report.body=state.analysis.body;await saveReview();},'text'));
   } else if (['scope', 'analyzing'].includes(state.stage)) {
     const client = state.clients.find(c=>c.id===state.clientId);
-    content.append(el('div', { className: 'notice', text: `分析成员：${client?.label ?? '已选成员'} · ${client?.model ?? ''}。版本、问题描述及近期错误线索先在本地脱敏，再交给该成员分析；如其模型在云端，脱敏材料会发送到该模型。截图不交给模型。` }),
+    content.append(el('div', { className: 'notice', text: `分析成员：${client?.label ?? '已选成员'} · ${client?.model ?? ''}。${state.report.kind === 'feat' ? '版本和功能建议' : '版本、问题描述及近期错误线索'}先在本地脱敏，再交给该成员分析；如其模型在云端，脱敏材料会发送到该模型。截图不交给模型。` }),
       note('仅生成报告，不执行修复或创建 Issue。完成后会再次脱敏，并展示完整标题和正文供你检查。'),
       el('details',{},[el('summary',{text:'查看将发送的脱敏材料'}),el('textarea', { className: 'material', value: state.material, readOnly: true, 'aria-label': '脱敏分析材料' })]));
     if (state.stage === 'analyzing') content.append(el('div',{className:'analysis-progress',role:'status','aria-live':'polite'},[
