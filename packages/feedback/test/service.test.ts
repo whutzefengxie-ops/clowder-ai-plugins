@@ -28,8 +28,8 @@ test('lost response survives service restart and reconciles without a second POS
   const outcome = await f.call({ op: 'submit', digest: saved.journal.digest });
   assert.equal(outcome.journal.state, 'unknown');
   const restarted = new FeedbackService(f.host, () => f.adapter);
-  await assert.rejects(restarted.dispatch({ op: 'submit', digest: saved.journal.digest }, f.ctx), /不会重复/);
-  const reconciled = await restarted.dispatch({ op: 'reconcile', digest: saved.journal.digest }, f.ctx) as { journal: HydratedJournal };
+  await assert.rejects(restarted.dispatch({ op: 'submit',feedbackId:f.feedbackId(), digest: saved.journal.digest }, f.ctx), /不会重复/);
+  const reconciled = await restarted.dispatch({ op: 'reconcile',feedbackId:f.feedbackId(), digest: saved.journal.digest }, f.ctx) as { journal: HydratedJournal };
   assert.equal(reconciled.journal.state, 'published');
   assert.equal(f.creates(), 1);
 });

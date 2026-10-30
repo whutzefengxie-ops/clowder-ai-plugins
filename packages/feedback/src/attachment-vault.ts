@@ -13,7 +13,7 @@ export class AttachmentVault {
       const normalized = await this.store(image);
       attachments.push({ ...normalized, ...(image.original ? { original: await this.store(image.original) } : {}) });
     }
-    return { title: report.title, body: report.body, attachments };
+    return { ...report, attachments };
   }
   async readReport(report: StoredReport): Promise<Report> {
     const attachments: Attachment[] = [];
@@ -22,7 +22,7 @@ export class AttachmentVault {
       attachments.push({ ...metadata, base64: (await this.bytes(item)).toString('base64'),
         ...(original ? { original: { ...original, base64: (await this.bytes(original)).toString('base64') } } : {}) });
     }
-    return { title: report.title, body: report.body, attachments };
+    return { ...report, attachments };
   }
   async hydrate(journal: Journal): Promise<HydratedJournal> { return { ...journal, report: await this.readReport(journal.report) }; }
   private async directory(): Promise<string> {

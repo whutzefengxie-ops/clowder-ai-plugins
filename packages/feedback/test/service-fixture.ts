@@ -22,6 +22,19 @@ export function fixture() {
   };
   const ctx: OwnerContext = { kind: 'owner-http-request', userId: 'owner', pluginInstanceId: 'fixture', operation: 'write', requestIdentity: { requestId: 'request' }, signal: new AbortController().signal, assertCurrent: async () => {} };
   const service = new FeedbackService(host, () => adapter);
-  const call = (input: unknown) => service.dispatch(input, ctx) as Promise<{ journal: HydratedJournal; revision: number }>;
-  return { host, adapter, ctx, service, call, creates: () => creates, fail: () => { fail = true; } };
+  let feedbackId: string | undefined;
+  let selectedRevision: number | undefined;
+  // A panel carries its selected record ID; raw dispatch tests cover the blank home.
+  const call = async (input: unknown) => {
+    const request=input as Record<string,unknown>;
+    if (request.op==='prepare-analysis' && !feedbackId) {
+      const saved=await service.dispatch({op:'save',targetId:'clowder',report:request.report},ctx) as {journal:HydratedJournal;revision:number};
+      feedbackId=saved.journal.id; selectedRevision=saved.revision;
+    }
+    const result=await service.dispatch({...request,revision:request.revision ?? selectedRevision,feedbackId:request.feedbackId ?? feedbackId},ctx) as {journal:HydratedJournal;revision:number};
+    if (result.journal) feedbackId=result.journal.id;
+    if (result.revision !== undefined) selectedRevision=result.revision;
+    return result;
+  };
+  return { host, adapter, ctx, service, call, feedbackId:()=>feedbackId, creates: () => creates, fail: () => { fail = true; } };
 }

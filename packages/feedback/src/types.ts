@@ -25,8 +25,9 @@ export interface Profile {
 export interface ImageBytes { id: string; name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; base64: string; sha256: string }
 export interface Attachment extends ImageBytes { original?: ImageBytes }
 export type StoredAttachment = Omit<ImageBytes, 'base64'> & { original?: Omit<ImageBytes, 'base64'> };
-export interface Report { title: string; body: string; attachments: Attachment[] }
-export interface StoredReport { title: string; body: string; attachments: StoredAttachment[] }
+export type FeedbackKind = 'bug' | 'feat';
+export interface Report { kind?: FeedbackKind; title: string; body: string; attachments: Attachment[] }
+export interface StoredReport { kind?: FeedbackKind; title: string; body: string; attachments: StoredAttachment[] }
 export interface RemoteIssue { id: string; url: string; title: string; body: string }
 export interface Journal {
   version: 1; id: string; owner: string; report: StoredReport; target: Profile; digest: string;
@@ -34,6 +35,7 @@ export interface Journal {
   phase?: 'uploading' | 'creating' | 'verifying';
   uploads?: { submissionId: string; sha256: string; markdown: string }[];
   uploadingHash?: string;
+  createdAt?: number; updatedAt?: number; reviewReady?: boolean; handoffAt?: number; supersededBy?: string;
 }
 export type HydratedJournal = Omit<Journal, 'report'> & { report: Report };
 export interface Provider {

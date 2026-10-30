@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { attachments } from './attachments.js';
 import { AttachmentVault } from './attachment-vault.js';
 import { FeedbackAnalysis } from './analysis.js';
-import { digest, profiles, record, text } from './config.js';
+import { digest, feedbackKey, feedbackTitle, profiles, record, text } from './config.js';
+import { FeedbackRecords } from './records.js';
 import { marker, provider } from './providers.js';
 import { sanitize } from './sanitize.js';
 import type { Host, Journal, OwnerContext, Profile, Provider, Report } from './types.js';
@@ -10,8 +11,10 @@ import type { Host, Journal, OwnerContext, Profile, Provider, Report } from './t
 type ProviderFactory = (target: Profile) => Provider;
 export class FeedbackService {
   private readonly analysis: FeedbackAnalysis;
+  private readonly records: FeedbackRecords;
   constructor(private readonly host: Host, private readonly factory: ProviderFactory = target => provider(host, target)) {
     this.analysis = new FeedbackAnalysis(host);
+    this.records = new FeedbackRecords(host);
   }
 
   receiveDelivery(input: unknown) { return this.analysis.receiveDelivery(input); }
@@ -19,16 +22,23 @@ export class FeedbackService {
   async dispatch(input: unknown, context: OwnerContext | undefined): Promise<unknown> {
     if (context?.kind !== 'owner-http-request' || context.operation !== 'write' || !context.requestIdentity || context.pluginInstanceId !== this.host.pluginInstanceId) throw new Error('反馈仅能由已登录用户在插件面板中操作');
     await context.assertCurrent();
-    const data = record(input); const op = text(data.op, 30); const key = `feedback:${digest(context.userId)}`;
-    if (['prepare-analysis', 'analyze', 'analysis-status', 'cancel-analysis'].includes(op)) return this.analysis.dispatch(data, context);
+    const data = record(input); const op = text(data.op, 30);
+    const targets = await profiles(this.host);
+    const feedbackId = data.feedbackId === undefined ? undefined : text(data.feedbackId,80);
+    if (feedbackId !== undefined && !/^[\w-]{1,80}$/.test(feedbackId)) throw new Error('反馈记录 ID 无效');
+    if (['bootstrap','history'].includes(op)) await this.records.migrate(context.userId,targets);
+    if (op === 'history') return {items:await this.history(context.userId)};
+    if (op !== 'save' && op !== 'bootstrap' && !feedbackId) throw new Error('请先选择反馈记录');
+    const key = feedbackKey(context.userId, feedbackId ?? randomUUID());
     const current = await this.host.storage.get(key);
     const journal = current?.value as Journal | undefined;
     const vault = new AttachmentVault(this.host.dataPath);
     const present = async (value: Journal, revision: number | undefined, extra = {}) => ({ journal: await vault.hydrate(value), revision, ...extra });
-    const targets = await profiles(this.host);
     const write = async (value: Journal) => {
       await context.assertCurrent();
-      const result = await this.host.storage.compareAndSet(key, current?.revision ?? null, value);
+      await this.records.register(context.userId,value.id);
+      await context.assertCurrent();
+      const result = await this.host.storage.compareAndSet(key, current?.revision ?? null, {...value,updatedAt:Date.now()});
       if (!result.applied) throw new Error('草稿已在另一个窗口更新，请重新打开反馈面板');
       return { journal: value, revision: result.revision };
     };
@@ -38,22 +48,30 @@ export class FeedbackService {
         this.host.members?.list() ?? Promise.resolve([]),
         this.host.runtimeInfo?.get(),
       ]);
-      return { targets, journal: journal ? await vault.hydrate(journal) : undefined, revision: current?.revision,
+      if (feedbackId && !journal) throw new Error('反馈记录不存在或不属于当前用户');
+      return { targets, journal: journal ? await vault.hydrate(journal) : undefined, revision: current?.revision, items:await this.history(context.userId),
         clients: members.status === 'fulfilled' ? members.value.filter(member => member.available).map(member => ({ id: member.catId, label: member.displayName, model: member.defaultModel })) : [],
         projectRoot: runtime.status === 'fulfilled' ? runtime.value?.projectRoot : undefined,
-        analysis: await this.analysis.status(context.userId, true) };
+        analysis: feedbackId ? await this.analysis.status(context.userId,true,feedbackId) : undefined };
+    }
+    if (['prepare-analysis', 'analyze', 'analysis-status', 'cancel-analysis'].includes(op)) {
+      if (!journal || journal.owner !== context.userId) throw new Error('反馈记录不存在');
+      if (op === 'prepare-analysis' && ['writing','unknown','upload_failed','published'].includes(journal.state)) throw new Error('此记录暂不能重新分析，可以新建另一条反馈');
+      return this.analysis.dispatch({...data,feedbackId:journal.id,report:(await vault.hydrate(journal)).report,journalDigest:journal.digest},context);
     }
     if (op === 'save') {
       if (journal && ['writing', 'unknown', 'upload_failed'].includes(journal.state)) throw new Error('请先处理上一次提交或保留上传回执，再编辑新报告');
-      if (journal && journal.state !== 'published' && data.revision !== current?.revision) throw new Error('草稿版本已变化，请重新打开');
+      if (journal?.state === 'published') throw new Error('此反馈已投递，请新建另一条反馈');
+      if (journal && data.revision !== current?.revision) throw new Error('草稿版本已变化，请重新打开');
       const target = targets.find(p => p.id === data.targetId);
       if (!target) throw new Error('反馈目标已变化');
       const report = await vault.storeReport(this.report(data.report));
-      if (!report.title.trim() || !report.body.trim()) throw new Error('请填写标题与问题描述');
-      const id = !journal || journal.state === 'published' ? randomUUID() : journal.id;
+      if (data.draftOnly !== true && !report.body.trim() && !report.attachments.length) throw new Error('请描述问题或添加图片');
+      const id = journal?.id ?? feedbackId ?? key.split(':').at(-1)!;
       const value: Journal = {
         version: 1, id,
         owner: context.userId, report, target, digest: digest({ id, report, target }), state: 'draft',
+        createdAt:journal?.createdAt ?? Date.now(),reviewReady:data.draftOnly !== true,
       };
       return publicWrite(value);
     }
@@ -61,13 +79,20 @@ export class FeedbackService {
     if (digest(targets.find(p => p.id === journal.target.id)) !== digest(journal.target)) throw new Error('目标配置已变化，请重新检查报告');
     const adapter = this.factory(journal.target);
     if (op === 'preflight') return adapter.preflight(context.signal);
-    if (op === 'manual') return { url: journal.target.issueCreateUrl, remoteIssueCreated: false };
+    if (op === 'manual') {
+      if (!['draft','approved'].includes(journal.state)) throw new Error('请先核对当前提交结果');
+      return publicWrite({...journal,handoffAt:Date.now()});
+    }
     if (op === 'reset-upload') {
       if (journal.state !== 'upload_failed' || data.confirmed !== true) throw new Error('当前提交不能重新编辑');
       const archived = await this.host.storage.compareAndSet(`publication:${journal.id}`, null, journal);
       if (!archived.applied && digest((await this.host.storage.get(`publication:${journal.id}`))?.value) !== digest(journal)) throw new Error('回执已变化，请重新打开面板检查状态');
       const id = randomUUID();
-      return publicWrite({ ...journal, id, digest: digest({ id, report: journal.report, target: journal.target }), state: 'draft', phase: undefined, uploads: undefined, uploadingHash: undefined, safeError: undefined });
+      const next: Journal = {...journal,id,digest:digest({id,report:journal.report,target:journal.target}),state:'draft',phase:undefined,uploads:undefined,uploadingHash:undefined,safeError:undefined,createdAt:Date.now()};
+      await this.records.register(context.userId,id);
+      await this.host.storage.compareAndSet(feedbackKey(context.userId,id),null,next);
+      await write({...journal,supersededBy:id});
+      return present(next,(await this.host.storage.get(feedbackKey(context.userId,id)))?.revision);
     }
     if (op === 'approve') {
       if (journal.state !== 'draft' || data.confirmed !== true) throw new Error('请检查报告和图片，并确认目标可见性');
@@ -127,7 +152,24 @@ export class FeedbackService {
 
   private report(value: unknown): Report {
     const r = record(value);
-    return { title: sanitize(text(r.title, 200)).replace(/[\r\n]/g, ' '), body: sanitize(text(r.body, 100_000)), attachments: attachments(r.attachments ?? []) };
+    if (r.kind !== undefined && r.kind !== 'bug' && r.kind !== 'feat') throw new Error('反馈类型无效');
+    const title=sanitize(text(r.title ?? '',200)).replace(/[\r\n]/g,' '), body=sanitize(text(r.body ?? '',100_000));
+    return { ...(r.kind ? {kind:r.kind} : {}),title:r.kind ? feedbackTitle(r.kind,title,body) : title || feedbackTitle('bug','',body),body,attachments:attachments(r.attachments ?? []) };
+  }
+
+  private async history(userId: string) {
+    const journals=await this.records.list(userId);
+    const items=await Promise.all(journals.map(async journal=>{
+      const analysis=await this.analysis.status(userId,false,journal.id).catch(()=>({state:'unavailable',threadUrl:undefined,startedAt:undefined}));
+      const status=journal.supersededBy ? 'retained' : journal.state==='published' ? 'published'
+        : ['writing','unknown','upload_failed'].includes(journal.state) ? journal.state
+        : journal.handoffAt ? 'manual' : ['preparing','prepared','starting','running','blocked'].includes(analysis?.state ?? '') ? analysis!.state
+        : ['failed','interrupted','cancelled','unavailable'].includes(analysis?.state ?? '') ? analysis!.state
+        : analysis?.state==='ready' || journal.reviewReady ? 'ready' : 'draft';
+      return {id:journal.id,title:journal.report.title,kind:journal.report.kind ?? (/^feat:/i.test(journal.report.title)?'feat':'bug'),status,
+        updatedAt:Math.max(journal.updatedAt ?? journal.createdAt ?? 0,analysis?.startedAt ?? 0),analyzed:analysis?.state==='ready',issueUrl:journal.issue?.url,threadUrl:analysis?.threadUrl};
+    }));
+    return items.sort((a,b)=>b.updatedAt-a.updatedAt);
   }
 }
 function verify(journal: Journal, issue: { title: string; body: string }): void {

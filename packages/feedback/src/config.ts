@@ -61,3 +61,9 @@ export function parseProfiles(raw: unknown): Profile[] {
 }
 export async function profiles(host: Host): Promise<Profile[]> { return parseProfiles(await host.config.get('destinations')); }
 export function digest(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+export function feedbackTitle(kind: 'bug' | 'feat', title: string, body = '') {
+  const summary = title.replace(/^(?:(?:bug|feat):\s*)+/i, '').trim() || body.trim().split('\n')[0] || '反馈';
+  return `${kind}: ${summary.slice(0, 194)}`;
+}
+export const feedbackKey = (userId: string, id: string) => `feedback:${digest(userId)}:${id}`;
+export const analysisKey = (userId: string, id?: string) => `analysis:${digest(userId)}${id ? `:${id}` : ''}`;

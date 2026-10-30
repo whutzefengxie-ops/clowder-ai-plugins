@@ -18,7 +18,7 @@ test('large valid PNG persists outside 1 MiB Host CAS values and hydrates across
   const png = pngFixture(512); assert.ok(png.length > 1_000_000);
   const saved = await f.call({ op: 'save', targetId: 'clowder', report: { title: 'large screenshot', body: 'visible pixels', attachments: [{ mime: 'image/png', base64: png.toString('base64') }] } });
   assert.ok(!JSON.stringify(writes).includes('base64'));
-  const loaded = await f.service.dispatch({ op: 'bootstrap' }, f.ctx) as { journal: { report: { attachments: { base64: string }[] } } };
+  const loaded = await f.service.dispatch({ op: 'bootstrap',feedbackId:f.feedbackId() }, f.ctx) as { journal: { report: { attachments: { base64: string }[] } } };
   assert.equal(loaded.journal.report.attachments[0]?.base64, saved.journal.report.attachments[0]?.base64);
 });
 

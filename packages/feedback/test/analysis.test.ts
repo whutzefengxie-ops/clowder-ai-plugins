@@ -16,7 +16,7 @@ function analysisFixture() {
     threads: { list: async () => [], get: async () => thread, create: async (input: { projectRef?: string }) => { effects.push(`create:${input.projectRef}`); return thread; } },
     messaging: { subscribe: async () => { effects.push('subscribe'); }, unsubscribe: async () => { effects.push('unsubscribe'); }, send: async (input: { wake: { catId: string }; payload: unknown }) => { effects.push(`wake:${input.wake.catId}`); return { messageId: 'request-message', threadId: thread.id }; } },
   });
-  const call = (input: unknown) => f.service.dispatch(input, f.ctx) as Promise<Record<string, unknown>>;
+  const call = (input: unknown) => f.call(input) as Promise<Record<string, unknown>>;
   return { ...f, effects, call, thread };
 }
 
@@ -91,12 +91,12 @@ test('a cold plugin activation reports an unverifiable old run as interrupted', 
   const f = analysisFixture();
   const prepared = await f.call({ op: 'prepare-analysis', report: { title: '失败', body: '无法运行', attachments: [] } });
   const resumed = new FeedbackService(f.host);
-  const pending = await resumed.dispatch({ op: 'bootstrap' }, f.ctx) as { analysis: { state: string } };
+  const pending = await resumed.dispatch({ op: 'bootstrap',feedbackId:f.feedbackId() }, f.ctx) as { analysis: { state: string } };
   assert.equal(pending.analysis.state, 'prepared');
-  const started = await resumed.dispatch({ op: 'analyze', clientId: 'configured-cat', hash: prepared.hash, confirmed: true }, f.ctx) as { analysis: { state: string } };
+  const started = await resumed.dispatch({ op: 'analyze',feedbackId:f.feedbackId(), clientId: 'configured-cat', hash: prepared.hash, confirmed: true }, f.ctx) as { analysis: { state: string } };
   assert.equal(started.analysis.state, 'running');
   const restarted = new FeedbackService(f.host);
-  const reopened = await restarted.dispatch({ op: 'analysis-status' }, f.ctx) as { analysis: { state: string; threadUrl: string } };
+  const reopened = await restarted.dispatch({ op: 'analysis-status',feedbackId:f.feedbackId() }, f.ctx) as { analysis: { state: string; threadUrl: string } };
   assert.equal(reopened.analysis.state, 'interrupted');
   assert.equal(reopened.analysis.threadUrl, f.thread.deepLinkUrl);
   assert.equal(f.effects.filter(effect => effect.startsWith('wake:')).length, 1);
@@ -139,7 +139,7 @@ test('durable completed replies recover a missed lifecycle event and legacy sign
     response:{executionId:'turn',inputMessageIds:['request-message'],status:'completed',startedAt:10,completedAt:20},
   }]});
   const restarted = new FeedbackService(f.host);
-  const result = await restarted.dispatch({op:'bootstrap'},f.ctx) as {analysis:{state:string;title:string;body:string}};
+  const result = await restarted.dispatch({op:'bootstrap',feedbackId:f.feedbackId()},f.ctx) as {analysis:{state:string;title:string;body:string}};
   assert.equal(result.analysis.state,'ready');
   assert.equal(result.analysis.title,'反馈报告');
   assert.equal(result.analysis.body,'## 问题摘要\n已分析');
@@ -194,7 +194,7 @@ test('a previously rejected completed response can be recovered after a parser u
   assert.equal(((await f.call({op:'analysis-status'})).analysis as {state:string}).state,'failed');
   Object.assign(f.host.threads!,{readMessages:async()=>[{id:'reply',timestamp:20,sender:{kind:'cat',catId:'configured-cat'},content:'先说明分析依据。\n\n# 完整报告\n\n## 摘要\n合成验收。',
     response:{executionId:'turn',inputMessageIds:['request-message'],status:'completed',startedAt:10}}]});
-  const result=await new FeedbackService(f.host).dispatch({op:'bootstrap'},f.ctx) as {analysis:{state:string;title:string}};
+  const result=await new FeedbackService(f.host).dispatch({op:'bootstrap',feedbackId:f.feedbackId()},f.ctx) as {analysis:{state:string;title:string}};
   assert.equal(result.analysis.state,'ready'); assert.equal(result.analysis.title,'完整报告');
   assert.equal(f.effects.filter(effect=>effect.startsWith('wake:')).length,1);
 });
