@@ -34,8 +34,12 @@ bypassPermission
 
 已有 `plugin:official.acp-clients/<固定ID>` 或 native 绑定、引导目录、参数和历史不会迁移到本插件，无需强制改绑。本插件引用为 `plugin:official.codeagent/codeagent`。停用会阻止该绑定的新调用，保留角色和配置；重新启用可恢复。错误配置先在同一入口修正保存，再重试，不需卸载重装。
 
-版本 `0.1.0-beta.2` 需要支持“固定 ACP 声明 + configurationKey 连接覆盖”的 Host（配对分支 `feat/codeagent-plugin-extension`，基于角色重构 `99d68baa8`）。仅支持旧静态声明的 Host 不兼容这个版本，不能忽略报错后继续使用。公开稳定契约尚未发布，本包不宣称已在市场上架。
+## Host 与模型要求
 
-Windows 引导目录信任与受限审计恢复由 Host 部署策略管理，插件不能放宽。`strict` 默认仍要求可信祖先；内网发行可一次选择 `trusted-host`，同时保留目录自身私有权限。审计放宽只覆盖 Host 验证通过的真实 root-only 变更；命令、参数或权限变更仍要求可用审计。
+版本 `0.1.0-beta.3` 配对支持“固定 ACP 声明 + configurationKey 连接覆盖”的 Host。该通用能力已由 [Host PR #1745](https://github.com/zts212653/clowder-ai/pull/1745) 合入 `develop`，代码基线为 `f27e6b0f40b119f43b68312b0dcb28ecf12b2121`，不依赖角色重构分支。旧静态声明 Host 不兼容；合入 develop 不代表已随稳定版安装包发布，不能仅凭相同的安装包版本号判断是否包含。完整 Host 操作与验证边界见[使用指南](https://github.com/zts212653/clowder-ai/blob/f27e6b0f40b119f43b68312b0dcb28ecf12b2121/docs/ops/codeagent-main-acp-plugin.md)。本包仍是未发布候选，不宣称已在市场上架。
+
+成员的模型字段可跟随 CodeAgent 设置，或选择客户端实际报告的模型。未报告默认值时，Host 会显示“默认模型尚未确认”，模型列表可读取不代表真实调用已通过；更改连接后在成员配置刷新并确认实际采用结果。原生 system/persona 接口尚未验证，通用 ACP 兼容路径仍将身份上下文与用户任务共同发送；静态插件声明不代表原生身份接入已经完成。
+
+Windows 引导目录信任和审计策略由 Host 管理，插件不能放宽。Host #1745 不包含旧内网分支的 `trusted-host` 兼容策略、受限审计恢复或一次性部署准备。检查失败时应按实际 Host 的拒绝原因单独处理部署策略，不修改系统盘或祖先 ACL，也不能因安装本包而认为这些能力已具备。
 
 工程验证须覆盖实际 tgz 的文件闭包及 Host 安装/注册/配置/恢复；协议 fixture 不代表真实模型。真实企业 CodeAgent 的版本、登录、MCP、协作和重启结果由内网现场单独验收。
