@@ -490,8 +490,8 @@ importers:
   packages/plugin-sdk:
     dependencies:
       '@clowder-ai/plugin-contract':
-        specifier: 0.3.1-candidate.0
-        version: 0.3.1-candidate.0
+        specifier: 0.3.2-candidate.0
+        version: link:../plugin-contract
     devDependencies:
       '@types/node':
         specifier: ^20.17.0
