@@ -75,12 +75,15 @@ export class FeedbackService {
       if (journal && data.revision !== current?.revision) throw new Error('草稿版本已变化，请重新打开');
       const target = targets.find(p => p.id === data.targetId);
       if (!target) throw new Error('反馈目标已变化');
+      const clientId = data.clientId === undefined ? journal?.clientId : text(data.clientId, 200);
+      const projectRef = data.projectRef === undefined ? journal?.projectRef : text(data.projectRef, 4096);
       const report = await vault.storeReport(this.report(data.report));
       if (data.draftOnly !== true && !report.body.trim() && !report.attachments.length) throw new Error('请描述问题或添加图片');
       const id = journal?.id ?? feedbackId ?? key.split(':').at(-1)!;
       const value: Journal = {
         version: 1, id,
         owner: context.userId, report, target, digest: digest({ id, report, target }), state: 'draft',
+        clientId, projectRef,
         createdAt:journal?.createdAt ?? Date.now(),reviewReady:data.draftOnly !== true,
       };
       const saved = await publicWrite(value);

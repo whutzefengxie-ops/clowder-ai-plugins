@@ -5,7 +5,7 @@ import { feedbackHistory } from './history.js';
 
 const app = document.getElementById('app');
 const state = { stage: 'edit', feedbackId:crypto.randomUUID(), items:[], report: { kind:'bug', title: '', body: '', attachments: [] }, targets: [], targetId: '', clients: [], clientId: '',
-  consent: false, busy: false, error: '', dirty: true, automatic: false, projectRef: '', analysis: undefined, preview: true };
+  consent: false, busy: false, error: '', dirty: false, automatic: false, projectRef: '', analysis: undefined, preview: true };
 let analysisTimer;
 let analysisEpoch = 0;
 let historyTimer, draftTimer;
@@ -37,19 +37,19 @@ async function saveDraft() {
   if(!['edit','review','handoff'].includes(state.stage)||!state.dirty||locked()||!hasDraft())return;
   const id=state.feedbackId, version=editVersion;
   const status=document.querySelector('[data-save-status]');if(status)status.textContent='正在保存草稿…';
-  const saved=await recordCall({op:'save',draftOnly:state.stage==='edit',targetId:state.targetId,revision:state.revision,report:state.report});
+  const saved=await recordCall({op:'save',draftOnly:state.stage==='edit',targetId:state.targetId,clientId:state.clientId,projectRef:state.projectRef,revision:state.revision,report:state.report});
   if(state.feedbackId!==id)return;
   state.journal=saved.journal;state.revision=saved.revision;
   if(version===editVersion)state.dirty=false;
   if(status)status.textContent=version===editVersion?'草稿已保存到反馈记录':'草稿有更新，将自动保存';
 }
-function hasDraft(){return state.journal||state.report.title.replace(/^(?:bug|feat):\s*/i,'').trim()||state.report.body.trim()||state.report.attachments.length;}
+function hasDraft(){return state.journal||state.dirty;}
 async function flushDraft(){clearTimeout(draftTimer);await pendingDraft;await saveDraft();}
 async function startNew(){
   analysisEpoch++;clearTimeout(analysisTimer);clearTimeout(historyTimer);await flushDraft();
   await call({op:'new'});
   Object.assign(state,{feedbackId:crypto.randomUUID(),report:{kind:'bug',title:'',body:'',attachments:[]},journal:undefined,revision:undefined,analysis:undefined,
-    stage:'edit',dirty:true,consent:false,automatic:false,error:'',projectRef:'',preview:true});
+    stage:'edit',dirty:false,consent:false,automatic:false,error:'',projectRef:'',preview:true});
 }
 async function showHistory(){
   analysisEpoch++;clearTimeout(analysisTimer);clearTimeout(historyTimer);await flushDraft();state.stage='history';
@@ -67,7 +67,7 @@ async function openRecord(id,value){
   value??=await call({op:'bootstrap',feedbackId:id});
   Object.assign(state,value,{feedbackId:id,report:{...value.journal.report,kind:value.journal.report.kind??(/^feat:/i.test(value.journal.report.title)?'feat':'bug')},
     targetId:value.journal.target.id,analysis:value.analysis,material:value.analysis?.material,hash:value.analysis?.hash,preflight:undefined,dirty:false,consent:false,automatic:false,error:'',preview:true});
-  state.clientId=value.analysis?.clientId??state.clientId;state.projectRef=value.analysis?.projectRef??'';
+  state.clientId=value.journal.clientId??value.analysis?.clientId??state.clientId;state.projectRef=value.journal.projectRef??value.analysis?.projectRef??'';
   state.stage=value.journal.state==='published'?'submitted':value.journal.reviewReady||locked()?'review':'edit';
   if(['prepared','preparing','starting','running','blocked'].includes(value.analysis?.state)){
     state.material=value.analysis.material;state.hash=value.analysis.hash;state.stage=value.analysis.state==='prepared'?'scope':'analyzing';
@@ -103,7 +103,7 @@ async function addFiles(files) {
 }
 async function saveReview(checkTarget = true) {
   await flushDraft();
-  const saved = await recordCall({ op: 'save', targetId: state.targetId, revision: state.revision, report: state.report });
+  const saved = await recordCall({ op: 'save', targetId: state.targetId, clientId: state.clientId, projectRef: state.projectRef, revision: state.revision, report: state.report });
   Object.assign(state, saved, { report: saved.journal.report, dirty: false, consent: false, stage: 'review' });
   state.automatic = false;
   if (checkTarget) await checkRoute();

@@ -10,7 +10,7 @@ test('opening a record with no analysis clears fields omitted by JSON transport'
     el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,crypto:{randomUUID:()=> 'feedback-B'},
     bridge:async()=>true,beforeClose:async()=>{},copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
     call:async(input:{feedbackId?:string})=>input.feedbackId ? JSON.parse(JSON.stringify({
-      journal:{id:'feedback-B',state:'draft',digest:'digest-B',target:{id:'test'},report:{title:'bug: B',body:'body B',attachments:[]}},
+      journal:{id:'feedback-B',state:'draft',digest:'digest-B',target:{id:'test'},clientId:'member-B',projectRef:'C:/project-B',report:{title:'bug: B',body:'body B',attachments:[]}},
       revision:1,analysis:undefined,
     })) : new Promise(()=>{}),
   });
@@ -24,6 +24,8 @@ test('opening a record with no analysis clears fields omitted by JSON transport'
   assert.equal(actions.state.hash,undefined);
   assert.equal(actions.state.preflight,undefined);
   assert.equal(actions.state.report.body,'body B');
+  assert.equal(actions.state.clientId,'member-B');
+  assert.equal(actions.state.projectRef,'C:/project-B');
 });
 
 test('a prior poll cannot save its report into a newly prepared analysis draft', async () => {
