@@ -79,3 +79,39 @@ test('an earlier save acknowledgement never marks newer input as saved', async (
   assert.equal(actions.state.dirty,false);
   assert.equal(status.textContent,'草稿已保存到反馈记录');
 });
+
+test('closing waits for the automatic save of a completed analysis', async () => {
+  const messages: string[]=[];
+  let closePanel!: () => Promise<void>;
+  let release!: (value:unknown)=>void;
+  let started!: ()=>void;
+  const saving=new Promise<void>(resolve=>{started=resolve;});
+  const node=()=>({dataset:{},append(){},replaceChildren(){},addEventListener(){},querySelector(){return undefined;},scrollTop:0});
+  const context=createContext({
+    document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[]},el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,
+    crypto:{randomUUID:()=> 'draft'},setTimeout:()=>0,clearTimeout(){},console,copyImage:async()=>{},normalizePicture:async()=>{},
+    bridge:async(type:string)=>{messages.push(type);},beforeClose:async(action:()=>Promise<void>)=>{closePanel=action;},
+    call:async(input:{op:string;report:unknown})=>{
+      if(input.op==='bootstrap')return{targets:[],clients:[],items:[]};
+      if(input.op==='analysis-status')return{analysis:{id:'run',state:'ready',title:'bug: 分析报告',body:'完成的正文'}};
+      if(input.op==='save') {
+        const saved={journal:{id:'draft',state:'draft',digest:'saved',target:{},report:input.report},revision:2};
+        if(!release)return new Promise(resolve=>{release=resolve;started();});
+        return saved;
+      }
+      return{attachments:false};
+    },
+  });
+  const source=await readFile(new URL('../ui/main.js',import.meta.url),'utf8');
+  await runInContext(source.replace(/^import[^\n]+\n/gm,''),context);
+  const actions=runInContext('({state,refreshAnalysis})',context);
+  Object.assign(actions.state,{stage:'analyzing',dirty:false,analysis:{id:'run'},journal:{id:'draft',state:'draft',digest:'source',target:{}}});
+  const poll=actions.refreshAnalysis();
+  await saving;
+  const closing=closePanel();
+  await Promise.resolve();
+  assert.deepEqual(messages,[]);
+  release({journal:{id:'draft',state:'draft',digest:'saved',target:{}},revision:1});
+  await poll;await closing;
+  assert.ok(messages.includes('close'),'the queued close must finish after analysis saving');
+});

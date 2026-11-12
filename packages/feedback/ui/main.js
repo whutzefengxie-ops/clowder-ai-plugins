@@ -161,8 +161,8 @@ async function refreshAnalysis() {
     state.analysis = analysis;
     if (analysis?.state === 'ready') {
       state.report.title = analysis.title; state.report.body = analysis.body; state.dirty = true;
-      state.busy = true; state.stage = 'review'; render();
-      try { await saveReview(); } finally { state.busy = false; render(); }
+      state.stage = 'review';
+      await run(saveReview);
       return;
     }
     if (['failed', 'cancelled', 'interrupted'].includes(analysis?.state)) {
