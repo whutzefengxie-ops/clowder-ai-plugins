@@ -117,3 +117,29 @@ test('closing waits for the automatic save of a completed analysis', async () =>
   await poll;await closing;
   assert.ok(messages.includes('close'),'the queued close must finish after analysis saving');
 });
+
+test('a stale window can preserve its edits as a new draft and then close', async () => {
+  let closePanel!:()=>Promise<void>;
+  const messages:string[]=[];
+  const node=()=>({dataset:{},append(){},replaceChildren(){},addEventListener(){},querySelector(){},scrollTop:0});
+  const context=createContext({document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[]},el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,
+    crypto:{randomUUID:()=> 'copy'},setTimeout:()=>0,clearTimeout(){},console,normalizePicture:async()=>{},copyImage:async()=>{},
+    beforeClose:async(action:()=>Promise<void>)=>{closePanel=action;},bridge:async(type:string)=>{messages.push(type);},
+    call:async(input:{op:string;feedbackId?:string;report?:unknown})=>{
+      if(input.op==='bootstrap')return{targets:[],clients:[],items:[]};
+      if(input.feedbackId==='old')throw Object.assign(new Error('草稿版本已变化，请重新打开'),{code:'revision_conflict'});
+      return{journal:{id:'copy',state:'draft',target:{id:'clowder'},report:input.report},revision:3};
+    }});
+  const source=await readFile(new URL('../ui/main.js',import.meta.url),'utf8');
+  await runInContext(source.replace(/^import[^\n]+\n/gm,''),context);
+  const actions=runInContext('({state,saveDraft})',context);
+  Object.assign(actions.state,{feedbackId:'old',revision:1,dirty:true,journal:{id:'old',state:'draft',target:{id:'clowder'}},report:{title:'my edit',body:'unsaved contents',attachments:[]}});
+  await closePanel();
+  assert.deepEqual(messages,['close.cancel']);
+  await actions.saveDraft(true);
+  assert.equal(actions.state.feedbackId,'copy');
+  assert.equal(actions.state.report.body,'unsaved contents');
+  assert.equal(actions.state.saveError,'');
+  await closePanel();
+  assert.deepEqual(messages,['close.cancel','close']);
+});

@@ -17,7 +17,7 @@ export function beforeClose(action) {
   return bridge('close.guard', true);
 }
 window.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || !closeHandler) return;
+  if (event.isComposing || event.key !== 'Escape' || !closeHandler) return;
   event.preventDefault();
   void closeHandler();
 });
@@ -31,7 +31,7 @@ export function bridge(type, input) {
 }
 export const call = async input => {
   const response = await bridge('http', { method: 'POST', path: 'feedback', body: input });
-  if (response.status < 200 || response.status >= 300) throw new Error(response.body?.error ?? '反馈操作未完成');
+  if (response.status < 200 || response.status >= 300) throw Object.assign(new Error(response.body?.error ?? '反馈操作未完成'), {code:response.body?.code});
   return response.body;
 };
 export function el(tag, attrs = {}, children = []) {

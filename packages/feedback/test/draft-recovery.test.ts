@@ -19,3 +19,14 @@ test('a restarted service resumes the selected draft and explicit new feedback s
   await call({op:'bootstrap',feedbackId:saved.journal!.id});
   assert.equal((await call({op:'bootstrap',resume:true})).journal?.id,'draft-a');
 });
+
+test('a resume-pointer CAS conflict does not poison a successfully written draft revision', async () => {
+  const f=fixture();
+  const compare=f.host.storage.compareAndSet;
+  f.host.storage.compareAndSet=async(key,expected,value)=>key.startsWith('feedback-selection:')?{applied:false}:compare(key,expected,value);
+  const saved=await f.service.dispatch({op:'save',feedbackId:'draft-a',draftOnly:true,targetId:'clowder',report:{title:'A',body:'first',attachments:[]}},f.ctx) as {journal:HydratedJournal;revision:number;selectionSaved:boolean};
+  assert.equal(saved.selectionSaved,false);
+  const edited=await f.service.dispatch({op:'save',feedbackId:'draft-a',revision:saved.revision,draftOnly:true,targetId:'clowder',report:{title:'A',body:'second',attachments:[]}},f.ctx) as {journal:HydratedJournal;revision:number};
+  assert.equal(edited.journal.report.body,'second');
+  assert.ok(edited.revision>saved.revision);
+});
