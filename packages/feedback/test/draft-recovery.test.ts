@@ -1,0 +1,19 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { fixture } from './service-fixture.js';
+import type { HydratedJournal } from '../src/types.js';
+
+test('a restarted service resumes the selected draft and explicit new feedback stays blank', async () => {
+  const f = fixture();
+  const call = (input: unknown, userId = f.ctx.userId) => f.service.dispatch(input, {...f.ctx, userId}) as Promise<{journal?: HydratedJournal; revision: number}>;
+  const saved = await call({op:'save',feedbackId:'draft-a',draftOnly:true,targetId:'clowder',report:{kind:'feat',title:'feat: 粘贴截图',body:'关闭后继续填写',attachments:[]}});
+  const { FeedbackService } = await import('../src/service.js');
+  const reopened = await new FeedbackService(f.host).dispatch({op:'bootstrap',resume:true},f.ctx) as {journal?: HydratedJournal};
+  assert.equal(reopened.journal?.id,'draft-a');
+  assert.equal(reopened.journal?.report.body,'关闭后继续填写');
+  assert.equal((await call({op:'bootstrap',resume:true},'other-owner')).journal,undefined);
+  await call({op:'new'});
+  assert.equal((await call({op:'bootstrap',resume:true})).journal,undefined);
+  await call({op:'bootstrap',feedbackId:saved.journal!.id});
+  assert.equal((await call({op:'bootstrap',resume:true})).journal?.id,'draft-a');
+});

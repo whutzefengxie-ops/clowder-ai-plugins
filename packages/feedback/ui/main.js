@@ -1,4 +1,4 @@
-import { bridge, call, copyImage, el, normalizePicture } from './bridge.js';
+import { bridge, call, copyImage, el, normalizePicture, beforeClose } from './bridge.js';
 import { reportPreview } from './report.js';
 import { feedbackForm } from './form.js';
 import { feedbackHistory } from './history.js';
@@ -10,6 +10,7 @@ let analysisTimer;
 let analysisEpoch = 0;
 let historyTimer, draftTimer;
 let pendingDraft=Promise.resolve();
+let pendingAction=Promise.resolve();
 let editVersion=0;
 const recordCall = input=>call({...input,feedbackId:state.feedbackId});
 const button = (label, action, style = 'secondary', disabled = false) => el('button', { type: 'button', text: label, className: style, disabled: disabled || state.busy, onClick: () => run(action) });
@@ -27,25 +28,26 @@ function input(label, field, multiline = false, copy = false) {
 function invalidate() {
   state.dirty = true; state.consent = false; state.automatic = false;
   editVersion++;
-  const status=document.querySelector('[data-save-status]');if(status)status.textContent='尚未保存，关闭前请保存';
+  const status=document.querySelector('[data-save-status]');if(status)status.textContent='草稿有更新，将自动保存';
   if(state.stage==='edit') {clearTimeout(draftTimer);draftTimer=setTimeout(()=>{pendingDraft=pendingDraft.then(saveDraft).catch(error=>{state.error=`草稿暂未保存：${error.message}`;render();});},500);}
   document.querySelectorAll('[data-consent]').forEach(node => { node.checked = false; });
   document.querySelectorAll('[data-publish]').forEach(node => { node.disabled = true; node.setAttribute('aria-disabled', 'true'); });
 }
 async function saveDraft() {
-  if(state.stage!=='edit'||!state.dirty||locked()||!hasDraft())return;
+  if(!['edit','review','handoff'].includes(state.stage)||!state.dirty||locked()||!hasDraft())return;
   const id=state.feedbackId, version=editVersion;
   const status=document.querySelector('[data-save-status]');if(status)status.textContent='正在保存草稿…';
-  const saved=await recordCall({op:'save',draftOnly:true,targetId:state.targetId,revision:state.revision,report:state.report});
+  const saved=await recordCall({op:'save',draftOnly:state.stage==='edit',targetId:state.targetId,revision:state.revision,report:state.report});
   if(state.feedbackId!==id)return;
   state.journal=saved.journal;state.revision=saved.revision;
   if(version===editVersion)state.dirty=false;
-  if(status)status.textContent=version===editVersion?'草稿已保存到反馈记录':'尚未保存，关闭前请保存';
+  if(status)status.textContent=version===editVersion?'草稿已保存到反馈记录':'草稿有更新，将自动保存';
 }
 function hasDraft(){return state.journal||state.report.title.replace(/^(?:bug|feat):\s*/i,'').trim()||state.report.body.trim()||state.report.attachments.length;}
 async function flushDraft(){clearTimeout(draftTimer);await pendingDraft;await saveDraft();}
 async function startNew(){
   analysisEpoch++;clearTimeout(analysisTimer);clearTimeout(historyTimer);await flushDraft();
+  await call({op:'new'});
   Object.assign(state,{feedbackId:crypto.randomUUID(),report:{kind:'bug',title:'',body:'',attachments:[]},journal:undefined,revision:undefined,analysis:undefined,
     stage:'edit',dirty:true,consent:false,automatic:false,error:'',projectRef:'',preview:true});
 }
@@ -60,9 +62,9 @@ async function refreshHistory(){
   if(value&&JSON.stringify(value.items)!==JSON.stringify(state.items)){state.items=value.items;render();}
   historyTimer=setTimeout(refreshHistory,2000);
 }
-async function openRecord(id){
+async function openRecord(id,value){
   analysisEpoch++;clearTimeout(analysisTimer);clearTimeout(historyTimer);await flushDraft();
-  const value=await call({op:'bootstrap',feedbackId:id});
+  value??=await call({op:'bootstrap',feedbackId:id});
   Object.assign(state,value,{feedbackId:id,report:{...value.journal.report,kind:value.journal.report.kind??(/^feat:/i.test(value.journal.report.title)?'feat':'bug')},
     targetId:value.journal.target.id,analysis:value.analysis,material:value.analysis?.material,hash:value.analysis?.hash,preflight:undefined,dirty:false,consent:false,automatic:false,error:'',preview:true});
   state.clientId=value.analysis?.clientId??state.clientId;state.projectRef=value.analysis?.projectRef??'';
@@ -96,8 +98,8 @@ async function addFiles(files) {
   for (const file of files) {
     if (state.report.attachments.length >= 4 || file.size > 4000000 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('最多 4 张 PNG/JPEG/WebP，单张不超过 4 MB');
     state.report.attachments.push(await normalizePicture(file, state.report.attachments.length));
+    invalidate();
   }
-  invalidate();
 }
 async function saveReview(checkTarget = true) {
   await flushDraft();
@@ -141,11 +143,12 @@ async function submit() {
     state.stage = state.journal.state === 'published' ? 'submitted' : 'review';
   } catch (error) { state.stage = 'review'; throw error; }
 }
-async function run(action) {
+function run(action) {
   if (state.busy) return;
   state.busy = true; state.error = ''; render();
-  try { await action(); } catch (error) { state.error = error.message || '操作未完成，草稿已保留'; }
-  finally { state.busy = false; render(); }
+  pendingAction = Promise.resolve().then(action).catch(error => { state.error = error.message || '操作未完成，草稿已保留'; })
+    .finally(() => { state.busy = false; render(); });
+  return pendingAction;
 }
 async function refreshAnalysis() {
   if (state.stage !== 'analyzing') return;
@@ -187,7 +190,7 @@ function render() {
     footer.append(button('刷新记录',showHistory),button('新建反馈',startNew,'primary'));
   } else if (state.stage === 'edit') {
     content.append(...feedbackForm(state,{input,note,button,pictureCards,addFiles,invalidate,run,render}));
-    footer.append(el('span',{'data-save-status':'',className:'hint',text:state.journal&&!state.dirty?'草稿已保存到反馈记录':hasDraft()?'尚未保存，关闭前请保存':''}),button('保存草稿',flushDraft,'text'),button('直接反馈',saveReview),button('生成分析报告',prepareAnalysis,'primary',!state.clients.length));
+    footer.append(el('span',{'data-save-status':'',className:'hint',text:state.journal&&!state.dirty?'草稿已保存到反馈记录':hasDraft()?'草稿有更新，将自动保存':''}),button('保存草稿',flushDraft,'text'),button('直接反馈',saveReview),button('生成分析报告',prepareAnalysis,'primary',!state.clients.length));
     if(state.analysis?.state==='ready')footer.append(button('查看本条分析报告',async()=>{state.report.title=state.analysis.title;state.report.body=state.analysis.body;await saveReview();},'text'));
   } else if (['scope', 'analyzing'].includes(state.stage)) {
     const client = state.clients.find(c=>c.id===state.clientId);
@@ -232,7 +235,22 @@ function render() {
   app.dataset.stage = state.stage; content.scrollTop = scroll;
 }
 render();
+app.addEventListener('paste', event => {
+  if(state.stage!=='edit'||state.busy||locked())return;
+  const files=Array.from(event.clipboardData?.items??[]).filter(item=>item.type.startsWith('image/')).map(item=>item.getAsFile()).filter(Boolean);
+  if(!files.length)return;
+  event.preventDefault();
+  return run(()=>addFiles(files));
+});
+beforeClose(async()=>{
+  await pendingAction;
+  await run(async()=>{
+    try { await flushDraft(); void bridge('close'); }
+    catch(error) { await bridge('close.cancel'); throw error; }
+  });
+}).catch(error=>{state.error=`关闭前自动保存不可用，请更新宿主：${error.message}`;render();});
 run(async()=>{
-  const initial=await call({op:'bootstrap'});state.targets=initial.targets;state.clients=initial.clients??[];state.items=initial.items??[];
+  const initial=await call({op:'bootstrap',resume:true});state.targets=initial.targets;state.clients=initial.clients??[];state.items=initial.items??[];
   state.clientId=state.clients[0]?.id??'';state.targetId=state.targets[0]?.id??'';
+  if(initial.journal)await openRecord(initial.journal.id,initial);
 });

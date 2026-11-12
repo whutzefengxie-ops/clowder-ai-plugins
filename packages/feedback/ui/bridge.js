@@ -2,13 +2,24 @@ const channel = 'clowder-plugin-ui/v1';
 const nonce = window.name;
 const pending = new Map();
 let sequence = 0;
+let closeHandler;
 window.addEventListener('message', event => {
   const data = event.data;
   if (event.source !== parent || !data || data.channel !== channel || data.nonce !== nonce) return;
+  if (data.type === 'before-close') { void closeHandler?.(); return; }
   const request = pending.get(data.requestId);
   if (!request) return;
   pending.delete(data.requestId); clearTimeout(request.timer);
   if (data.error) request.reject(new Error(data.error)); else request.resolve(data.result);
+});
+export function beforeClose(action) {
+  closeHandler = action;
+  return bridge('close.guard', true);
+}
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !closeHandler) return;
+  event.preventDefault();
+  void closeHandler();
 });
 export function bridge(type, input) {
   const requestId = ++sequence;

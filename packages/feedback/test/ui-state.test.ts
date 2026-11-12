@@ -4,11 +4,11 @@ import {readFile} from 'node:fs/promises';
 import {createContext,runInContext} from 'node:vm';
 
 test('opening a record with no analysis clears fields omitted by JSON transport', async () => {
-  const node=()=>({dataset:{},append(){},replaceChildren(){},querySelector(){return undefined;},scrollTop:0});
+  const node=()=>({dataset:{},append(){},replaceChildren(){},addEventListener(){},querySelector(){return undefined;},scrollTop:0});
   const context=createContext({
     document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[]},
     el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,crypto:{randomUUID:()=> 'feedback-B'},
-    bridge:async()=>true,copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
+    bridge:async()=>true,beforeClose:async()=>{},copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
     call:async(input:{feedbackId?:string})=>input.feedbackId ? JSON.parse(JSON.stringify({
       journal:{id:'feedback-B',state:'draft',digest:'digest-B',target:{id:'test'},report:{title:'bug: B',body:'body B',attachments:[]}},
       revision:1,analysis:undefined,
@@ -27,12 +27,12 @@ test('opening a record with no analysis clears fields omitted by JSON transport'
 });
 
 test('a prior poll cannot save its report into a newly prepared analysis draft', async () => {
-  const node=()=>({dataset:{},append(){},replaceChildren(){},querySelector(){return undefined;},scrollTop:0});
+  const node=()=>({dataset:{},append(){},replaceChildren(){},addEventListener(){},querySelector(){return undefined;},scrollTop:0});
   const saves: Array<{title:string;body:string}>=[];
   let release!: (value:unknown)=>void;
   const context=createContext({
     document:{getElementById:node,querySelector:()=>null,querySelectorAll:()=>[],createTextNode:(text:string)=>text},
-    el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,crypto:{randomUUID:()=> 'feedback-B'},bridge:async()=>true,copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
+    el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,crypto:{randomUUID:()=> 'feedback-B'},bridge:async()=>true,beforeClose:async()=>{},copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
     call:async(input: {op:string;report:{title:string;body:string}})=>{
       if(input.op==='bootstrap') return new Promise(()=>{});
       if(input.op==='analysis-status') return new Promise(resolve=>{release=resolve;});
@@ -57,12 +57,12 @@ test('a prior poll cannot save its report into a newly prepared analysis draft',
 
 test('an earlier save acknowledgement never marks newer input as saved', async () => {
   const status={textContent:''};
-  const node=()=>({dataset:{},append(){},replaceChildren(){},querySelector(){return undefined;},scrollTop:0});
+  const node=()=>({dataset:{},append(){},replaceChildren(){},addEventListener(){},querySelector(){return undefined;},scrollTop:0});
   let release!: (value:unknown)=>void;
   const context=createContext({
     document:{getElementById:node,querySelector:()=>status,querySelectorAll:()=>[]},
     el:node,reportPreview:node,feedbackForm:()=>[],feedbackHistory:node,crypto:{randomUUID:()=> 'feedback-B'},
-    bridge:async()=>true,copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
+    bridge:async()=>true,beforeClose:async()=>{},copyImage:async()=>{},normalizePicture:async()=>{},setTimeout:()=>0,clearTimeout:()=>{},console,
     call:async(input:{op:string})=>input.op==='save'?new Promise(resolve=>{release=resolve;}):new Promise(()=>{}),
   });
   const source=await readFile(new URL('../ui/main.js',import.meta.url),'utf8');
@@ -74,7 +74,7 @@ test('an earlier save acknowledgement never marks newer input as saved', async (
   actions.state.report.body='new input';actions.invalidate();
   release({journal:{state:'draft'},revision:1});await pending;
   assert.equal(actions.state.dirty,true);
-  assert.equal(status.textContent,'尚未保存，关闭前请保存');
+  assert.equal(status.textContent,'草稿有更新，将自动保存');
   const latest=actions.saveDraft();release({journal:{state:'draft'},revision:2});await latest;
   assert.equal(actions.state.dirty,false);
   assert.equal(status.textContent,'草稿已保存到反馈记录');

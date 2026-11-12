@@ -19,5 +19,5 @@ export function feedbackForm(state, {input,note,pictureCards,addFiles,invalidate
       el('input',{'aria-label':'相关项目目录',type:'text',value:state.projectRef,placeholder:'留空使用当前实例的项目',disabled:state.busy,onInput:event=>{state.projectRef=event.target.value;}})])]);
   return [types,input('标题（选填）','title'),input('描述','body',true),
     el('label',{className:'secondary add-picture',text:'＋ 添加图片'},[el('input',{type:'file',accept:'image/png,image/jpeg,image/webp',multiple:true,hidden:true,disabled:state.busy,onChange:event=>run(()=>addFiles(event.target.files))})]),
-    pictureCards(),note('请勿填写密码、令牌等敏感信息。'),options];
+    pictureCards(),note('可直接粘贴截图，也可添加本地图片。请勿填写密码、令牌等敏感信息。'),options];
 }

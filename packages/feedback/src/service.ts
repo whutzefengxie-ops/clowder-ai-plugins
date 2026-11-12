@@ -24,7 +24,16 @@ export class FeedbackService {
     await context.assertCurrent();
     const data = record(input); const op = text(data.op, 30);
     const targets = await profiles(this.host);
-    const feedbackId = data.feedbackId === undefined ? undefined : text(data.feedbackId,80);
+    const selectionKey = `feedback-selection:${digest(context.userId)}`;
+    const remember = async (id: string | null) => {
+      const selected = await this.host.storage.get(selectionKey);
+      if (selected?.value === id) return;
+      await context.assertCurrent();
+      if (!(await this.host.storage.compareAndSet(selectionKey, selected?.revision ?? null, id)).applied) throw new Error('当前反馈已在另一个窗口变化，请重新打开');
+    };
+    if (op === 'new') { await remember(null); return {}; }
+    const resumed = op === 'bootstrap' && data.resume === true ? (await this.host.storage.get(selectionKey))?.value as string | null | undefined : undefined;
+    const feedbackId = data.feedbackId === undefined ? resumed ?? undefined : text(data.feedbackId,80);
     if (feedbackId !== undefined && !/^[\w-]{1,80}$/.test(feedbackId)) throw new Error('反馈记录 ID 无效');
     if (['bootstrap','history'].includes(op)) await this.records.migrate(context.userId,targets);
     if (op === 'history') return {items:await this.history(context.userId)};
@@ -49,6 +58,7 @@ export class FeedbackService {
         this.host.runtimeInfo?.get(),
       ]);
       if (feedbackId && !journal) throw new Error('反馈记录不存在或不属于当前用户');
+      if (feedbackId) await remember(feedbackId);
       return { targets, journal: journal ? await vault.hydrate(journal) : undefined, revision: current?.revision, items:await this.history(context.userId),
         clients: members.status === 'fulfilled' ? members.value.filter(member => member.available).map(member => ({ id: member.catId, label: member.displayName, model: member.defaultModel })) : [],
         projectRoot: runtime.status === 'fulfilled' ? runtime.value?.projectRoot : undefined,
@@ -73,7 +83,9 @@ export class FeedbackService {
         owner: context.userId, report, target, digest: digest({ id, report, target }), state: 'draft',
         createdAt:journal?.createdAt ?? Date.now(),reviewReady:data.draftOnly !== true,
       };
-      return publicWrite(value);
+      const saved = await publicWrite(value);
+      await remember(id);
+      return saved;
     }
     if (!journal || journal.owner !== context.userId || data.digest !== journal.digest) throw new Error('报告版本已变化，请重新检查并确认');
     if (digest(targets.find(p => p.id === journal.target.id)) !== digest(journal.target)) throw new Error('目标配置已变化，请重新检查报告');
